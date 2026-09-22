@@ -123,5 +123,11 @@ func _test_build_ship_mesh_adds_visible_mesh() -> int:
 	if mesh_node == null or not (mesh_node is MeshInstance3D) or not ((mesh_node as MeshInstance3D).mesh is BoxMesh):
 		print("FAIL _test_build_ship_mesh_adds_visible_mesh: no ShipMesh MeshInstance3D with a BoxMesh")
 		result = 1
+	else:
+		var box: BoxMesh = (mesh_node as MeshInstance3D).mesh
+		var expected_size := Vector3(2.0, 1.0, 4.0)
+		if not box.size.is_equal_approx(expected_size):
+			print("FAIL _test_build_ship_mesh_adds_visible_mesh: size=%s expected=%s" % [box.size, expected_size])
+			result = 1
 	cruiser.free()
 	return result
