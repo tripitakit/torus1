@@ -1,0 +1,12 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Torus1"
+config/features=PackedStringArray("4.6")
+run/main_scene="res://scenes/torus1_system.tscn"
+
+[rendering]
+
+renderer/rendering_method="mobile"
