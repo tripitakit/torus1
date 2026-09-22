@@ -16,6 +16,17 @@ var rebuild_action: Callable = build_station
 func _ready() -> void:
 	build_station()
 
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	_rotate_sections(delta)
+
+func _rotate_sections(delta: float) -> void:
+	var omega := TorusGeometry.compute_section_angular_velocity(section_radius)
+	for child in get_children():
+		if child.name.begins_with("Section"):
+			child.rotate_object_local(Vector3.UP, omega * delta)
+
 func _effective_planet_radius() -> float:
 	if planet_node.is_empty():
 		return planet_radius
@@ -42,6 +53,14 @@ func build_station() -> void:
 		section.mesh = cyl
 		section.transform = section_transforms[i]
 		add_child(section)
+
+		var stripe := MeshInstance3D.new()
+		stripe.name = "Stripe"
+		var stripe_box := BoxMesh.new()
+		stripe_box.size = Vector3(2.0, section_length, 2.0)
+		stripe.mesh = stripe_box
+		stripe.transform.origin = Vector3(section_radius, 0.0, 0.0)
+		section.add_child(stripe)
 
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)

@@ -2,6 +2,7 @@ extends SceneTree
 
 const TorusStationScript = preload("res://scripts/torus_station.gd")
 const PlanetScript = preload("res://scripts/planet.gd")
+const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 
 func _init():
 	var failures := 0
@@ -11,6 +12,9 @@ func _init():
 	failures += _test_build_station_preserves_unrelated_children()
 	failures += _test_bridge_positions_are_distinct_and_close_the_ring()
 	failures += _test_uses_planet_node_radius_when_set()
+	failures += _test_sections_have_stripe_marker()
+	failures += _test_rotate_sections_applies_correct_local_y_angle()
+	failures += _test_rotate_sections_does_not_rotate_bridges()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -114,6 +118,51 @@ func _test_uses_planet_node_radius_when_set() -> int:
 	var expected_torus_radius := 900.0 + 1500.0
 	if not is_equal_approx(section0.transform.origin.length(), expected_torus_radius):
 		print("FAIL _test_uses_planet_node_radius_when_set: Section0 distance=%f expected=%f" % [section0.transform.origin.length(), expected_torus_radius])
+		result = 1
+	station.free()
+	return result
+
+func _test_sections_have_stripe_marker() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var section: MeshInstance3D = station.get_node("Section0")
+	var result := 0
+	var stripe := section.get_node_or_null("Stripe")
+	if stripe == null or not (stripe is MeshInstance3D) or not ((stripe as MeshInstance3D).mesh is BoxMesh):
+		print("FAIL _test_sections_have_stripe_marker: Section0 has no Stripe MeshInstance3D with a BoxMesh")
+		result = 1
+	station.free()
+	return result
+
+func _test_rotate_sections_applies_correct_local_y_angle() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var section: MeshInstance3D = station.get_node("Section0")
+	var original_basis: Basis = section.transform.basis
+	var delta := 0.1
+	station._rotate_sections(delta)
+	var new_basis: Basis = section.transform.basis
+	var delta_basis: Basis = original_basis.inverse() * new_basis
+	var expected_omega: float = TorusGeometry.compute_section_angular_velocity(30.0)
+	var expected_delta_basis := Basis(Vector3.UP, expected_omega * delta)
+	var result := 0
+	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \
+			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
+			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
+		print("FAIL _test_rotate_sections_applies_correct_local_y_angle: delta_basis=%s expected=%s" % [delta_basis, expected_delta_basis])
+		result = 1
+	station.free()
+	return result
+
+func _test_rotate_sections_does_not_rotate_bridges() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var bridge: MeshInstance3D = station.get_node("Bridge0")
+	var original_basis: Basis = bridge.transform.basis
+	station._rotate_sections(0.1)
+	var result := 0
+	if not bridge.transform.basis.is_equal_approx(original_basis):
+		print("FAIL _test_rotate_sections_does_not_rotate_bridges: bridge basis changed")
 		result = 1
 	station.free()
 	return result
