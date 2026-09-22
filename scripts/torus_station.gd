@@ -59,7 +59,7 @@ func build_station() -> void:
 		var stripe_box := BoxMesh.new()
 		stripe_box.size = Vector3(2.0, section_length, 2.0)
 		stripe.mesh = stripe_box
-		stripe.transform.origin = Vector3(section_radius, 0.0, 0.0)
+		stripe.transform.origin = Vector3(0.0, 0.0, section_radius)
 		section.add_child(stripe)
 
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)

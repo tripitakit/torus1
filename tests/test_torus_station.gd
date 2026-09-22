@@ -131,6 +131,14 @@ func _test_sections_have_stripe_marker() -> int:
 	if stripe == null or not (stripe is MeshInstance3D) or not ((stripe as MeshInstance3D).mesh is BoxMesh):
 		print("FAIL _test_sections_have_stripe_marker: Section0 has no Stripe MeshInstance3D with a BoxMesh")
 		result = 1
+	else:
+		# Offset must be along local Z (radially outward in the ring's horizontal
+		# plane, visible from the top-down verification camera), not local X
+		# (which maps to world UP for every section and is invisible from above).
+		var expected_offset := Vector3(0.0, 0.0, 30.0)
+		if not (stripe as MeshInstance3D).transform.origin.is_equal_approx(expected_offset):
+			print("FAIL _test_sections_have_stripe_marker: Stripe offset=%s expected=%s" % [(stripe as MeshInstance3D).transform.origin, expected_offset])
+			result = 1
 	station.free()
 	return result
 
