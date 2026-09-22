@@ -9,6 +9,8 @@ func _init():
 	failures += _test_ring_closes()
 	failures += _test_degenerate_num_sections()
 	failures += _test_negative_bridge_length_does_not_crash()
+	failures += _test_section_angular_velocity_gives_1g()
+	failures += _test_section_angular_velocity_zero_radius_does_not_crash()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -72,5 +74,22 @@ func _test_negative_bridge_length_does_not_crash() -> int:
 	var bridges = TorusGeometry.compute_bridge_transforms(500.0, 1500.0, 4, 5000.0)
 	if bridges.size() != 4:
 		print("FAIL _test_negative_bridge_length_does_not_crash: expected 4 bridges even when overlapping, got %d" % bridges.size())
+		return 1
+	return 0
+
+func _test_section_angular_velocity_gives_1g() -> int:
+	# omega = sqrt(g / r); centripetal accel at radius r is omega^2 * r, which must equal g.
+	var section_radius := 30.0
+	var omega: float = TorusGeometry.compute_section_angular_velocity(section_radius)
+	var resulting_accel: float = omega * omega * section_radius
+	if not is_equal_approx(resulting_accel, TorusGeometry.GRAVITY_1G):
+		print("FAIL _test_section_angular_velocity_gives_1g: resulting_accel=%f expected=%f" % [resulting_accel, TorusGeometry.GRAVITY_1G])
+		return 1
+	return 0
+
+func _test_section_angular_velocity_zero_radius_does_not_crash() -> int:
+	var omega: float = TorusGeometry.compute_section_angular_velocity(0.0)
+	if omega != 0.0:
+		print("FAIL _test_section_angular_velocity_zero_radius_does_not_crash: expected 0.0, got %f" % omega)
 		return 1
 	return 0
