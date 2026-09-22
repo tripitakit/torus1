@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "godot": {
+      "command": "/home/patrick/.local/share/zed/node/node-v22.5.1-linux-x64/bin/node",
+      "args": [
+        "/home/patrick/projects/playground/godot-mcp/build/index.js"
+      ],
+      "env": {
+        "GODOT_PATH": "/home/patrick/Godot_v4.6.1-stable_linux.x86_64",
+        "DEBUG": "true"
+      }
+    }
+  }
+}
