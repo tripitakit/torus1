@@ -8,6 +8,8 @@ func _init():
 	failures += _test_apply_physics_step_rotates_orientation()
 	failures += _test_velocity_persists_across_steps_without_thrust()
 	failures += _test_read_input_methods_do_not_crash_headless()
+	failures += _test_mouse_look_is_independent_of_tick_rate()
+	failures += _test_build_ship_mesh_adds_visible_mesh()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -77,13 +79,49 @@ func _test_velocity_persists_across_steps_without_thrust() -> int:
 func _test_read_input_methods_do_not_crash_headless() -> int:
 	var cruiser := _make_cruiser()
 	var thrust: Vector3 = cruiser._read_thrust_input()
-	var torque: Vector3 = cruiser._read_torque_input()
+	var torque: Vector3 = cruiser._read_torque_input(1.0 / 60.0)
 	var result := 0
 	if not thrust.is_equal_approx(Vector3.ZERO):
 		print("FAIL _test_read_input_methods_do_not_crash_headless: thrust=%s expected ZERO with no keys held" % thrust)
 		result = 1
 	if not torque.is_equal_approx(Vector3.ZERO):
 		print("FAIL _test_read_input_methods_do_not_crash_headless: torque=%s expected ZERO with no input" % torque)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_mouse_look_is_independent_of_tick_rate() -> int:
+	var fake_event := InputEventMouseMotion.new()
+	fake_event.relative = Vector2(10, 0)
+
+	var cruiser_a := _make_cruiser()
+	cruiser_a._unhandled_input(fake_event)
+	var torque_a: Vector3 = cruiser_a._read_torque_input(0.5)
+
+	var cruiser_b := _make_cruiser()
+	cruiser_b._unhandled_input(fake_event)
+	var torque_b: Vector3 = cruiser_b._read_torque_input(0.25)
+
+	var result := 0
+	# The actual angular-velocity contribution (torque_input * delta, inside
+	# compute_new_angular_velocity) must be the same regardless of tick rate
+	# for the same physical mouse movement.
+	var contribution_a := torque_a.y * 0.5
+	var contribution_b := torque_b.y * 0.25
+	if not is_equal_approx(contribution_a, contribution_b):
+		print("FAIL _test_mouse_look_is_independent_of_tick_rate: contribution_a=%f contribution_b=%f" % [contribution_a, contribution_b])
+		result = 1
+	cruiser_a.free()
+	cruiser_b.free()
+	return result
+
+func _test_build_ship_mesh_adds_visible_mesh() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_ship_mesh()
+	var result := 0
+	var mesh_node := cruiser.get_node_or_null("ShipMesh")
+	if mesh_node == null or not (mesh_node is MeshInstance3D) or not ((mesh_node as MeshInstance3D).mesh is BoxMesh):
+		print("FAIL _test_build_ship_mesh_adds_visible_mesh: no ShipMesh MeshInstance3D with a BoxMesh")
 		result = 1
 	cruiser.free()
 	return result

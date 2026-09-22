@@ -13,6 +13,8 @@ func _init():
 	failures += _test_angular_pure_torque_no_damping()
 	failures += _test_angular_pure_damping_no_torque()
 	failures += _test_angular_large_delta_stays_finite()
+	failures += _test_damping_above_one_does_not_produce_nan()
+	failures += _test_angular_damping_above_one_does_not_produce_nan()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -90,5 +92,22 @@ func _test_angular_large_delta_stays_finite() -> int:
 	var result: Vector3 = VoidCruiserPhysics.compute_new_angular_velocity(Vector3(5, 0, 0), Vector3(1, 0, 0), 10.0, 0.3, 1000.0)
 	if is_nan(result.x) or is_inf(result.x):
 		print("FAIL _test_angular_large_delta_stays_finite: result=%s" % result)
+		return 1
+	return 0
+
+func _test_damping_above_one_does_not_produce_nan() -> int:
+	# A negative base (1.0 - damping) raised to a fractional delta exponent is
+	# NaN (e.g. a physics tick of 1/60s); an inspector typo of damping=1.5
+	# must not permanently corrupt velocity.
+	var result: Vector3 = VoidCruiserPhysics.compute_new_velocity(Vector3(10, 0, 0), Vector3.ZERO, Basis.IDENTITY, 0.0, 1.5, 1.0 / 60.0)
+	if is_nan(result.x) or is_nan(result.y) or is_nan(result.z):
+		print("FAIL _test_damping_above_one_does_not_produce_nan: result=%s" % result)
+		return 1
+	return 0
+
+func _test_angular_damping_above_one_does_not_produce_nan() -> int:
+	var result: Vector3 = VoidCruiserPhysics.compute_new_angular_velocity(Vector3(10, 0, 0), Vector3.ZERO, 0.0, 1.5, 1.0 / 60.0)
+	if is_nan(result.x) or is_nan(result.y) or is_nan(result.z):
+		print("FAIL _test_angular_damping_above_one_does_not_produce_nan: result=%s" % result)
 		return 1
 	return 0
