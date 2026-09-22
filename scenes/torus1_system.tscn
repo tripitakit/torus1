@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
+[ext_resource type="Script" path="res://scripts/torus_station.gd" id="2_station"]
+
+[node name="root" type="Node3D" unique_id=1858120877]
+
+[node name="Planet" type="MeshInstance3D" parent="." unique_id=972318534]
+script = ExtResource("1_planet")
+
+[node name="TorusStation" type="Node3D" parent="." unique_id=1706718276]
+script = ExtResource("2_station")
+
+[node name="TopDownCamera" type="Camera3D" parent="." unique_id=716806475]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 6000, 0)
+current = true

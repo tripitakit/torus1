@@ -18,7 +18,7 @@ static func compute_bridge_length(planet_radius: float, orbit_altitude: float, n
 	var step_arc_length := circumference / num_sections
 	return step_arc_length - section_length
 
-static func compute_bridge_transforms(planet_radius: float, orbit_altitude: float, num_sections: int, section_length: float) -> Array[Transform3D]:
+static func compute_bridge_transforms(planet_radius: float, orbit_altitude: float, num_sections: int, _section_length: float) -> Array[Transform3D]:
 	var transforms: Array[Transform3D] = []
 	if num_sections < 1:
 		return transforms
