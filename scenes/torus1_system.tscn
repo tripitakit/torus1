@@ -10,7 +10,12 @@ script = ExtResource("1_planet")
 
 [node name="TorusStation" type="Node3D" parent="." unique_id=1706718276]
 script = ExtResource("2_station")
+planet_node = NodePath("../Planet")
 
 [node name="TopDownCamera" type="Camera3D" parent="." unique_id=716806475]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 6000, 0)
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 6000, 0)
 current = true
+far = 10000.0
+
+[node name="SunLight" type="DirectionalLight3D" parent="." unique_id=804147296]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
