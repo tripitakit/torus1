@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
 [ext_resource type="Script" path="res://scripts/torus_station.gd" id="2_station"]
+[ext_resource type="Script" path="res://scripts/void_cruiser.gd" id="3_cruiser"]
 
 [node name="root" type="Node3D" unique_id=1858120877]
 
@@ -14,8 +15,15 @@ planet_node = NodePath("../Planet")
 
 [node name="TopDownCamera" type="Camera3D" parent="." unique_id=716806475]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 6000, 0)
-current = true
 far = 10000.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=804147296]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
+
+[node name="VoidCruiser" type="Node3D" parent="." unique_id=413410014]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2200, 150, 0)
+script = ExtResource("3_cruiser")
+
+[node name="ChaseCamera" type="Camera3D" parent="VoidCruiser" unique_id=583786054]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 15)
+current = true
