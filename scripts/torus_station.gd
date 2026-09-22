@@ -7,7 +7,7 @@ const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 @export var orbit_altitude: float = 1500.0
 @export var num_sections: int = 100
 @export var section_radius: float = 30.0
-@export var section_length: float = 80.0
+@export var section_length: float = 102.83185307179585
 @export var planet_node: NodePath = NodePath("")
 
 @export_tool_button("Rebuild Station")
