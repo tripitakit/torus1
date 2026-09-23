@@ -6,6 +6,7 @@ func _init():
 	var failures := 0
 	failures += _test_build_planet_sets_sphere_mesh()
 	failures += _test_rebuild_does_not_leak()
+	failures += _test_build_planet_sets_surface_material()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -28,6 +29,22 @@ func _test_build_planet_sets_sphere_mesh() -> int:
 			result = 1
 		if not is_equal_approx(sphere.height, 1000.0):
 			print("FAIL _test_build_planet_sets_sphere_mesh: height=%f" % sphere.height)
+			result = 1
+	planet.free()
+	return result
+
+func _test_build_planet_sets_surface_material() -> int:
+	var planet: MeshInstance3D = PlanetScript.new()
+	planet.planet_radius = 500.0
+	planet.build_planet()
+	var result := 0
+	if planet.material_override == null or not (planet.material_override is StandardMaterial3D):
+		print("FAIL _test_build_planet_sets_surface_material: no StandardMaterial3D override")
+		result = 1
+	else:
+		var mat: StandardMaterial3D = planet.material_override
+		if mat.albedo_texture == null:
+			print("FAIL _test_build_planet_sets_surface_material: albedo_texture not set")
 			result = 1
 	planet.free()
 	return result
