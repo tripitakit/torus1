@@ -22,6 +22,11 @@ func build_ship_mesh() -> void:
 	var packed: PackedScene = load(SHIP_MODEL_PATH)
 	var model := packed.instantiate()
 	model.name = "ShipModel"
+	# Blender's glTF exporter does not preserve "which way is forward": this
+	# ship was modeled nose-toward -Y in Blender, and the export placed the
+	# nose toward +Z in Godot instead of -Z (forward), so it faced the chase
+	# camera instead of away from it. Corrective yaw, not a modeling error.
+	model.rotation_degrees.y = 180.0
 	add_child(model)
 
 func _unhandled_input(event: InputEvent) -> void:

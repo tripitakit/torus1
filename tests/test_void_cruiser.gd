@@ -10,6 +10,7 @@ func _init():
 	failures += _test_read_input_methods_do_not_crash_headless()
 	failures += _test_mouse_look_is_independent_of_tick_rate()
 	failures += _test_build_ship_mesh_adds_visible_mesh()
+	failures += _test_ship_model_faces_forward()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -128,5 +129,24 @@ func _test_build_ship_mesh_adds_visible_mesh() -> int:
 		if hull == null or not (hull is MeshInstance3D):
 			print("FAIL _test_build_ship_mesh_adds_visible_mesh: ShipModel has no Hull_Cargo MeshInstance3D")
 			result = 1
+	cruiser.free()
+	return result
+
+func _test_ship_model_faces_forward() -> int:
+	# Blender's glTF exporter does not automatically align a model's nose
+	# with Godot's -Z forward: this ship was authored nose-toward -Y in
+	# Blender, which the exporter placed nose-toward +Z in Godot (facing
+	# the chase camera instead of away from it). Corrected with a fixed
+	# 180-degree yaw applied at instantiation; verify it stays applied.
+	var cruiser := _make_cruiser()
+	cruiser.build_ship_mesh()
+	var result := 0
+	var model_node := cruiser.get_node_or_null("ShipModel")
+	if model_node == null:
+		print("FAIL _test_ship_model_faces_forward: no ShipModel child")
+		result = 1
+	elif not is_equal_approx(wrapf(model_node.rotation_degrees.y, 0.0, 360.0), 180.0):
+		print("FAIL _test_ship_model_faces_forward: ShipModel rotation_degrees.y=%f expected 180" % model_node.rotation_degrees.y)
+		result = 1
 	cruiser.free()
 	return result
