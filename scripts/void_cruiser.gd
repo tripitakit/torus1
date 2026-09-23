@@ -21,7 +21,7 @@ func build_ship_mesh() -> void:
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "ShipMesh"
 	var box := BoxMesh.new()
-	box.size = Vector3(2.0, 1.0, 4.0)
+	box.size = Vector3(0.04, 0.02, 0.08)
 	mesh_instance.mesh = box
 	add_child(mesh_instance)
 

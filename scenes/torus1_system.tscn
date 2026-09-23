@@ -25,6 +25,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 60, 2200)
 script = ExtResource("3_cruiser")
 
 [node name="ChaseCamera" type="Camera3D" parent="VoidCruiser" unique_id=583786054]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 15)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0.3)
 current = true
 far = 20000.0

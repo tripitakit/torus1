@@ -9,7 +9,7 @@ run/main_scene="res://scenes/torus1_system.tscn"
 
 [rendering]
 
-renderer/rendering_method="mobile"
+renderer/rendering_method="gl_compatibility"
 
 [input]
 
