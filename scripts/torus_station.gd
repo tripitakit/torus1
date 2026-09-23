@@ -84,17 +84,28 @@ func build_station() -> void:
 	section_mesh.bottom_radius = section_radius
 	section_mesh.height = section_length
 
+	var section_shape := CylinderShape3D.new()
+	section_shape.radius = section_radius
+	section_shape.height = section_length
+
 	var stripe_mesh := BoxMesh.new()
 	stripe_mesh.size = Vector3(2.0, section_length, 2.0)
 
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
-		var section := MeshInstance3D.new()
+		var section := AnimatableBody3D.new()
 		section.name = "Section%d" % i
-		section.mesh = section_mesh
-		section.material_override = hull_material
-		section.transform = section_transforms[i]
-		add_child(section)
+
+		var section_mesh_instance := MeshInstance3D.new()
+		section_mesh_instance.name = "Mesh"
+		section_mesh_instance.mesh = section_mesh
+		section_mesh_instance.material_override = hull_material
+		section.add_child(section_mesh_instance)
+
+		var section_collision := CollisionShape3D.new()
+		section_collision.name = "Collision"
+		section_collision.shape = section_shape
+		section.add_child(section_collision)
 
 		var stripe := MeshInstance3D.new()
 		stripe.name = "Stripe"
@@ -103,16 +114,34 @@ func build_station() -> void:
 		stripe.transform.origin = Vector3(0.0, 0.0, section_radius)
 		section.add_child(stripe)
 
+		section.transform = section_transforms[i]
+		add_child(section)
+
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_mesh := CylinderMesh.new()
 	bridge_mesh.top_radius = section_radius * 0.3
 	bridge_mesh.bottom_radius = section_radius * 0.3
 	bridge_mesh.height = max(bridge_length, 0.01)
+
+	var bridge_shape := CylinderShape3D.new()
+	bridge_shape.radius = section_radius * 0.3
+	bridge_shape.height = max(bridge_length, 0.01)
+
 	for i in range(bridge_transforms.size()):
-		var bridge := MeshInstance3D.new()
+		var bridge := StaticBody3D.new()
 		bridge.name = "Bridge%d" % i
-		bridge.mesh = bridge_mesh
-		bridge.material_override = hull_material
+
+		var bridge_mesh_instance := MeshInstance3D.new()
+		bridge_mesh_instance.name = "Mesh"
+		bridge_mesh_instance.mesh = bridge_mesh
+		bridge_mesh_instance.material_override = hull_material
+		bridge.add_child(bridge_mesh_instance)
+
+		var bridge_collision := CollisionShape3D.new()
+		bridge_collision.name = "Collision"
+		bridge_collision.shape = bridge_shape
+		bridge.add_child(bridge_collision)
+
 		bridge.transform = bridge_transforms[i]
 		add_child(bridge)
