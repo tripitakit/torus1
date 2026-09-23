@@ -1,6 +1,7 @@
 extends Node3D
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
+const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
 
 @export var thrust_power: float = 150.0
 @export_range(0.0, 0.999, 0.001) var linear_damping: float = 0.5
@@ -18,12 +19,10 @@ func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func build_ship_mesh() -> void:
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = "ShipMesh"
-	var box := BoxMesh.new()
-	box.size = Vector3(15.0, 7.5, 30.0)
-	mesh_instance.mesh = box
-	add_child(mesh_instance)
+	var packed: PackedScene = load(SHIP_MODEL_PATH)
+	var model := packed.instantiate()
+	model.name = "ShipModel"
+	add_child(model)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:

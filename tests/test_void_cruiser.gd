@@ -119,15 +119,14 @@ func _test_build_ship_mesh_adds_visible_mesh() -> int:
 	var cruiser := _make_cruiser()
 	cruiser.build_ship_mesh()
 	var result := 0
-	var mesh_node := cruiser.get_node_or_null("ShipMesh")
-	if mesh_node == null or not (mesh_node is MeshInstance3D) or not ((mesh_node as MeshInstance3D).mesh is BoxMesh):
-		print("FAIL _test_build_ship_mesh_adds_visible_mesh: no ShipMesh MeshInstance3D with a BoxMesh")
+	var model_node := cruiser.get_node_or_null("ShipModel")
+	if model_node == null:
+		print("FAIL _test_build_ship_mesh_adds_visible_mesh: no ShipModel child")
 		result = 1
 	else:
-		var box: BoxMesh = (mesh_node as MeshInstance3D).mesh
-		var expected_size := Vector3(15.0, 7.5, 30.0)
-		if not box.size.is_equal_approx(expected_size):
-			print("FAIL _test_build_ship_mesh_adds_visible_mesh: size=%s expected=%s" % [box.size, expected_size])
+		var hull := model_node.find_child("Hull_Cargo", true, false)
+		if hull == null or not (hull is MeshInstance3D):
+			print("FAIL _test_build_ship_mesh_adds_visible_mesh: ShipModel has no Hull_Cargo MeshInstance3D")
 			result = 1
 	cruiser.free()
 	return result
