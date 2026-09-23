@@ -104,13 +104,13 @@ func _test_update_hud_writes_speed_and_distances() -> int:
 	cockpit.update_hud(1240.4, {"bow": 819.6, "stern": -1.0, "port": 3140.0, "starboard": -1.0, "dorsal": 410.0, "ventral": -1.0})
 	var result := 0
 	var expected := {
-		"SpeedLabel": "VEL  1240 m/s",
-		"BowLabel": "PRUA  820 m",
-		"SternLabel": "POPPA  —",
-		"PortLabel": "SX  3.1 km",
-		"StarboardLabel": "DX  —",
-		"DorsalLabel": "DORSO  410 m",
-		"VentralLabel": "VENTRE  —",
+		"SpeedLabel": "SPEED  1240 m/s",
+		"BowLabel": "BOW  820 m",
+		"SternLabel": "STERN  —",
+		"PortLabel": "PORT  3.1 km",
+		"StarboardLabel": "STARBOARD  —",
+		"DorsalLabel": "DORSAL  410 m",
+		"VentralLabel": "VENTRAL  —",
 	}
 	for label_name in expected:
 		var label: Label = cockpit.get_node("Hud/Panel/Lines/" + label_name)
@@ -125,8 +125,8 @@ func _test_update_hud_missing_distances_show_no_reading() -> int:
 	cockpit.update_hud(0.0, {})
 	var result := 0
 	var label: Label = cockpit.get_node("Hud/Panel/Lines/BowLabel")
-	if label.text != "PRUA  —":
-		print("FAIL _test_update_hud_missing_distances_show_no_reading: BowLabel='%s' expected 'PRUA  —'" % label.text)
+	if label.text != "BOW  —":
+		print("FAIL _test_update_hud_missing_distances_show_no_reading: BowLabel='%s' expected 'BOW  —'" % label.text)
 		result = 1
 	cockpit.free()
 	return result

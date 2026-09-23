@@ -24,12 +24,12 @@ const HUD_BACKGROUND_COLOR := Color(0.02, 0.05, 0.08, 0.6)
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
-	"bow": ["BowLabel", "PRUA"],
-	"stern": ["SternLabel", "POPPA"],
-	"port": ["PortLabel", "SX"],
-	"starboard": ["StarboardLabel", "DX"],
-	"dorsal": ["DorsalLabel", "DORSO"],
-	"ventral": ["VentralLabel", "VENTRE"],
+	"bow": ["BowLabel", "BOW"],
+	"stern": ["SternLabel", "STERN"],
+	"port": ["PortLabel", "PORT"],
+	"starboard": ["StarboardLabel", "STARBOARD"],
+	"dorsal": ["DorsalLabel", "DORSAL"],
+	"ventral": ["VentralLabel", "VENTRAL"],
 }
 
 func build() -> void:
@@ -38,7 +38,7 @@ func build() -> void:
 
 func update_hud(speed: float, distances: Dictionary) -> void:
 	var lines := get_node("Hud/Panel/Lines")
-	(lines.get_node("SpeedLabel") as Label).text = "VEL  " + CockpitHudFormat.format_speed(speed)
+	(lines.get_node("SpeedLabel") as Label).text = "SPEED  " + CockpitHudFormat.format_speed(speed)
 	for key in DISTANCE_LABELS:
 		var entry: Array = DISTANCE_LABELS[key]
 		var distance: float = distances.get(key, -1.0)

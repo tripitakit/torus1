@@ -406,12 +406,12 @@ func _test_process_shows_ship_speed_on_hud() -> int:
 	cruiser._process(0.016)
 	var result := 0
 	var speed_label: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/SpeedLabel")
-	if speed_label.text != "VEL  50 m/s":
-		print("FAIL _test_process_shows_ship_speed_on_hud: SpeedLabel='%s' expected 'VEL  50 m/s'" % speed_label.text)
+	if speed_label.text != "SPEED  50 m/s":
+		print("FAIL _test_process_shows_ship_speed_on_hud: SpeedLabel='%s' expected 'SPEED  50 m/s'" % speed_label.text)
 		result = 1
 	var bow_label: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/BowLabel")
-	if bow_label.text != "PRUA  —":
-		print("FAIL _test_process_shows_ship_speed_on_hud: BowLabel='%s' expected 'PRUA  —' (off-tree: no hit)" % bow_label.text)
+	if bow_label.text != "BOW  —":
+		print("FAIL _test_process_shows_ship_speed_on_hud: BowLabel='%s' expected 'BOW  —' (off-tree: no hit)" % bow_label.text)
 		result = 1
 	cruiser.free()
 	return result
