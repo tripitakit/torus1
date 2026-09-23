@@ -3,28 +3,39 @@
 [ext_resource type="Script" path="res://scripts/planet.gd" id="1_planet"]
 [ext_resource type="Script" path="res://scripts/torus_station.gd" id="2_station"]
 [ext_resource type="Script" path="res://scripts/void_cruiser.gd" id="3_cruiser"]
+[ext_resource type="Script" path="res://scripts/world_origin_rebase.gd" id="4_rebase"]
 
 [node name="root" type="Node3D" unique_id=1858120877]
 
-[node name="Planet" type="MeshInstance3D" parent="." unique_id=972318534]
+[node name="PlanetSystem" type="Node3D" parent="." unique_id=205893441]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4000, -6959600)
+
+[node name="Planet" type="MeshInstance3D" parent="PlanetSystem" unique_id=972318534]
 script = ExtResource("1_planet")
 
-[node name="TorusStation" type="Node3D" parent="." unique_id=1706718276]
+[node name="TorusStation" type="Node3D" parent="PlanetSystem" unique_id=1706718276]
 script = ExtResource("2_station")
 planet_node = NodePath("../Planet")
 
-[node name="TopDownCamera" type="Camera3D" parent="." unique_id=716806475]
-transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 6000, 0)
-far = 10000.0
+[node name="TopDownCamera" type="Camera3D" parent="PlanetSystem" unique_id=716806475]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 20848800, 0)
+near = 1000.0
+far = 34748000.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=804147296]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
 
 [node name="VoidCruiser" type="Node3D" parent="." unique_id=413410014]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 60, 2200)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("3_cruiser")
 
 [node name="ChaseCamera" type="Camera3D" parent="VoidCruiser" unique_id=583786054]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 37.5, 112.5)
 current = true
-far = 20000.0
+near = 10.0
+far = 69496000.0
+
+[node name="WorldOriginRebase" type="Node" parent="." unique_id=647120983]
+script = ExtResource("4_rebase")
+tracked_node = NodePath("../VoidCruiser")
+rebasing_node = NodePath("../PlanetSystem")
