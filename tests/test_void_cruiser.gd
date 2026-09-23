@@ -24,6 +24,8 @@ func _init():
 	failures += _test_build_navigation_lights_starboard_is_green_on_the_right()
 	failures += _test_build_navigation_lights_tail_is_white_toward_the_stern()
 	failures += _test_build_headlights_adds_two_spotlights_near_the_nose()
+	failures += _test_build_proximity_sensors_adds_six_rays_on_hull_faces()
+	failures += _test_read_proximity_distances_off_tree_reports_no_hit()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -351,5 +353,54 @@ func _test_build_headlights_adds_two_spotlights_near_the_nose() -> int:
 			if not spot.shadow_enabled:
 				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s shadow_enabled=false expected true" % light_name)
 				result = 1
+	cruiser.free()
+	return result
+
+func _test_build_proximity_sensors_adds_six_rays_on_hull_faces() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_proximity_sensors()
+	var result := 0
+	# name: [position on the hull face, target_position (20 km outward)]
+	var expected := {
+		"SensorBow": [Vector3(0.0, 0.0, -15.0), Vector3(0.0, 0.0, -20000.0)],
+		"SensorStern": [Vector3(0.0, 0.0, 15.0), Vector3(0.0, 0.0, 20000.0)],
+		"SensorPort": [Vector3(-7.5, 0.0, 0.0), Vector3(-20000.0, 0.0, 0.0)],
+		"SensorStarboard": [Vector3(7.5, 0.0, 0.0), Vector3(20000.0, 0.0, 0.0)],
+		"SensorDorsal": [Vector3(0.0, 3.75, 0.0), Vector3(0.0, 20000.0, 0.0)],
+		"SensorVentral": [Vector3(0.0, -3.75, 0.0), Vector3(0.0, -20000.0, 0.0)],
+	}
+	for sensor_name in expected:
+		var node := cruiser.get_node_or_null(sensor_name)
+		if node == null or not (node is RayCast3D):
+			print("FAIL _test_build_proximity_sensors_adds_six_rays_on_hull_faces: no %s RayCast3D child" % sensor_name)
+			result = 1
+			continue
+		var ray: RayCast3D = node
+		var expected_position: Vector3 = expected[sensor_name][0]
+		var expected_target: Vector3 = expected[sensor_name][1]
+		if not ray.position.is_equal_approx(expected_position):
+			print("FAIL _test_build_proximity_sensors_adds_six_rays_on_hull_faces: %s position=%s expected=%s" % [sensor_name, ray.position, expected_position])
+			result = 1
+		if not ray.target_position.is_equal_approx(expected_target):
+			print("FAIL _test_build_proximity_sensors_adds_six_rays_on_hull_faces: %s target_position=%s expected=%s" % [sensor_name, ray.target_position, expected_target])
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_read_proximity_distances_off_tree_reports_no_hit() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_proximity_sensors()
+	var distances: Dictionary = cruiser.read_proximity_distances()
+	var result := 0
+	for key in ["bow", "stern", "port", "starboard", "dorsal", "ventral"]:
+		if not distances.has(key):
+			print("FAIL _test_read_proximity_distances_off_tree_reports_no_hit: missing key %s" % key)
+			result = 1
+		elif not is_equal_approx(distances[key], -1.0):
+			print("FAIL _test_read_proximity_distances_off_tree_reports_no_hit: %s=%s expected -1.0 (no physics frame, no hit)" % [key, distances[key]])
+			result = 1
+	if distances.size() != 6:
+		print("FAIL _test_read_proximity_distances_off_tree_reports_no_hit: %d keys, expected 6" % distances.size())
+		result = 1
 	cruiser.free()
 	return result

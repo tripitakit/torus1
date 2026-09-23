@@ -19,6 +19,16 @@ const TAIL_LIGHT_ENERGY := 5.0
 const HEADLIGHT_ENERGY := 12.0
 const HEADLIGHT_RANGE := 400.0
 const HEADLIGHT_ANGLE := 25.0
+const HULL_SIZE := Vector3(15.0, 7.5, 30.0)
+const SENSOR_RANGE := 20000.0
+const SENSOR_DIRECTIONS := {
+	"bow": Vector3(0.0, 0.0, -1.0),
+	"stern": Vector3(0.0, 0.0, 1.0),
+	"port": Vector3(-1.0, 0.0, 0.0),
+	"starboard": Vector3(1.0, 0.0, 0.0),
+	"dorsal": Vector3(0.0, 1.0, 0.0),
+	"ventral": Vector3(0.0, -1.0, 0.0),
+}
 
 var angular_velocity: Vector3 = Vector3.ZERO
 
@@ -30,6 +40,7 @@ var _strobe_time: float = 0.0
 func _ready() -> void:
 	build_ship_mesh()
 	build_collision_shape()
+	build_proximity_sensors()
 	build_navigation_lights()
 	build_headlights()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -55,9 +66,31 @@ func build_collision_shape() -> void:
 	var shape_node := CollisionShape3D.new()
 	shape_node.name = "CollisionShape3D"
 	var box := BoxShape3D.new()
-	box.size = Vector3(15.0, 7.5, 30.0)
+	box.size = HULL_SIZE
 	shape_node.shape = box
 	add_child(shape_node)
+
+func build_proximity_sensors() -> void:
+	# One ray per hull face, starting on the face itself, so the reading is
+	# the gap between the hull and the surface, not the ship's center.
+	# exclude_parent (on by default) keeps the rays from hitting the ship.
+	for key in SENSOR_DIRECTIONS:
+		var direction: Vector3 = SENSOR_DIRECTIONS[key]
+		var ray := RayCast3D.new()
+		ray.name = "Sensor" + String(key).capitalize()
+		ray.position = direction * HULL_SIZE * 0.5
+		ray.target_position = direction * SENSOR_RANGE
+		add_child(ray)
+
+func read_proximity_distances() -> Dictionary:
+	var distances := {}
+	for key in SENSOR_DIRECTIONS:
+		var ray: RayCast3D = get_node("Sensor" + String(key).capitalize())
+		if ray.is_colliding():
+			distances[key] = ray.global_position.distance_to(ray.get_collision_point())
+		else:
+			distances[key] = -1.0
+	return distances
 
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),
