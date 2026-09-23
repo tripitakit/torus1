@@ -30,6 +30,10 @@ func _test_scene_wiring() -> int:
 		print("FAIL _test_scene_wiring: VoidCruiser position=%s" % (void_cruiser as Node3D).position)
 		result = 1
 
+	if void_cruiser != null and void_cruiser.get_node_or_null("ChaseCamera") != null:
+		print("FAIL _test_scene_wiring: VoidCruiser still has a ChaseCamera; the view is now the cockpit's PilotCamera, built by void_cruiser.gd")
+		result = 1
+
 	if planet_system != null and void_cruiser != null:
 		if planet_system.get_parent() != void_cruiser.get_parent():
 			print("FAIL _test_scene_wiring: PlanetSystem and VoidCruiser are not siblings, so WorldOriginRebase's sibling auto-discovery would never shift PlanetSystem")
@@ -46,6 +50,10 @@ func _test_scene_wiring() -> int:
 			result = 1
 		if planet_system.get_node_or_null("TopDownCamera") == null:
 			print("FAIL _test_scene_wiring: PlanetSystem/TopDownCamera missing")
+			result = 1
+		var top_down := planet_system.get_node_or_null("TopDownCamera") as Camera3D
+		if top_down != null and top_down.current:
+			print("FAIL _test_scene_wiring: TopDownCamera is current; it would compete with the cockpit's PilotCamera")
 			result = 1
 		if torus_station != null and planet != null:
 			var resolved_planet: Node = torus_station.get_node_or_null(torus_station.planet_node)

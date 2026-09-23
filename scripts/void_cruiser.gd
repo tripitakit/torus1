@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
+const CockpitScript = preload("res://scripts/cockpit.gd")
 const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
 
 @export var thrust_power: float = 150.0
@@ -29,6 +30,8 @@ const SENSOR_DIRECTIONS := {
 	"dorsal": Vector3(0.0, 1.0, 0.0),
 	"ventral": Vector3(0.0, -1.0, 0.0),
 }
+# The pilot's eye, inside the hull box, 7 m behind the bow face.
+const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
 var angular_velocity: Vector3 = Vector3.ZERO
 
@@ -43,6 +46,7 @@ func _ready() -> void:
 	build_proximity_sensors()
 	build_navigation_lights()
 	build_headlights()
+	build_cockpit()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _process(delta: float) -> void:
@@ -50,6 +54,9 @@ func _process(delta: float) -> void:
 	var tail_light: OmniLight3D = get_node_or_null("TailLight")
 	if tail_light:
 		tail_light.light_energy = VoidCruiserPhysics.compute_strobe_energy(_strobe_time, STROBE_PERIOD, STROBE_ON_DURATION, TAIL_LIGHT_ENERGY)
+	var cockpit := get_node_or_null("Cockpit")
+	if cockpit:
+		cockpit.update_hud(velocity.length(), read_proximity_distances())
 
 func build_ship_mesh() -> void:
 	var packed: PackedScene = load(SHIP_MODEL_PATH)
@@ -92,6 +99,13 @@ func read_proximity_distances() -> Dictionary:
 			distances[key] = -1.0
 	return distances
 
+func build_cockpit() -> void:
+	var cockpit: Node3D = CockpitScript.new()
+	cockpit.name = "Cockpit"
+	cockpit.position = COCKPIT_POSITION
+	add_child(cockpit)
+	cockpit.build()
+
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),
 	# white = tail. The tail light strobes; position/color are steady.
@@ -119,6 +133,8 @@ func _add_nav_light(light_name: String, color: Color, local_position: Vector3, e
 	marker_material.emission = color
 	marker_material.emission_energy_multiplier = 4.0
 	marker.material_override = marker_material
+	# The markers are for outside observers; keep them out of the on-board cameras.
+	marker.layers = CockpitScript.SHIP_EXTERIOR_LAYER
 	light.add_child(marker)
 
 func build_headlights() -> void:

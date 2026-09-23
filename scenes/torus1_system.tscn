@@ -41,12 +41,6 @@ directional_shadow_max_distance = 20000.0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("3_cruiser")
 
-[node name="ChaseCamera" type="Camera3D" parent="VoidCruiser" unique_id=583786054]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 37.5, 112.5)
-current = true
-near = 10.0
-far = 69496000.0
-
 [node name="WorldOriginRebase" type="Node" parent="." unique_id=647120983]
 script = ExtResource("4_rebase")
 tracked_node = NodePath("../VoidCruiser")

@@ -26,6 +26,9 @@ func _init():
 	failures += _test_build_headlights_adds_two_spotlights_near_the_nose()
 	failures += _test_build_proximity_sensors_adds_six_rays_on_hull_faces()
 	failures += _test_read_proximity_distances_off_tree_reports_no_hit()
+	failures += _test_build_cockpit_adds_cockpit_at_pilot_eye()
+	failures += _test_process_shows_ship_speed_on_hud()
+	failures += _test_nav_light_markers_hidden_from_onboard_cameras()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -402,5 +405,53 @@ func _test_read_proximity_distances_off_tree_reports_no_hit() -> int:
 	if distances.size() != 6:
 		print("FAIL _test_read_proximity_distances_off_tree_reports_no_hit: %d keys, expected 6" % distances.size())
 		result = 1
+	cruiser.free()
+	return result
+
+func _test_build_cockpit_adds_cockpit_at_pilot_eye() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_cockpit()
+	var result := 0
+	var cockpit := cruiser.get_node_or_null("Cockpit")
+	if cockpit == null:
+		print("FAIL _test_build_cockpit_adds_cockpit_at_pilot_eye: no Cockpit child")
+		result = 1
+	else:
+		if not (cockpit as Node3D).position.is_equal_approx(Vector3(0.0, 0.5, -8.0)):
+			print("FAIL _test_build_cockpit_adds_cockpit_at_pilot_eye: position=%s expected (0, 0.5, -8)" % (cockpit as Node3D).position)
+			result = 1
+		if cockpit.get_node_or_null("PilotCamera") == null:
+			print("FAIL _test_build_cockpit_adds_cockpit_at_pilot_eye: Cockpit was not built (no PilotCamera)")
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_process_shows_ship_speed_on_hud() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_proximity_sensors()
+	cruiser.build_cockpit()
+	cruiser.velocity = Vector3(30.0, 0.0, -40.0)
+	cruiser._process(0.016)
+	var result := 0
+	var speed_label: Label = cruiser.get_node("Cockpit/HudViewport/Lines/SpeedLabel")
+	if speed_label.text != "VEL  50 m/s":
+		print("FAIL _test_process_shows_ship_speed_on_hud: SpeedLabel='%s' expected 'VEL  50 m/s'" % speed_label.text)
+		result = 1
+	var bow_label: Label = cruiser.get_node("Cockpit/HudViewport/Lines/BowLabel")
+	if bow_label.text != "PRUA  —":
+		print("FAIL _test_process_shows_ship_speed_on_hud: BowLabel='%s' expected 'PRUA  —' (off-tree: no hit)" % bow_label.text)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_nav_light_markers_hidden_from_onboard_cameras() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_navigation_lights()
+	var result := 0
+	for light_name in ["PortLight", "StarboardLight", "TailLight"]:
+		var marker: MeshInstance3D = cruiser.get_node("%s/Marker" % light_name)
+		if marker.layers != 4:
+			print("FAIL _test_nav_light_markers_hidden_from_onboard_cameras: %s marker layers=%d expected 4 (SHIP_EXTERIOR_LAYER)" % [light_name, marker.layers])
+			result = 1
 	cruiser.free()
 	return result
