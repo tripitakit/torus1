@@ -5,7 +5,14 @@
 [ext_resource type="Script" path="res://scripts/void_cruiser.gd" id="3_cruiser"]
 [ext_resource type="Script" path="res://scripts/world_origin_rebase.gd" id="4_rebase"]
 
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0, 0, 0, 1)
+
 [node name="root" type="Node3D" unique_id=1858120877]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=339021847]
+environment = SubResource("Environment_1")
 
 [node name="PlanetSystem" type="Node3D" parent="." unique_id=205893441]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4000, -6959600)
@@ -23,7 +30,9 @@ near = 1000.0
 far = 34748000.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=804147296]
-transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0)
+transform = Transform3D(0, 0, 1, 0.1483, 0.9889, 0, -0.9889, 0.1483, 0, 0, 0, 0)
+shadow_enabled = true
+directional_shadow_max_distance = 20000.0
 
 [node name="VoidCruiser" type="Node3D" parent="." unique_id=413410014]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
