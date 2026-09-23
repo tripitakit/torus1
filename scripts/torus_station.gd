@@ -70,38 +70,40 @@ func build_station() -> void:
 	var hull_material := _build_hull_material(TAU * section_radius, section_length)
 	var stripe_material := _build_stripe_material()
 
+	var section_mesh := CylinderMesh.new()
+	section_mesh.top_radius = section_radius
+	section_mesh.bottom_radius = section_radius
+	section_mesh.height = section_length
+
+	var stripe_mesh := BoxMesh.new()
+	stripe_mesh.size = Vector3(2.0, section_length, 2.0)
+
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
 		var section := MeshInstance3D.new()
 		section.name = "Section%d" % i
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = section_radius
-		cyl.bottom_radius = section_radius
-		cyl.height = section_length
-		section.mesh = cyl
+		section.mesh = section_mesh
 		section.material_override = hull_material
 		section.transform = section_transforms[i]
 		add_child(section)
 
 		var stripe := MeshInstance3D.new()
 		stripe.name = "Stripe"
-		var stripe_box := BoxMesh.new()
-		stripe_box.size = Vector3(2.0, section_length, 2.0)
-		stripe.mesh = stripe_box
+		stripe.mesh = stripe_mesh
 		stripe.material_override = stripe_material
 		stripe.transform.origin = Vector3(0.0, 0.0, section_radius)
 		section.add_child(stripe)
 
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)
+	var bridge_mesh := CylinderMesh.new()
+	bridge_mesh.top_radius = section_radius * 0.3
+	bridge_mesh.bottom_radius = section_radius * 0.3
+	bridge_mesh.height = max(bridge_length, 0.01)
 	for i in range(bridge_transforms.size()):
 		var bridge := MeshInstance3D.new()
 		bridge.name = "Bridge%d" % i
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = section_radius * 0.3
-		cyl.bottom_radius = section_radius * 0.3
-		cyl.height = max(bridge_length, 0.01)
-		bridge.mesh = cyl
+		bridge.mesh = bridge_mesh
 		bridge.material_override = hull_material
 		bridge.transform = bridge_transforms[i]
 		add_child(bridge)

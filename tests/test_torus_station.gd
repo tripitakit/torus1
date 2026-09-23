@@ -17,6 +17,9 @@ func _init():
 	failures += _test_rotate_sections_does_not_rotate_bridges()
 	failures += _test_sections_and_bridges_share_one_hull_material()
 	failures += _test_stripes_use_yellow_material_distinct_from_hull()
+	failures += _test_sections_share_one_mesh_resource()
+	failures += _test_stripes_share_one_mesh_resource()
+	failures += _test_bridges_share_one_mesh_resource()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -196,6 +199,44 @@ func _test_sections_and_bridges_share_one_hull_material() -> int:
 		result = 1
 	elif section0.material_override != bridge0.material_override:
 		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 and Bridge0 use different material resources")
+		result = 1
+	station.free()
+	return result
+
+func _test_sections_share_one_mesh_resource() -> int:
+	# With num_sections in the thousands, a fresh CylinderMesh per section
+	# would duplicate identical geometry in GPU memory thousands of times.
+	var station := _make_station(4)
+	station.build_station()
+	var section0: MeshInstance3D = station.get_node("Section0")
+	var section1: MeshInstance3D = station.get_node("Section1")
+	var result := 0
+	if section0.mesh == null or section0.mesh != section1.mesh:
+		print("FAIL _test_sections_share_one_mesh_resource: Section0 and Section1 use different mesh resources")
+		result = 1
+	station.free()
+	return result
+
+func _test_stripes_share_one_mesh_resource() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var stripe0: MeshInstance3D = station.get_node("Section0").get_node("Stripe")
+	var stripe1: MeshInstance3D = station.get_node("Section1").get_node("Stripe")
+	var result := 0
+	if stripe0.mesh == null or stripe0.mesh != stripe1.mesh:
+		print("FAIL _test_stripes_share_one_mesh_resource: Stripe meshes differ between sections")
+		result = 1
+	station.free()
+	return result
+
+func _test_bridges_share_one_mesh_resource() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var bridge0: MeshInstance3D = station.get_node("Bridge0")
+	var bridge1: MeshInstance3D = station.get_node("Bridge1")
+	var result := 0
+	if bridge0.mesh == null or bridge0.mesh != bridge1.mesh:
+		print("FAIL _test_bridges_share_one_mesh_resource: Bridge meshes differ between instances")
 		result = 1
 	station.free()
 	return result
