@@ -20,6 +20,7 @@ func _init():
 	failures += _test_sections_share_one_mesh_resource()
 	failures += _test_stripes_share_one_mesh_resource()
 	failures += _test_bridges_share_one_mesh_resource()
+	failures += _test_hull_material_has_emission_and_ao()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -237,6 +238,25 @@ func _test_bridges_share_one_mesh_resource() -> int:
 	var result := 0
 	if bridge0.mesh == null or bridge0.mesh != bridge1.mesh:
 		print("FAIL _test_bridges_share_one_mesh_resource: Bridge meshes differ between instances")
+		result = 1
+	station.free()
+	return result
+
+func _test_hull_material_has_emission_and_ao() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var mat: StandardMaterial3D = (station.get_node("Section0") as MeshInstance3D).material_override
+	var result := 0
+	if not mat.emission_enabled or mat.emission_texture == null:
+		print("FAIL _test_hull_material_has_emission_and_ao: emission not enabled or no emission_texture")
+		result = 1
+	# Emission operator is additive (color + texture): a non-black base color
+	# would make the whole hull glow, not just the lights painted in the texture.
+	if not mat.emission.is_equal_approx(Color(0, 0, 0)):
+		print("FAIL _test_hull_material_has_emission_and_ao: base emission color=%s expected black" % mat.emission)
+		result = 1
+	if not mat.ao_enabled or mat.ao_texture == null:
+		print("FAIL _test_hull_material_has_emission_and_ao: ao not enabled or no ao_texture")
 		result = 1
 	station.free()
 	return result

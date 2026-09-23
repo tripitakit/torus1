@@ -40,7 +40,10 @@ func _effective_planet_radius() -> float:
 const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
 const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
 const HULL_NORMAL_PATH := "res://assets/textures/station/normal.png"
+const HULL_EMISSION_PATH := "res://assets/textures/station/emission.png"
+const HULL_AO_PATH := "res://assets/textures/station/ao.png"
 const HULL_TILE_SIZE := 500.0
+const HULL_LIGHTS_ENERGY := 3.0
 const STRIPE_COLOR := Color(0.95, 0.65, 0.05)
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
@@ -49,6 +52,12 @@ func _build_hull_material(circumference: float, length: float) -> StandardMateri
 	mat.roughness_texture = load(HULL_ROUGHNESS_PATH)
 	mat.normal_enabled = true
 	mat.normal_texture = load(HULL_NORMAL_PATH)
+	mat.emission_enabled = true
+	mat.emission = Color(0, 0, 0)
+	mat.emission_texture = load(HULL_EMISSION_PATH)
+	mat.emission_energy_multiplier = HULL_LIGHTS_ENERGY
+	mat.ao_enabled = true
+	mat.ao_texture = load(HULL_AO_PATH)
 	mat.uv1_scale = Vector3(circumference / HULL_TILE_SIZE, length / HULL_TILE_SIZE, 1.0)
 	return mat
 
