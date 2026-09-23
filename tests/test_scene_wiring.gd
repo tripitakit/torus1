@@ -22,9 +22,6 @@ func _test_scene_wiring() -> int:
 	if planet_system == null:
 		print("FAIL _test_scene_wiring: PlanetSystem node missing")
 		result = 1
-	elif not (planet_system as Node3D).position.is_equal_approx(Vector3(0.0, -4000.0, -6959600.0)):
-		print("FAIL _test_scene_wiring: PlanetSystem position=%s" % (planet_system as Node3D).position)
-		result = 1
 
 	if void_cruiser == null:
 		print("FAIL _test_scene_wiring: VoidCruiser node missing")
@@ -32,6 +29,11 @@ func _test_scene_wiring() -> int:
 	elif not (void_cruiser as Node3D).position.is_equal_approx(Vector3.ZERO):
 		print("FAIL _test_scene_wiring: VoidCruiser position=%s" % (void_cruiser as Node3D).position)
 		result = 1
+
+	if planet_system != null and void_cruiser != null:
+		if planet_system.get_parent() != void_cruiser.get_parent():
+			print("FAIL _test_scene_wiring: PlanetSystem and VoidCruiser are not siblings, so WorldOriginRebase's sibling auto-discovery would never shift PlanetSystem")
+			result = 1
 
 	if planet_system != null:
 		var planet := planet_system.get_node_or_null("Planet")
@@ -50,18 +52,31 @@ func _test_scene_wiring() -> int:
 			if resolved_planet != planet:
 				print("FAIL _test_scene_wiring: TorusStation.planet_node did not resolve to Planet after reparenting")
 				result = 1
+		if torus_station != null:
+			# PlanetSystem's offset must stay consistent with TorusStation's own
+			# geometry, not be a second hand-copied literal that can silently
+			# drift out of sync with it (they did, once: rescaling the station
+			# without updating this offset left a 2km-radius station ~7000km
+			# from a 4cm ship, and every existing test still passed).
+			var clearance := 10000.0
+			var section_clearance := 2.0
+			var planet_radius: float = torus_station.planet_radius
+			var orbit_altitude: float = torus_station.orbit_altitude
+			var section_radius: float = torus_station.section_radius
+			var expected_z: float = -(planet_radius + orbit_altitude + clearance)
+			var expected_y: float = -(section_clearance * section_radius)
+			var actual: Vector3 = (planet_system as Node3D).position
+			if not is_equal_approx(actual.z, expected_z) or not is_equal_approx(actual.y, expected_y):
+				print("FAIL _test_scene_wiring: PlanetSystem position=%s not consistent with TorusStation geometry (expected y=%f z=%f)" % [actual, expected_y, expected_z])
+				result = 1
 
 	if rebase == null:
 		print("FAIL _test_scene_wiring: WorldOriginRebase node missing")
 		result = 1
 	else:
 		var resolved_tracked: Node = rebase.get_node_or_null(rebase.tracked_node)
-		var resolved_rebasing: Node = rebase.get_node_or_null(rebase.rebasing_node)
 		if resolved_tracked != void_cruiser:
 			print("FAIL _test_scene_wiring: WorldOriginRebase.tracked_node did not resolve to VoidCruiser")
-			result = 1
-		if resolved_rebasing != planet_system:
-			print("FAIL _test_scene_wiring: WorldOriginRebase.rebasing_node did not resolve to PlanetSystem")
 			result = 1
 
 	scene.free()

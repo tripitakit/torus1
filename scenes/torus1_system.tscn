@@ -38,4 +38,3 @@ far = 69496000.0
 [node name="WorldOriginRebase" type="Node" parent="." unique_id=647120983]
 script = ExtResource("4_rebase")
 tracked_node = NodePath("../VoidCruiser")
-rebasing_node = NodePath("../PlanetSystem")
