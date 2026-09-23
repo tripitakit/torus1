@@ -3,12 +3,20 @@ extends SceneTree
 func _init():
 	var failures := 0
 	failures += _test_scene_wiring()
+	failures += _test_game_starts_fullscreen()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
 		print("%d TEST(S) FAILED" % failures)
 	quit()
+
+func _test_game_starts_fullscreen() -> int:
+	var mode: int = ProjectSettings.get_setting("display/window/size/mode", DisplayServer.WINDOW_MODE_WINDOWED)
+	if mode != DisplayServer.WINDOW_MODE_FULLSCREEN:
+		print("FAIL _test_game_starts_fullscreen: display/window/size/mode=%d expected %d (fullscreen)" % [mode, DisplayServer.WINDOW_MODE_FULLSCREEN])
+		return 1
+	return 0
 
 func _test_scene_wiring() -> int:
 	var packed: PackedScene = load("res://scenes/torus1_system.tscn")
