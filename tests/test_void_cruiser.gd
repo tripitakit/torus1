@@ -314,11 +314,19 @@ func _test_build_headlights_adds_two_spotlights_near_the_nose() -> int:
 			if spot.position.z >= 0.0:
 				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s position.z=%f expected negative (nose, -Z is forward)" % [light_name, spot.position.z])
 				result = 1
-			if spot.spot_range < 300.0:
-				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s spot_range=%f expected >= 300.0 (deep-reaching)" % [light_name, spot.spot_range])
-				result = 1
-			if not spot.shadow_enabled:
-				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s shadow_enabled=false expected true" % light_name)
+			# Tuned in game: reaches far in open space without blowing out to
+			# white at close range.
+			var tuned := {"light_energy": 18.0, "spot_range": 8000.0, "spot_angle": 45.0, "spot_attenuation": 0.8}
+			for property in tuned:
+				if not is_equal_approx(spot.get(property), tuned[property]):
+					print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s %s=%f expected %f (tuned value)" % [light_name, property, spot.get(property), tuned[property]])
+					result = 1
+			if spot.shadow_enabled:
+				# Shadow-mapped self-shadowing on the station's large-radius
+				# curved hull produces flickering acne bands at range (shadow
+				# map precision breaks down at kilometer scale); disabled by
+				# design, not an oversight.
+				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s shadow_enabled=true expected false (shadow acne at station scale)" % light_name)
 				result = 1
 	cruiser.free()
 	return result

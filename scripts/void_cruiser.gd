@@ -16,9 +16,10 @@ const STROBE_PERIOD := 1.2
 const STROBE_ON_DURATION := 0.1
 const NAV_LIGHT_ENERGY := 3.0
 const TAIL_LIGHT_ENERGY := 5.0
-const HEADLIGHT_ENERGY := 12.0
-const HEADLIGHT_RANGE := 400.0
-const HEADLIGHT_ANGLE := 25.0
+const HEADLIGHT_ENERGY := 18.0
+const HEADLIGHT_RANGE := 8000.0
+const HEADLIGHT_ANGLE := 45.0
+const HEADLIGHT_ATTENUATION := 0.8
 const HULL_SIZE := Vector3(15.0, 7.5, 30.0)
 const SENSOR_RANGE := 20000.0
 const SENSOR_DIRECTIONS := {
@@ -139,7 +140,11 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 	light.light_energy = HEADLIGHT_ENERGY
 	light.spot_range = HEADLIGHT_RANGE
 	light.spot_angle = HEADLIGHT_ANGLE
-	light.shadow_enabled = true
+	light.spot_attenuation = HEADLIGHT_ATTENUATION
+	# Shadows off by design: at the station's kilometer scale, the spotlight
+	# shadow map self-shadows the curved hull with flickering acne bands at
+	# range, resolving cleanly only at very close distance.
+	light.shadow_enabled = false
 	add_child(light)
 
 func _unhandled_input(event: InputEvent) -> void:
