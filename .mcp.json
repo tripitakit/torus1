@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "blender": {
+      "command": "uvx",
+      "args": ["mcp-for-blender"]
+    },
     "godot": {
       "command": "/home/patrick/.local/share/zed/node/node-v22.5.1-linux-x64/bin/node",
       "args": [
