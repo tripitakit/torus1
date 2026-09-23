@@ -40,7 +40,7 @@ func _effective_planet_radius() -> float:
 const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
 const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
 const HULL_NORMAL_PATH := "res://assets/textures/station/normal.png"
-const HULL_TILE_SIZE := 10.0
+const HULL_TILE_SIZE := 500.0
 const STRIPE_COLOR := Color(0.95, 0.65, 0.05)
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
