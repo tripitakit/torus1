@@ -10,8 +10,6 @@ func _init():
 	failures += _test_velocity_persists_across_steps_without_thrust()
 	failures += _test_read_input_methods_do_not_crash_headless()
 	failures += _test_mouse_look_is_independent_of_tick_rate()
-	failures += _test_build_ship_mesh_adds_visible_mesh()
-	failures += _test_ship_model_faces_forward()
 	failures += _test_forward_hold_time_starts_at_zero()
 	failures += _test_forward_hold_time_resets_on_first_press()
 	failures += _test_forward_hold_time_accumulates_while_held()
@@ -29,6 +27,7 @@ func _init():
 	failures += _test_build_cockpit_adds_cockpit_at_pilot_eye()
 	failures += _test_process_shows_ship_speed_on_hud()
 	failures += _test_nav_light_markers_hidden_from_onboard_cameras()
+	failures += _test_ship_model_is_gone()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -132,41 +131,6 @@ func _test_mouse_look_is_independent_of_tick_rate() -> int:
 		result = 1
 	cruiser_a.free()
 	cruiser_b.free()
-	return result
-
-func _test_build_ship_mesh_adds_visible_mesh() -> int:
-	var cruiser := _make_cruiser()
-	cruiser.build_ship_mesh()
-	var result := 0
-	var model_node := cruiser.get_node_or_null("ShipModel")
-	if model_node == null:
-		print("FAIL _test_build_ship_mesh_adds_visible_mesh: no ShipModel child")
-		result = 1
-	else:
-		var hull := model_node.find_child("Hull_Cargo", true, false)
-		if hull == null or not (hull is MeshInstance3D):
-			print("FAIL _test_build_ship_mesh_adds_visible_mesh: ShipModel has no Hull_Cargo MeshInstance3D")
-			result = 1
-	cruiser.free()
-	return result
-
-func _test_ship_model_faces_forward() -> int:
-	# Blender's glTF exporter does not automatically align a model's nose
-	# with Godot's -Z forward: this ship was authored nose-toward -Y in
-	# Blender, which the exporter placed nose-toward +Z in Godot (facing
-	# the chase camera instead of away from it). Corrected with a fixed
-	# 180-degree yaw applied at instantiation; verify it stays applied.
-	var cruiser := _make_cruiser()
-	cruiser.build_ship_mesh()
-	var result := 0
-	var model_node := cruiser.get_node_or_null("ShipModel")
-	if model_node == null:
-		print("FAIL _test_ship_model_faces_forward: no ShipModel child")
-		result = 1
-	elif not is_equal_approx(wrapf(model_node.rotation_degrees.y, 0.0, 360.0), 180.0):
-		print("FAIL _test_ship_model_faces_forward: ShipModel rotation_degrees.y=%f expected 180" % model_node.rotation_degrees.y)
-		result = 1
-	cruiser.free()
 	return result
 
 func _test_forward_hold_time_starts_at_zero() -> int:
@@ -452,6 +416,20 @@ func _test_nav_light_markers_hidden_from_onboard_cameras() -> int:
 		var marker: MeshInstance3D = cruiser.get_node("%s/Marker" % light_name)
 		if marker.layers != 4:
 			print("FAIL _test_nav_light_markers_hidden_from_onboard_cameras: %s marker layers=%d expected 4 (SHIP_EXTERIOR_LAYER)" % [light_name, marker.layers])
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_ship_model_is_gone() -> int:
+	# First-person cockpit: the ship has no exterior model any more.
+	var cruiser := _make_cruiser()
+	var result := 0
+	if cruiser.has_method("build_ship_mesh"):
+		print("FAIL _test_ship_model_is_gone: void_cruiser.gd still has build_ship_mesh()")
+		result = 1
+	for path in ["res://assets/models/void_cruiser.glb", "res://assets/models/void_cruiser.glb.import"]:
+		if FileAccess.file_exists(path):
+			print("FAIL _test_ship_model_is_gone: %s still exists" % path)
 			result = 1
 	cruiser.free()
 	return result

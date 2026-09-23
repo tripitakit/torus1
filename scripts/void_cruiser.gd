@@ -2,7 +2,6 @@ extends CharacterBody3D
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
-const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
 
 @export var thrust_power: float = 150.0
 @export_range(0.0, 0.999, 0.001) var linear_damping: float = 0.5
@@ -41,7 +40,6 @@ var _forward_hold_sign: float = 0.0
 var _strobe_time: float = 0.0
 
 func _ready() -> void:
-	build_ship_mesh()
 	build_collision_shape()
 	build_proximity_sensors()
 	build_navigation_lights()
@@ -57,17 +55,6 @@ func _process(delta: float) -> void:
 	var cockpit := get_node_or_null("Cockpit")
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
-
-func build_ship_mesh() -> void:
-	var packed: PackedScene = load(SHIP_MODEL_PATH)
-	var model := packed.instantiate()
-	model.name = "ShipModel"
-	# Blender's glTF exporter does not preserve "which way is forward": this
-	# ship was modeled nose-toward -Y in Blender, and the export placed the
-	# nose toward +Z in Godot instead of -Z (forward), so it faced the chase
-	# camera instead of away from it. Corrective yaw, not a modeling error.
-	model.rotation_degrees.y = 180.0
-	add_child(model)
 
 func build_collision_shape() -> void:
 	var shape_node := CollisionShape3D.new()
