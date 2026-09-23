@@ -18,6 +18,7 @@ func _init():
 	failures += _test_forward_hold_time_resets_on_release()
 	failures += _test_forward_hold_time_resets_on_direction_reversal()
 	failures += _test_forward_thrust_ramps_up_velocity_over_time()
+	failures += _test_build_collision_shape_adds_box_shape()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -236,5 +237,25 @@ func _test_forward_thrust_ramps_up_velocity_over_time() -> int:
 		print("FAIL _test_forward_thrust_ramps_up_velocity_over_time: after holding %fs multiplier=%f expected=%f" % [cruiser.forward_thrust_ramp_duration, multiplier_max, cruiser.forward_thrust_ramp_multiplier])
 		result = 1
 
+	cruiser.free()
+	return result
+
+func _test_build_collision_shape_adds_box_shape() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_collision_shape()
+	var result := 0
+	var shape_node := cruiser.get_node_or_null("CollisionShape3D")
+	if shape_node == null or not (shape_node is CollisionShape3D):
+		print("FAIL _test_build_collision_shape_adds_box_shape: no CollisionShape3D child")
+		result = 1
+	elif (shape_node as CollisionShape3D).shape == null or not ((shape_node as CollisionShape3D).shape is BoxShape3D):
+		print("FAIL _test_build_collision_shape_adds_box_shape: shape is not a BoxShape3D")
+		result = 1
+	else:
+		var box: BoxShape3D = (shape_node as CollisionShape3D).shape
+		var expected := Vector3(15.0, 7.5, 30.0)
+		if not box.size.is_equal_approx(expected):
+			print("FAIL _test_build_collision_shape_adds_box_shape: size=%s expected=%s" % [box.size, expected])
+			result = 1
 	cruiser.free()
 	return result

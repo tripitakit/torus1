@@ -1,4 +1,4 @@
-extends Node3D
+extends CharacterBody3D
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
@@ -10,8 +10,8 @@ const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
 @export var mouse_sensitivity: float = 0.01
 @export var forward_thrust_ramp_multiplier: float = 10.0
 @export var forward_thrust_ramp_duration: float = 5.0
+@export_range(0.0, 1.0, 0.01) var collision_restitution: float = 0.4
 
-var velocity: Vector3 = Vector3.ZERO
 var angular_velocity: Vector3 = Vector3.ZERO
 
 var _mouse_delta: Vector2 = Vector2.ZERO
@@ -20,6 +20,7 @@ var _forward_hold_sign: float = 0.0
 
 func _ready() -> void:
 	build_ship_mesh()
+	build_collision_shape()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func build_ship_mesh() -> void:
@@ -32,6 +33,14 @@ func build_ship_mesh() -> void:
 	# camera instead of away from it. Corrective yaw, not a modeling error.
 	model.rotation_degrees.y = 180.0
 	add_child(model)
+
+func build_collision_shape() -> void:
+	var shape_node := CollisionShape3D.new()
+	shape_node.name = "CollisionShape3D"
+	var box := BoxShape3D.new()
+	box.size = Vector3(15.0, 7.5, 30.0)
+	shape_node.shape = box
+	add_child(shape_node)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
@@ -81,7 +90,22 @@ func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque
 	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, linear_damping, delta)
 	angular_velocity = VoidCruiserPhysics.compute_new_angular_velocity(angular_velocity, local_torque_input, torque_power, angular_damping, delta)
 
-	position += velocity * delta
+	_move(delta)
+
 	rotate_object_local(Vector3.RIGHT, angular_velocity.x * delta)
 	rotate_object_local(Vector3.UP, angular_velocity.y * delta)
 	rotate_object_local(Vector3.FORWARD, angular_velocity.z * delta)
+
+func _move(delta: float) -> void:
+	# move_and_collide needs a live physics space, which only exists once
+	# this node is genuinely inside a processed scene tree frame. Off-tree
+	# (every headless unit test in this project, which never adds the
+	# cruiser to a tree) falls back to plain integration — see
+	# docs/superpowers/specs/2026-09-23-station-collisions-design.md for the
+	# empirical verification behind this.
+	if not is_inside_tree():
+		position += velocity * delta
+		return
+	var collision := move_and_collide(velocity * delta)
+	if collision:
+		velocity = VoidCruiserPhysics.compute_bounce_velocity(velocity, collision.get_normal(), collision_restitution)

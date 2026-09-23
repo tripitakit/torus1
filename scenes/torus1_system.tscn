@@ -37,7 +37,7 @@ transform = Transform3D(1, 0, 0, 0, 0.9889, -0.1483, 0, 0.1483, 0.9889, 0, 0, 0)
 shadow_enabled = true
 directional_shadow_max_distance = 20000.0
 
-[node name="VoidCruiser" type="Node3D" parent="." unique_id=413410014]
+[node name="VoidCruiser" type="CharacterBody3D" parent="." unique_id=413410014]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("3_cruiser")
 
