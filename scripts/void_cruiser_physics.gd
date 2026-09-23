@@ -9,3 +9,9 @@ static func compute_new_angular_velocity(angular_velocity: Vector3, local_torque
 	var damping_factor := pow(1.0 - clamp(angular_damping, 0.0, 0.999), delta)
 	var torque_accel := local_torque_input * torque_power
 	return angular_velocity * damping_factor + torque_accel * delta
+
+static func compute_forward_thrust_multiplier(hold_time: float, ramp_duration: float, max_multiplier: float) -> float:
+	if ramp_duration <= 0.0:
+		return max_multiplier
+	var t: float = clamp(hold_time / ramp_duration, 0.0, 1.0)
+	return lerp(1.0, max_multiplier, t)

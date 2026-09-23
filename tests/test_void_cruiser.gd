@@ -1,6 +1,7 @@
 extends SceneTree
 
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
+const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 
 func _init():
 	var failures := 0
@@ -11,6 +12,12 @@ func _init():
 	failures += _test_mouse_look_is_independent_of_tick_rate()
 	failures += _test_build_ship_mesh_adds_visible_mesh()
 	failures += _test_ship_model_faces_forward()
+	failures += _test_forward_hold_time_starts_at_zero()
+	failures += _test_forward_hold_time_resets_on_first_press()
+	failures += _test_forward_hold_time_accumulates_while_held()
+	failures += _test_forward_hold_time_resets_on_release()
+	failures += _test_forward_hold_time_resets_on_direction_reversal()
+	failures += _test_forward_thrust_ramps_up_velocity_over_time()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -148,5 +155,86 @@ func _test_ship_model_faces_forward() -> int:
 	elif not is_equal_approx(wrapf(model_node.rotation_degrees.y, 0.0, 360.0), 180.0):
 		print("FAIL _test_ship_model_faces_forward: ShipModel rotation_degrees.y=%f expected 180" % model_node.rotation_degrees.y)
 		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_hold_time_starts_at_zero() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	if not is_equal_approx(cruiser._forward_hold_time, 0.0):
+		print("FAIL _test_forward_hold_time_starts_at_zero: _forward_hold_time=%f" % cruiser._forward_hold_time)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_hold_time_resets_on_first_press() -> int:
+	# The tick a key first goes down is a fresh hold: multiplier must start at
+	# 1x, not carry over from whatever _forward_hold_sign was before.
+	var cruiser := _make_cruiser()
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	var result := 0
+	if not is_equal_approx(cruiser._forward_hold_time, 0.0):
+		print("FAIL _test_forward_hold_time_resets_on_first_press: _forward_hold_time=%f expected 0.0" % cruiser._forward_hold_time)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_hold_time_accumulates_while_held() -> int:
+	var cruiser := _make_cruiser()
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	cruiser._update_forward_hold_time(1.0, 0.3)
+	cruiser._update_forward_hold_time(1.0, 0.2)
+	var result := 0
+	if not is_equal_approx(cruiser._forward_hold_time, 0.5):
+		print("FAIL _test_forward_hold_time_accumulates_while_held: _forward_hold_time=%f expected 0.5" % cruiser._forward_hold_time)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_hold_time_resets_on_release() -> int:
+	var cruiser := _make_cruiser()
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	cruiser._update_forward_hold_time(0.0, 0.5)
+	var result := 0
+	if not is_equal_approx(cruiser._forward_hold_time, 0.0):
+		print("FAIL _test_forward_hold_time_resets_on_release: _forward_hold_time=%f expected 0.0" % cruiser._forward_hold_time)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_hold_time_resets_on_direction_reversal() -> int:
+	var cruiser := _make_cruiser()
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	cruiser._update_forward_hold_time(1.0, 0.5)
+	cruiser._update_forward_hold_time(-1.0, 0.5)
+	var result := 0
+	if not is_equal_approx(cruiser._forward_hold_time, 0.0):
+		print("FAIL _test_forward_hold_time_resets_on_direction_reversal: _forward_hold_time=%f expected 0.0" % cruiser._forward_hold_time)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_forward_thrust_ramps_up_velocity_over_time() -> int:
+	var cruiser := _make_cruiser()
+	var delta := 1.0
+	var result := 0
+
+	cruiser._update_forward_hold_time(1.0, delta)
+	var multiplier_first_tick: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(
+		cruiser._forward_hold_time, cruiser.forward_thrust_ramp_duration, cruiser.forward_thrust_ramp_multiplier)
+	if not is_equal_approx(multiplier_first_tick, 1.0):
+		print("FAIL _test_forward_thrust_ramps_up_velocity_over_time: first-tick multiplier=%f expected 1.0" % multiplier_first_tick)
+		result = 1
+
+	var ticks_needed := int(cruiser.forward_thrust_ramp_duration / delta)
+	for i in range(ticks_needed):
+		cruiser._update_forward_hold_time(1.0, delta)
+	var multiplier_max: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(
+		cruiser._forward_hold_time, cruiser.forward_thrust_ramp_duration, cruiser.forward_thrust_ramp_multiplier)
+	if not is_equal_approx(multiplier_max, cruiser.forward_thrust_ramp_multiplier):
+		print("FAIL _test_forward_thrust_ramps_up_velocity_over_time: after holding %fs multiplier=%f expected=%f" % [cruiser.forward_thrust_ramp_duration, multiplier_max, cruiser.forward_thrust_ramp_multiplier])
+		result = 1
+
 	cruiser.free()
 	return result

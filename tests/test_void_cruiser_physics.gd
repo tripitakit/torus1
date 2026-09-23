@@ -15,6 +15,11 @@ func _init():
 	failures += _test_angular_large_delta_stays_finite()
 	failures += _test_damping_above_one_does_not_produce_nan()
 	failures += _test_angular_damping_above_one_does_not_produce_nan()
+	failures += _test_forward_thrust_multiplier_at_zero_hold_time()
+	failures += _test_forward_thrust_multiplier_at_full_ramp()
+	failures += _test_forward_thrust_multiplier_at_half_ramp()
+	failures += _test_forward_thrust_multiplier_clamps_past_ramp_duration()
+	failures += _test_forward_thrust_multiplier_zero_duration_is_instant_max()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -109,5 +114,41 @@ func _test_angular_damping_above_one_does_not_produce_nan() -> int:
 	var result: Vector3 = VoidCruiserPhysics.compute_new_angular_velocity(Vector3(10, 0, 0), Vector3.ZERO, 0.0, 1.5, 1.0 / 60.0)
 	if is_nan(result.x) or is_nan(result.y) or is_nan(result.z):
 		print("FAIL _test_angular_damping_above_one_does_not_produce_nan: result=%s" % result)
+		return 1
+	return 0
+
+func _test_forward_thrust_multiplier_at_zero_hold_time() -> int:
+	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 5.0, 10.0)
+	if not is_equal_approx(result, 1.0):
+		print("FAIL _test_forward_thrust_multiplier_at_zero_hold_time: result=%f expected=1.0" % result)
+		return 1
+	return 0
+
+func _test_forward_thrust_multiplier_at_full_ramp() -> int:
+	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(5.0, 5.0, 10.0)
+	if not is_equal_approx(result, 10.0):
+		print("FAIL _test_forward_thrust_multiplier_at_full_ramp: result=%f expected=10.0" % result)
+		return 1
+	return 0
+
+func _test_forward_thrust_multiplier_at_half_ramp() -> int:
+	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(2.5, 5.0, 10.0)
+	var expected := 5.5  # lerp(1, 10, 0.5)
+	if not is_equal_approx(result, expected):
+		print("FAIL _test_forward_thrust_multiplier_at_half_ramp: result=%f expected=%f" % [result, expected])
+		return 1
+	return 0
+
+func _test_forward_thrust_multiplier_clamps_past_ramp_duration() -> int:
+	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(50.0, 5.0, 10.0)
+	if not is_equal_approx(result, 10.0):
+		print("FAIL _test_forward_thrust_multiplier_clamps_past_ramp_duration: result=%f expected=10.0" % result)
+		return 1
+	return 0
+
+func _test_forward_thrust_multiplier_zero_duration_is_instant_max() -> int:
+	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 0.0, 10.0)
+	if not is_equal_approx(result, 10.0):
+		print("FAIL _test_forward_thrust_multiplier_zero_duration_is_instant_max: result=%f expected=10.0" % result)
 		return 1
 	return 0
