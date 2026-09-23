@@ -12,13 +12,11 @@ func _init():
 	failures += _test_build_station_preserves_unrelated_children()
 	failures += _test_bridge_positions_are_distinct_and_close_the_ring()
 	failures += _test_uses_planet_node_radius_when_set()
-	failures += _test_sections_have_stripe_marker()
+	failures += _test_sections_have_no_stripe_marker()
 	failures += _test_rotate_sections_applies_correct_local_y_angle()
 	failures += _test_rotate_sections_also_rotates_bridges()
 	failures += _test_sections_and_bridges_share_one_hull_material()
-	failures += _test_stripes_use_yellow_material_distinct_from_hull()
 	failures += _test_sections_share_one_mesh_resource()
-	failures += _test_stripes_share_one_mesh_resource()
 	failures += _test_bridges_share_one_mesh_resource()
 	failures += _test_hull_material_has_emission_and_ao()
 	failures += _test_sections_are_animatable_bodies()
@@ -135,23 +133,20 @@ func _test_uses_planet_node_radius_when_set() -> int:
 	station.free()
 	return result
 
-func _test_sections_have_stripe_marker() -> int:
+func _test_sections_have_no_stripe_marker() -> int:
+	# The orange rotation-marker stripe was removed at the user's request:
+	# a section is only its hull mesh and collision shape.
 	var station := _make_station(4)
 	station.build_station()
 	var section: AnimatableBody3D = station.get_node("Section0")
 	var result := 0
-	var stripe := section.get_node_or_null("Stripe")
-	if stripe == null or not (stripe is MeshInstance3D) or not ((stripe as MeshInstance3D).mesh is BoxMesh):
-		print("FAIL _test_sections_have_stripe_marker: Section0 has no Stripe MeshInstance3D with a BoxMesh")
+	if section.get_node_or_null("Stripe") != null:
+		print("FAIL _test_sections_have_no_stripe_marker: Section0 still has a Stripe child")
 		result = 1
-	else:
-		# Offset must be along local Z (radially outward in the ring's horizontal
-		# plane, visible from the top-down verification camera), not local X
-		# (which maps to world UP for every section and is invisible from above).
-		var expected_offset := Vector3(0.0, 0.0, 30.0)
-		if not (stripe as MeshInstance3D).transform.origin.is_equal_approx(expected_offset):
-			print("FAIL _test_sections_have_stripe_marker: Stripe offset=%s expected=%s" % [(stripe as MeshInstance3D).transform.origin, expected_offset])
-			result = 1
+	var mesh_count := section.find_children("*", "MeshInstance3D", true, false).size()
+	if mesh_count != 1:
+		print("FAIL _test_sections_have_no_stripe_marker: Section0 has %d meshes, expected 1 (hull only)" % mesh_count)
+		result = 1
 	station.free()
 	return result
 
@@ -233,18 +228,6 @@ func _test_sections_share_one_mesh_resource() -> int:
 	station.free()
 	return result
 
-func _test_stripes_share_one_mesh_resource() -> int:
-	var station := _make_station(4)
-	station.build_station()
-	var stripe0: MeshInstance3D = station.get_node("Section0").get_node("Stripe")
-	var stripe1: MeshInstance3D = station.get_node("Section1").get_node("Stripe")
-	var result := 0
-	if stripe0.mesh == null or stripe0.mesh != stripe1.mesh:
-		print("FAIL _test_stripes_share_one_mesh_resource: Stripe meshes differ between sections")
-		result = 1
-	station.free()
-	return result
-
 func _test_bridges_share_one_mesh_resource() -> int:
 	var station := _make_station(4)
 	station.build_station()
@@ -274,27 +257,6 @@ func _test_hull_material_has_emission_and_ao() -> int:
 	if not mat.ao_enabled or mat.ao_texture == null:
 		print("FAIL _test_hull_material_has_emission_and_ao: ao not enabled or no ao_texture")
 		result = 1
-	station.free()
-	return result
-
-func _test_stripes_use_yellow_material_distinct_from_hull() -> int:
-	var station := _make_station(4)
-	station.build_station()
-	var section0_mesh: MeshInstance3D = station.get_node("Section0").get_node("Mesh")
-	var stripe: MeshInstance3D = station.get_node("Section0").get_node("Stripe")
-	var result := 0
-	if stripe.material_override == null or not (stripe.material_override is StandardMaterial3D):
-		print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe has no StandardMaterial3D override")
-		result = 1
-	else:
-		var mat: StandardMaterial3D = stripe.material_override
-		var c: Color = mat.albedo_color
-		if c.r < 0.5 or c.g < 0.3 or c.b > 0.3:
-			print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe albedo_color=%s not yellow-ish" % c)
-			result = 1
-		if mat == section0_mesh.material_override:
-			print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe uses the same material as the hull")
-			result = 1
 	station.free()
 	return result
 

@@ -46,7 +46,6 @@ const HULL_EMISSION_PATH := "res://assets/textures/station/emission.png"
 const HULL_AO_PATH := "res://assets/textures/station/ao.png"
 const HULL_TILE_SIZE := 500.0
 const HULL_LIGHTS_ENERGY := 3.0
-const STRIPE_COLOR := Color(0.95, 0.65, 0.05)
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -63,14 +62,6 @@ func _build_hull_material(circumference: float, length: float) -> StandardMateri
 	mat.uv1_scale = Vector3(circumference / HULL_TILE_SIZE, length / HULL_TILE_SIZE, 1.0)
 	return mat
 
-func _build_stripe_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = STRIPE_COLOR
-	mat.emission_enabled = true
-	mat.emission = STRIPE_COLOR
-	mat.emission_energy_multiplier = 0.3
-	return mat
-
 func build_station() -> void:
 	for child in get_children():
 		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
@@ -79,7 +70,6 @@ func build_station() -> void:
 
 	var effective_planet_radius := _effective_planet_radius()
 	var hull_material := _build_hull_material(TAU * section_radius, section_length)
-	var stripe_material := _build_stripe_material()
 
 	var section_mesh := CylinderMesh.new()
 	section_mesh.top_radius = section_radius
@@ -89,9 +79,6 @@ func build_station() -> void:
 	var section_shape := CylinderShape3D.new()
 	section_shape.radius = section_radius
 	section_shape.height = section_length
-
-	var stripe_mesh := BoxMesh.new()
-	stripe_mesh.size = Vector3(2.0, section_length, 2.0)
 
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
@@ -118,13 +105,6 @@ func build_station() -> void:
 		section_collision.name = "Collision"
 		section_collision.shape = section_shape
 		section.add_child(section_collision)
-
-		var stripe := MeshInstance3D.new()
-		stripe.name = "Stripe"
-		stripe.mesh = stripe_mesh
-		stripe.material_override = stripe_material
-		stripe.transform.origin = Vector3(0.0, 0.0, section_radius)
-		section.add_child(stripe)
 
 		section.transform = section_transforms[i]
 		add_child(section)
