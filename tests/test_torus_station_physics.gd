@@ -24,6 +24,7 @@ func _initialize():
 	await physics_frame
 
 	_failures += await _test_section_rotation_accumulates_across_physics_ticks()
+	_failures += await _test_bridge_rotation_accumulates_across_physics_ticks()
 	_failures += await _test_section_stays_aligned_with_parent_after_shift()
 
 	if _failures == 0:
@@ -89,6 +90,42 @@ func _test_section_rotation_accumulates_across_physics_ticks() -> int:
 			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
 			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
 		print("FAIL _test_section_rotation_accumulates_across_physics_ticks: delta_basis=%s expected=%s (a smaller-than-expected delta would mean sync_to_physics is silently dropping intermediate rotations)" % [delta_basis, expected_delta_basis])
+		result = 1
+	station.free()
+	return result
+
+func _test_bridge_rotation_accumulates_across_physics_ticks() -> int:
+	# Same bug class as the section test above, now checked on a bridge:
+	# bridges also rotate every frame (together with sections) and are also
+	# AnimatableBody3D, so they need sync_to_physics=false too.
+	var station := _make_station()
+	root.add_child(station)
+	station.set_process(false)
+	station.build_station()
+	var bridge: Node3D = station.get_node("Bridge0")
+	var original_basis: Basis = bridge.transform.basis
+
+	var sub_delta := 0.02
+	var calls_per_tick := 3
+	var num_ticks := 3
+	for tick in range(num_ticks):
+		for sub in range(calls_per_tick):
+			station._rotate_sections(sub_delta)
+		await physics_frame
+
+	var new_basis: Basis = bridge.transform.basis
+	var delta_basis: Basis = original_basis.inverse() * new_basis
+
+	var target_gravity: float = TorusGeometry.GRAVITY_1G * station.target_gravity_g
+	var omega: float = TorusGeometry.compute_section_angular_velocity(station.section_radius, target_gravity)
+	var total_expected_angle: float = omega * sub_delta * calls_per_tick * num_ticks
+	var expected_delta_basis := Basis(Vector3.UP, total_expected_angle)
+
+	var result := 0
+	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \
+			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
+			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
+		print("FAIL _test_bridge_rotation_accumulates_across_physics_ticks: delta_basis=%s expected=%s" % [delta_basis, expected_delta_basis])
 		result = 1
 	station.free()
 	return result

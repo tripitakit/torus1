@@ -14,7 +14,7 @@ func _init():
 	failures += _test_uses_planet_node_radius_when_set()
 	failures += _test_sections_have_stripe_marker()
 	failures += _test_rotate_sections_applies_correct_local_y_angle()
-	failures += _test_rotate_sections_does_not_rotate_bridges()
+	failures += _test_rotate_sections_also_rotates_bridges()
 	failures += _test_sections_and_bridges_share_one_hull_material()
 	failures += _test_stripes_use_yellow_material_distinct_from_hull()
 	failures += _test_sections_share_one_mesh_resource()
@@ -22,7 +22,7 @@ func _init():
 	failures += _test_bridges_share_one_mesh_resource()
 	failures += _test_hull_material_has_emission_and_ao()
 	failures += _test_sections_are_animatable_bodies()
-	failures += _test_bridges_are_static_bodies()
+	failures += _test_bridges_are_animatable_bodies()
 	failures += _test_sections_have_matching_collision_shape()
 	failures += _test_bridges_have_matching_collision_shape()
 	failures += _test_section_collision_shapes_are_shared()
@@ -108,7 +108,7 @@ func _test_bridge_positions_are_distinct_and_close_the_ring() -> int:
 	var torus_radius := 500.0 + 1500.0
 	var step := TAU / 4.0
 	for i in range(4):
-		var bridge: StaticBody3D = station.get_node("Bridge%d" % i)
+		var bridge: AnimatableBody3D = station.get_node("Bridge%d" % i)
 		var expected_theta := i * step + step * 0.5
 		var expected_pos := Vector3(cos(expected_theta), 0.0, sin(expected_theta)) * torus_radius
 		if not bridge.transform.origin.is_equal_approx(expected_pos):
@@ -175,15 +175,24 @@ func _test_rotate_sections_applies_correct_local_y_angle() -> int:
 	station.free()
 	return result
 
-func _test_rotate_sections_does_not_rotate_bridges() -> int:
+func _test_rotate_sections_also_rotates_bridges() -> int:
+	# Bridges rotate rigidly together with the sections they connect — the
+	# whole ring spins as one piece, not sections-spin/bridges-fixed.
 	var station := _make_station(4)
 	station.build_station()
-	var bridge: StaticBody3D = station.get_node("Bridge0")
+	var bridge: AnimatableBody3D = station.get_node("Bridge0")
 	var original_basis: Basis = bridge.transform.basis
-	station._rotate_sections(0.1)
+	var delta := 0.1
+	station._rotate_sections(delta)
+	var new_basis: Basis = bridge.transform.basis
+	var delta_basis: Basis = original_basis.inverse() * new_basis
+	var expected_omega: float = TorusGeometry.compute_section_angular_velocity(30.0, TorusGeometry.GRAVITY_1G)
+	var expected_delta_basis := Basis(Vector3.UP, expected_omega * delta)
 	var result := 0
-	if not bridge.transform.basis.is_equal_approx(original_basis):
-		print("FAIL _test_rotate_sections_does_not_rotate_bridges: bridge basis changed")
+	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \
+			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
+			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
+		print("FAIL _test_rotate_sections_also_rotates_bridges: delta_basis=%s expected=%s" % [delta_basis, expected_delta_basis])
 		result = 1
 	station.free()
 	return result
@@ -299,12 +308,16 @@ func _test_sections_are_animatable_bodies() -> int:
 	station.free()
 	return result
 
-func _test_bridges_are_static_bodies() -> int:
+func _test_bridges_are_animatable_bodies() -> int:
+	# Bridges now rotate every frame together with sections — same reasoning
+	# as sections: Godot recommends against moving a StaticBody3D every
+	# frame, and a body under continuous external transform control should
+	# be an AnimatableBody3D instead.
 	var station := _make_station(4)
 	station.build_station()
 	var result := 0
-	if not (station.get_node("Bridge0") is StaticBody3D):
-		print("FAIL _test_bridges_are_static_bodies: Bridge0 is not a StaticBody3D")
+	if not (station.get_node("Bridge0") is AnimatableBody3D):
+		print("FAIL _test_bridges_are_animatable_bodies: Bridge0 is not an AnimatableBody3D")
 		result = 1
 	station.free()
 	return result
@@ -329,7 +342,7 @@ func _test_sections_have_matching_collision_shape() -> int:
 func _test_bridges_have_matching_collision_shape() -> int:
 	var station := _make_station(4)
 	station.build_station()
-	var bridge: StaticBody3D = station.get_node("Bridge0")
+	var bridge: AnimatableBody3D = station.get_node("Bridge0")
 	var result := 0
 	var collision := bridge.get_node_or_null("Collision")
 	if collision == null or not (collision is CollisionShape3D) or not ((collision as CollisionShape3D).shape is CylinderShape3D):

@@ -23,10 +23,12 @@ func _process(delta: float) -> void:
 	_rotate_sections(delta)
 
 func _rotate_sections(delta: float) -> void:
+	# Bridges spin rigidly together with the sections they connect: the
+	# whole ring rotates as one piece.
 	var target_gravity := TorusGeometry.GRAVITY_1G * target_gravity_g
 	var omega := TorusGeometry.compute_section_angular_velocity(section_radius, target_gravity)
 	for child in get_children():
-		if child.name.begins_with("Section"):
+		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
 			child.rotate_object_local(Vector3.UP, omega * delta)
 
 func _effective_planet_radius() -> float:
@@ -139,8 +141,14 @@ func build_station() -> void:
 	bridge_shape.height = max(bridge_length, 0.01)
 
 	for i in range(bridge_transforms.size()):
-		var bridge := StaticBody3D.new()
+		var bridge := AnimatableBody3D.new()
 		bridge.name = "Bridge%d" % i
+		# Bridges now rotate every frame together with sections — same
+		# reasoning as sections: a body under continuous external transform
+		# control should not be a StaticBody3D (see the sync_to_physics
+		# comment on the section body above for why sync_to_physics must
+		# also be off).
+		bridge.sync_to_physics = false
 
 		var bridge_mesh_instance := MeshInstance3D.new()
 		bridge_mesh_instance.name = "Mesh"
