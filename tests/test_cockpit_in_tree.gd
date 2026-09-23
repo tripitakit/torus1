@@ -12,7 +12,7 @@ func _initialize():
 	await process_frame
 
 	_failures += await _test_exterior_cameras_follow_the_pilot_eye()
-	_failures += await _test_side_cameras_look_sixty_degrees_off_the_bow()
+	_failures += await _test_side_cameras_keep_their_yaw_off_the_bow()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -48,7 +48,7 @@ func _test_exterior_cameras_follow_the_pilot_eye() -> int:
 	ship.free()
 	return result
 
-func _test_side_cameras_look_sixty_degrees_off_the_bow() -> int:
+func _test_side_cameras_keep_their_yaw_off_the_bow() -> int:
 	var nodes := _make_moved_ship_with_cockpit()
 	var ship: Node3D = nodes[0]
 	var cockpit: Node3D = nodes[1]
@@ -56,15 +56,16 @@ func _test_side_cameras_look_sixty_degrees_off_the_bow() -> int:
 	await physics_frame
 	var ship_forward: Vector3 = -ship.global_transform.basis.z
 	var ship_left: Vector3 = -ship.global_transform.basis.x
-	var sin_60: float = sin(deg_to_rad(60.0))
+	# Side cameras sit 46.33° off the bow (30° front half-image + 16.33° side half-image).
+	var side_yaw := deg_to_rad(46.3348)
 	# prefix: [expected dot with ship forward, expected dot with ship left]
-	var expected := {"Front": [1.0, 0.0], "Left": [0.5, sin_60], "Right": [0.5, -sin_60]}
+	var expected := {"Front": [1.0, 0.0], "Left": [cos(side_yaw), sin(side_yaw)], "Right": [cos(side_yaw), -sin(side_yaw)]}
 	var result := 0
 	for prefix in expected:
 		var camera: Camera3D = cockpit.get_node("%sViewport/Camera" % prefix)
 		var looks: Vector3 = -camera.global_transform.basis.z
-		if not is_equal_approx(looks.dot(ship_forward), expected[prefix][0]) or not is_equal_approx(looks.dot(ship_left), expected[prefix][1]):
-			print("FAIL _test_side_cameras_look_sixty_degrees_off_the_bow: %s looks %s (forward·=%f left·=%f) expected forward·=%f left·=%f" % [prefix, looks, looks.dot(ship_forward), looks.dot(ship_left), expected[prefix][0], expected[prefix][1]])
+		if absf(looks.dot(ship_forward) - expected[prefix][0]) > 0.0001 or absf(looks.dot(ship_left) - expected[prefix][1]) > 0.0001:
+			print("FAIL _test_side_cameras_keep_their_yaw_off_the_bow: %s looks %s (forward·=%f left·=%f) expected forward·=%f left·=%f" % [prefix, looks, looks.dot(ship_forward), looks.dot(ship_left), expected[prefix][0], expected[prefix][1]])
 			result = 1
 	ship.free()
 	return result

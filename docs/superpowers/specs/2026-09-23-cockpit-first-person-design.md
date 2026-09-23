@@ -75,14 +75,27 @@ statiche):
   al bordo dello schermo centrale: il suo bordo interno coincide con il bordo
   esterno dello schermo centrale. È ruotato di `tilt_degrees` verso il
   pilota.
-- `compute_side_camera_yaw_degrees(horizontal_fov_degrees, side) -> float`:
-  ritorna `-side * horizontal_fov_degrees`. La camera laterale è ruotata di
-  un campo visivo intero rispetto a quella frontale, così i bordi delle
-  immagini combaciano.
+- `compute_side_camera_hfov_degrees(center_width, side_width, center_hfov_degrees) -> float`:
+  il campo visivo orizzontale della camera laterale. Alla giuntura un punto
+  compare alla stessa altezza sui due schermi solo se
+  `larghezza / sin(campo visivo / 2)` è uguale per entrambi. Lo schermo
+  laterale è più stretto, quindi la sua camera ha un campo visivo più
+  stretto: `2 * asin(sin(30°) * 0.9 / 1.6) ≈ 32,7°`.
+- `compute_side_camera_yaw_degrees(center_hfov_degrees, side_hfov_degrees, side) -> float`:
+  ritorna `-side * (center_hfov + side_hfov) / 2`, cioè ≈ ±46,3°. L'immagine
+  laterale comincia esattamente dove finisce quella frontale.
 
 Nota: l'inclinazione fisica del pannello (30°) e la rotazione della camera
-(60°) sono due cose separate. La prima decide dove sta lo schermo
+(46,3°) sono due cose separate. La prima decide dove sta lo schermo
 nell'abitacolo. La seconda decide cosa mostra.
+
+Correzione dopo la review finale: la prima versione dava a tutte e tre le
+camere 60° di campo visivo e ruotava le laterali di ±60°. Le immagini si
+toccavano in orizzontale, ma alla giuntura l'immagine "saltava" in altezza
+(lo stesso punto finiva a 0,34 m sullo schermo centrale e a 0,19 m su quello
+laterale). Con i valori sopra il panorama è continuo anche in altezza. Costo:
+la vista copre ±62,7° invece di ±90°. Per una vista più larga servirebbero
+schermi laterali grandi quanto quello centrale.
 
 ### Formattazione HUD (pura, testabile)
 
@@ -132,13 +145,13 @@ Cockpit (Node3D, origine = occhio del pilota)
   ├── HudScreen (MeshInstance3D, QuadMesh)   sulla plancia, inclinato verso il pilota
   ├── Dashboard (MeshInstance3D, BoxMesh)
   ├── FrontViewport / LeftViewport / RightViewport (SubViewport)
-  │     └── Camera (Camera3D)  fov orizzontale 60, near 2, far 69496000, cull_mask esterna
+  │     └── Camera (Camera3D)  fov orizzontale 60 (frontale) / ≈32,7 (laterali), near 2, far 69496000, cull_mask esterna
   ├── HudViewport (SubViewport)
   │     ├── Background (ColorRect)
   │     └── Lines (VBoxContainer) → SpeedLabel, BowLabel, SternLabel,
   │                                PortLabel, StarboardLabel, DorsalLabel, VentralLabel
   └── FrontCameraMount / LeftCameraMount / RightCameraMount (RemoteTransform3D)
-        ruotati di 0 / +60 / -60 gradi, spingono la loro trasformata sulla Camera
+        ruotati di 0 / ≈+46,3 / ≈-46,3 gradi, spingono la loro trasformata sulla Camera
 ```
 
 Perché i `RemoteTransform3D`: una `SubViewport` interrompe la catena delle
@@ -174,11 +187,11 @@ VENTRE  —
 | Schermi laterali | 0.9 × 0.50625 m (16:9), viewport 960 × 540, inclinati 30° |
 | Pannello HUD | 0.8 × 0.5 m, viewport 512 × 320, in `(0, -0.72, -1.3)`, inclinato -30° sull'asse X |
 | Camera pilota | fov verticale 80° (con finestra 16:9, ±56° orizzontali: ci stanno tutti gli schermi) |
-| Camere esterne | fov orizzontale 60° (`keep_aspect = KEEP_WIDTH`), stesso rapporto 16:9 per tutte |
+| Camere esterne | fov orizzontale 60° la frontale, ≈32,7° le laterali (`keep_aspect = KEEP_WIDTH`), rapporto 16:9 per tutte |
 
-Tutte le camere esterne hanno lo stesso rapporto d'aspetto e lo stesso
-campo visivo. Così il panorama è continuo negli angoli, anche se gli schermi
-laterali sono fisicamente più piccoli.
+Il campo visivo delle camere laterali dipende dalla larghezza degli schermi
+(vedi `compute_side_camera_hfov_degrees`). Così il panorama è continuo alle
+giunture anche se gli schermi laterali sono fisicamente più piccoli.
 
 `near = 2` per le camere esterne (la vecchia `ChaseCamera` usava 10).
 L'occhio è a 7 m dalla faccia di prua: con 10 m, una superficie a contatto

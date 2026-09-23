@@ -14,6 +14,7 @@ func _init():
 	failures += _test_hud_lines_in_display_order()
 	failures += _test_update_hud_writes_speed_and_distances()
 	failures += _test_update_hud_missing_distances_show_no_reading()
+	failures += _test_panorama_is_continuous_across_the_seams()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -47,7 +48,10 @@ func _test_pilot_camera_sees_only_the_cockpit() -> int:
 func _test_exterior_cameras_form_a_continuous_panorama() -> int:
 	var cockpit := _make_cockpit()
 	var result := 0
-	var expected_yaw := {"Front": 0.0, "Left": 60.0, "Right": -60.0}
+	# Side cameras: hfov = 2*asin(sin 30° * 0.9 / 1.6) ≈ 32.67°, turned by
+	# 30° + 16.33° so their image starts where the front one ends.
+	var expected_yaw := {"Front": 0.0, "Left": 46.3348, "Right": -46.3348}
+	var expected_fov := {"Front": 60.0, "Left": 32.6696, "Right": 32.6696}
 	for prefix in expected_yaw:
 		var camera := cockpit.get_node_or_null("%sViewport/Camera" % prefix)
 		if camera == null or not (camera is Camera3D):
@@ -55,8 +59,8 @@ func _test_exterior_cameras_form_a_continuous_panorama() -> int:
 			result = 1
 			continue
 		var cam: Camera3D = camera
-		if cam.keep_aspect != Camera3D.KEEP_WIDTH or not is_equal_approx(cam.fov, 60.0):
-			print("FAIL _test_exterior_cameras_form_a_continuous_panorama: %s keep_aspect=%d fov=%f expected KEEP_WIDTH and 60 (horizontal FOV)" % [prefix, cam.keep_aspect, cam.fov])
+		if cam.keep_aspect != Camera3D.KEEP_WIDTH or absf(cam.fov - expected_fov[prefix]) > 0.001:
+			print("FAIL _test_exterior_cameras_form_a_continuous_panorama: %s keep_aspect=%d fov=%f expected KEEP_WIDTH and %f (horizontal FOV)" % [prefix, cam.keep_aspect, cam.fov, expected_fov[prefix]])
 			result = 1
 		if (cam.cull_mask & 1) == 0 or (cam.cull_mask & 2) != 0 or (cam.cull_mask & 4) != 0:
 			print("FAIL _test_exterior_cameras_form_a_continuous_panorama: %s cull_mask=%d must include world (1) and exclude cockpit (2) and ship exterior (4)" % [prefix, cam.cull_mask])
@@ -65,7 +69,7 @@ func _test_exterior_cameras_form_a_continuous_panorama() -> int:
 		if mount == null or not (mount is RemoteTransform3D):
 			print("FAIL _test_exterior_cameras_form_a_continuous_panorama: no %sCameraMount RemoteTransform3D" % prefix)
 			result = 1
-		elif not is_equal_approx((mount as Node3D).rotation_degrees.y, expected_yaw[prefix]):
+		elif absf((mount as Node3D).rotation_degrees.y - expected_yaw[prefix]) > 0.001:
 			print("FAIL _test_exterior_cameras_form_a_continuous_panorama: %sCameraMount yaw=%f expected=%f" % [prefix, (mount as Node3D).rotation_degrees.y, expected_yaw[prefix]])
 			result = 1
 	cockpit.free()
@@ -199,5 +203,42 @@ func _test_update_hud_missing_distances_show_no_reading() -> int:
 	if label.text != "PRUA  —":
 		print("FAIL _test_update_hud_missing_distances_show_no_reading: BowLabel='%s' expected 'PRUA  —'" % label.text)
 		result = 1
+	cockpit.free()
+	return result
+
+# Height (metres, from the screen's centre line) at which a camera draws a
+# direction on its physical screen. Exterior cameras use KEEP_WIDTH, so fov is
+# horizontal and the image spans the screen width.
+func _height_on_screen(direction: Vector3, camera_yaw_degrees: float, hfov_degrees: float, screen_width: float) -> float:
+	var in_camera: Vector3 = Basis(Vector3.UP, deg_to_rad(camera_yaw_degrees)).inverse() * direction
+	return screen_width * (in_camera.y / -in_camera.z) / (2.0 * tan(deg_to_rad(hfov_degrees) * 0.5))
+
+func _test_panorama_is_continuous_across_the_seams() -> int:
+	# A point on the seam line must be drawn at the same height on both
+	# screens, at any elevation; otherwise the picture steps at the joint.
+	var cockpit := _make_cockpit()
+	var result := 0
+	var front_camera: Camera3D = cockpit.get_node("FrontViewport/Camera")
+	var front_width: float = (cockpit.get_node("FrontScreen").mesh as QuadMesh).size.x
+	for side in [-1.0, 1.0]:
+		var prefix := "Left" if side < 0.0 else "Right"
+		var side_camera: Camera3D = cockpit.get_node("%sViewport/Camera" % prefix)
+		var side_width: float = (cockpit.get_node("%sScreen" % prefix).mesh as QuadMesh).size.x
+		var side_yaw: float = (cockpit.get_node("%sCameraMount" % prefix) as Node3D).rotation_degrees.y
+		for elevation in [-12.0, 12.0, 25.0]:
+			# The front image's outer edge, on this side, at this elevation.
+			var seam_yaw: float = -side * front_camera.fov * 0.5
+			var direction: Vector3 = Basis(Vector3.UP, deg_to_rad(seam_yaw)) * Vector3(0.0, sin(deg_to_rad(elevation)), -cos(deg_to_rad(elevation)))
+			var front_height := _height_on_screen(direction, 0.0, front_camera.fov, front_width)
+			var side_height := _height_on_screen(direction, side_yaw, side_camera.fov, side_width)
+			if not is_equal_approx(front_height, side_height):
+				print("FAIL _test_panorama_is_continuous_across_the_seams: %s seam at %s° elevation drawn at %f m on the front screen but %f m on the side screen" % [prefix, elevation, front_height, side_height])
+				result = 1
+			# The seam direction must also be exactly the side image's inner edge (no gap, no overlap).
+			var in_side_camera: Vector3 = Basis(Vector3.UP, deg_to_rad(side_yaw)).inverse() * direction
+			var edge_ratio: float = absf(in_side_camera.x / in_side_camera.z)
+			if not is_equal_approx(edge_ratio, tan(deg_to_rad(side_camera.fov) * 0.5)):
+				print("FAIL _test_panorama_is_continuous_across_the_seams: %s seam direction is not on the side image's edge (x/z=%f, edge=%f)" % [prefix, edge_ratio, tan(deg_to_rad(side_camera.fov) * 0.5)])
+				result = 1
 	cockpit.free()
 	return result

@@ -35,9 +35,10 @@ const FRAME_COLOR := Color(0.08, 0.09, 0.1)
 const PILOT_FOV := 80.0
 const PILOT_NEAR := 0.05
 const PILOT_FAR := 10.0
-# Horizontal FOV (keep_aspect = KEEP_WIDTH): the side cameras turn by exactly
-# this much, so the three images join into one panorama.
-const EXTERIOR_CAMERA_HFOV := 60.0
+# Horizontal FOV of the front camera (keep_aspect = KEEP_WIDTH). The side
+# cameras get the narrower FOV that keeps the picture continuous at the seams
+# (see CockpitLayout.compute_side_camera_hfov_degrees).
+const FRONT_CAMERA_HFOV := 60.0
 # The eye sits 7 m behind the bow face: a larger near plane would clip a
 # surface touching the bow.
 const EXTERIOR_CAMERA_NEAR := 2.0
@@ -64,11 +65,12 @@ func build() -> void:
 	_build_pilot_camera()
 	_build_cockpit_light()
 	_build_exterior_screen("Front", CENTER_SCREEN_SIZE, CENTER_VIEWPORT_SIZE,
-		Transform3D(Basis(), Vector3(0.0, 0.0, -SCREEN_DISTANCE)), 0.0)
+		Transform3D(Basis(), Vector3(0.0, 0.0, -SCREEN_DISTANCE)), 0.0, FRONT_CAMERA_HFOV)
+	var side_hfov: float = CockpitLayout.compute_side_camera_hfov_degrees(CENTER_SCREEN_SIZE.x, SIDE_SCREEN_SIZE.x, FRONT_CAMERA_HFOV)
 	for side in [-1.0, 1.0]:
 		_build_exterior_screen("Left" if side < 0.0 else "Right", SIDE_SCREEN_SIZE, SIDE_VIEWPORT_SIZE,
 			CockpitLayout.compute_side_screen_transform(CENTER_SCREEN_SIZE.x, SIDE_SCREEN_SIZE.x, SCREEN_DISTANCE, SIDE_SCREEN_TILT, side),
-			CockpitLayout.compute_side_camera_yaw_degrees(EXTERIOR_CAMERA_HFOV, side))
+			CockpitLayout.compute_side_camera_yaw_degrees(FRONT_CAMERA_HFOV, side_hfov, side), side_hfov)
 	_build_dashboard()
 	_build_hud()
 
@@ -100,7 +102,7 @@ func _build_cockpit_light() -> void:
 	light.position = Vector3(0.0, 0.6, -0.8)
 	add_child(light)
 
-func _build_exterior_screen(prefix: String, screen_size: Vector2, viewport_size: Vector2i, screen_transform: Transform3D, camera_yaw_degrees: float) -> void:
+func _build_exterior_screen(prefix: String, screen_size: Vector2, viewport_size: Vector2i, screen_transform: Transform3D, camera_yaw_degrees: float, camera_hfov_degrees: float) -> void:
 	var viewport := SubViewport.new()
 	viewport.name = prefix + "Viewport"
 	viewport.size = viewport_size
@@ -110,7 +112,7 @@ func _build_exterior_screen(prefix: String, screen_size: Vector2, viewport_size:
 	var camera := Camera3D.new()
 	camera.name = "Camera"
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
-	camera.fov = EXTERIOR_CAMERA_HFOV
+	camera.fov = camera_hfov_degrees
 	camera.near = EXTERIOR_CAMERA_NEAR
 	camera.far = EXTERIOR_CAMERA_FAR
 	camera.cull_mask = EXTERIOR_CAMERA_CULL_MASK

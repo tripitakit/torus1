@@ -9,7 +9,14 @@ static func compute_side_screen_transform(center_width: float, side_width: float
 	var screen_origin: Vector3 = hinge + screen_basis * Vector3(side * side_width * 0.5, 0.0, 0.0)
 	return Transform3D(screen_basis, screen_origin)
 
-# A side camera turned by one full horizontal FOV starts exactly where the
-# front camera's image ends: a continuous panorama with no blind wedge.
-static func compute_side_camera_yaw_degrees(horizontal_fov_degrees: float, side: float) -> float:
-	return -side * horizontal_fov_degrees
+# Turned by half of each image, the side image starts exactly where the front
+# image ends: a continuous panorama with no blind wedge and no overlap.
+static func compute_side_camera_yaw_degrees(center_hfov_degrees: float, side_hfov_degrees: float, side: float) -> float:
+	return -side * (center_hfov_degrees + side_hfov_degrees) * 0.5
+
+# The two screens share their seam edge. A point on the seam is drawn at the
+# same height on both only when width / sin(hfov / 2) is equal for the two
+# screens, so a narrower side screen needs a narrower side camera.
+static func compute_side_camera_hfov_degrees(center_width: float, side_width: float, center_hfov_degrees: float) -> float:
+	var half_center := deg_to_rad(center_hfov_degrees) * 0.5
+	return rad_to_deg(2.0 * asin(sin(half_center) * side_width / center_width))

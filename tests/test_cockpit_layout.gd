@@ -13,8 +13,10 @@ func _init():
 	failures += _test_right_screen_inner_edge_touches_center_screen_right_edge()
 	failures += _test_side_screens_face_the_pilot()
 	failures += _test_side_screens_are_tilted_toward_the_center_by_tilt_angle()
-	failures += _test_left_camera_yaws_left_by_one_fov()
-	failures += _test_right_camera_yaws_right_by_one_fov()
+	failures += _test_left_camera_yaws_left_past_the_front_image()
+	failures += _test_right_camera_yaws_right_past_the_front_image()
+	failures += _test_side_camera_hfov_matches_seam_scale()
+	failures += _test_equal_screens_keep_the_front_hfov()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -67,26 +69,44 @@ func _test_side_screens_are_tilted_toward_the_center_by_tilt_angle() -> int:
 			result = 1
 	return result
 
-func _test_left_camera_yaws_left_by_one_fov() -> int:
-	var yaw: float = CockpitLayout.compute_side_camera_yaw_degrees(60.0, -1.0)
+func _test_left_camera_yaws_left_past_the_front_image() -> int:
+	# Turned by half of each image: the side image starts where the front one ends.
+	var yaw: float = CockpitLayout.compute_side_camera_yaw_degrees(60.0, 40.0, -1.0)
 	var result := 0
-	if not is_equal_approx(yaw, 60.0):
-		print("FAIL _test_left_camera_yaws_left_by_one_fov: yaw=%f expected=60.0" % yaw)
+	if not is_equal_approx(yaw, 50.0):
+		print("FAIL _test_left_camera_yaws_left_past_the_front_image: yaw=%f expected=50.0" % yaw)
 		result = 1
 	var looks: Vector3 = Basis(Vector3.UP, deg_to_rad(yaw)) * Vector3(0.0, 0.0, -1.0)
 	if looks.x >= 0.0:
-		print("FAIL _test_left_camera_yaws_left_by_one_fov: camera looks toward %s, expected negative X (left)" % looks)
+		print("FAIL _test_left_camera_yaws_left_past_the_front_image: camera looks toward %s, expected negative X (left)" % looks)
 		result = 1
 	return result
 
-func _test_right_camera_yaws_right_by_one_fov() -> int:
-	var yaw: float = CockpitLayout.compute_side_camera_yaw_degrees(60.0, 1.0)
+func _test_right_camera_yaws_right_past_the_front_image() -> int:
+	var yaw: float = CockpitLayout.compute_side_camera_yaw_degrees(60.0, 40.0, 1.0)
 	var result := 0
-	if not is_equal_approx(yaw, -60.0):
-		print("FAIL _test_right_camera_yaws_right_by_one_fov: yaw=%f expected=-60.0" % yaw)
+	if not is_equal_approx(yaw, -50.0):
+		print("FAIL _test_right_camera_yaws_right_past_the_front_image: yaw=%f expected=-50.0" % yaw)
 		result = 1
 	var looks: Vector3 = Basis(Vector3.UP, deg_to_rad(yaw)) * Vector3(0.0, 0.0, -1.0)
 	if looks.x <= 0.0:
-		print("FAIL _test_right_camera_yaws_right_by_one_fov: camera looks toward %s, expected positive X (right)" % looks)
+		print("FAIL _test_right_camera_yaws_right_past_the_front_image: camera looks toward %s, expected positive X (right)" % looks)
 		result = 1
 	return result
+
+func _test_side_camera_hfov_matches_seam_scale() -> int:
+	# Heights match at the seam when width / sin(hfov / 2) is the same for both screens.
+	var side_hfov: float = CockpitLayout.compute_side_camera_hfov_degrees(CENTER_WIDTH, SIDE_WIDTH, 60.0)
+	var front_scale: float = CENTER_WIDTH / sin(deg_to_rad(30.0))
+	var side_scale: float = SIDE_WIDTH / sin(deg_to_rad(side_hfov * 0.5))
+	if not is_equal_approx(front_scale, side_scale):
+		print("FAIL _test_side_camera_hfov_matches_seam_scale: side_hfov=%f gives scale %f, front scale %f" % [side_hfov, side_scale, front_scale])
+		return 1
+	return 0
+
+func _test_equal_screens_keep_the_front_hfov() -> int:
+	var side_hfov: float = CockpitLayout.compute_side_camera_hfov_degrees(1.6, 1.6, 60.0)
+	if not is_equal_approx(side_hfov, 60.0):
+		print("FAIL _test_equal_screens_keep_the_front_hfov: side_hfov=%f expected 60.0" % side_hfov)
+		return 1
+	return 0
