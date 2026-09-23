@@ -28,7 +28,6 @@ func _init():
 	failures += _test_process_shows_ship_speed_on_hud()
 	failures += _test_nav_light_markers_hidden_from_onboard_cameras()
 	failures += _test_ship_model_is_gone()
-	failures += _test_outside_lights_do_not_light_the_cockpit()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -398,11 +397,11 @@ func _test_process_shows_ship_speed_on_hud() -> int:
 	cruiser.velocity = Vector3(30.0, 0.0, -40.0)
 	cruiser._process(0.016)
 	var result := 0
-	var speed_label: Label = cruiser.get_node("Cockpit/HudViewport/Lines/SpeedLabel")
+	var speed_label: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/SpeedLabel")
 	if speed_label.text != "VEL  50 m/s":
 		print("FAIL _test_process_shows_ship_speed_on_hud: SpeedLabel='%s' expected 'VEL  50 m/s'" % speed_label.text)
 		result = 1
-	var bow_label: Label = cruiser.get_node("Cockpit/HudViewport/Lines/BowLabel")
+	var bow_label: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/BowLabel")
 	if bow_label.text != "PRUA  —":
 		print("FAIL _test_process_shows_ship_speed_on_hud: BowLabel='%s' expected 'PRUA  —' (off-tree: no hit)" % bow_label.text)
 		result = 1
@@ -431,24 +430,6 @@ func _test_ship_model_is_gone() -> int:
 	for path in ["res://assets/models/void_cruiser.glb", "res://assets/models/void_cruiser.glb.import"]:
 		if FileAccess.file_exists(path):
 			print("FAIL _test_ship_model_is_gone: %s still exists" % path)
-			result = 1
-	cruiser.free()
-	return result
-
-func _test_outside_lights_do_not_light_the_cockpit() -> int:
-	# The pilot sits inside a windowless hull: nav lights, the tail strobe and
-	# the headlights must not tint or flash the cockpit meshes.
-	var cruiser := _make_cruiser()
-	cruiser.build_navigation_lights()
-	cruiser.build_headlights()
-	var result := 0
-	for light_name in ["PortLight", "StarboardLight", "TailLight", "HeadlightLeft", "HeadlightRight"]:
-		var light: Light3D = cruiser.get_node(light_name)
-		if (light.light_cull_mask & 2) != 0:
-			print("FAIL _test_outside_lights_do_not_light_the_cockpit: %s light_cull_mask=%d includes COCKPIT_LAYER (2)" % [light_name, light.light_cull_mask])
-			result = 1
-		if (light.light_cull_mask & 1) == 0:
-			print("FAIL _test_outside_lights_do_not_light_the_cockpit: %s light_cull_mask=%d no longer lights the world (1)" % [light_name, light.light_cull_mask])
 			result = 1
 	cruiser.free()
 	return result

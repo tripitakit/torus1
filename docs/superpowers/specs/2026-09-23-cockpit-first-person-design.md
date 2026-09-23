@@ -1,5 +1,37 @@
 # Cockpit in prima persona
 
+## Revisione: vista unica con HUD 2D (vale più del resto del documento)
+
+Dopo l'implementazione l'utente ha rinunciato ai tre schermi. Il progetto in
+vigore è questo:
+
+- **Una sola camera** (`PilotCamera`, figlia diretta di `Cockpit`) all'occhio
+  del pilota, `(0, 0.5, -8)` nel sistema della navetta. Vede il mondo a tutto
+  schermo.
+  - Campo visivo orizzontale 90° (`keep_aspect = KEEP_WIDTH`). Su 16:9 fa
+    circa 59° in verticale.
+  - `near = 2`, `far = 69496000`.
+  - `cull_mask` = tutti i livelli tranne `SHIP_EXTERIOR_LAYER` (4), così non
+    vede le sferette delle luci di navigazione.
+- **Perché 90° e non 120°:** con una proiezione prospettica piatta, a 120° un
+  oggetto sul bordo appare 4 volte più largo che al centro; a 90°, 2 volte.
+  Le linee restano dritte. Una correzione Panini in post-processing
+  permetterebbe 120° con bordi naturali: è un possibile pezzo successivo.
+- **HUD 2D sovrapposto:** un `CanvasLayer` (`Hud`) con un `PanelContainer`
+  (`Panel`) in alto a sinistra, a 24 px dai bordi, sfondo scuro
+  semitrasparente, 7 righe di testo ciano (`Lines`). Stessi testi e stessa
+  `update_hud(speed, distances)` di prima.
+- **Schermo intero:** `display/window/size/mode = 3` in `project.godot`.
+- **Tolti:** schermi laterali e centrale, `SubViewport`, camere esterne,
+  `RemoteTransform3D`, cornici, plancia, luce interna, pannello HUD 3D,
+  `scripts/cockpit_layout.gd` e il livello `COCKPIT_LAYER` (con le maschere
+  delle luci che servivano a proteggerlo).
+- **Restano:** i sei sensori di distanza, `cockpit_hud_format.gd`, la
+  rimozione del modello e della `ChaseCamera`.
+
+Le sezioni sotto su livelli, geometria degli schermi, nodo `Cockpit` e
+dimensioni descrivono il primo progetto e restano solo come storia.
+
 ## Contesto
 
 Oggi il giocatore vede il void-cruiser da fuori: una `ChaseCamera` figlia di

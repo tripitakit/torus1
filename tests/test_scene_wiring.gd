@@ -38,14 +38,6 @@ func _test_scene_wiring() -> int:
 		print("FAIL _test_scene_wiring: VoidCruiser position=%s" % (void_cruiser as Node3D).position)
 		result = 1
 
-	var sun := scene.get_node_or_null("SunLight") as Light3D
-	if sun == null:
-		print("FAIL _test_scene_wiring: SunLight missing")
-		result = 1
-	elif (sun.light_cull_mask & 2) != 0 or (sun.light_cull_mask & 1) == 0:
-		print("FAIL _test_scene_wiring: SunLight light_cull_mask=%d must light the world (1) but not the windowless cockpit (2)" % sun.light_cull_mask)
-		result = 1
-
 	if void_cruiser != null and void_cruiser.get_node_or_null("ChaseCamera") != null:
 		print("FAIL _test_scene_wiring: VoidCruiser still has a ChaseCamera; the view is now the cockpit's PilotCamera, built by void_cruiser.gd")
 		result = 1
