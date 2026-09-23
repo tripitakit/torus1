@@ -1,7 +1,7 @@
 @tool
 extends MeshInstance3D
 
-@export var planet_radius: float = 500.0
+@export var planet_radius: float = 1737400.0
 
 @export_tool_button("Rebuild Planet")
 var rebuild_action: Callable = build_planet

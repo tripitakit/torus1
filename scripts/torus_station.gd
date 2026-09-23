@@ -3,11 +3,12 @@ extends Node3D
 
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 
-@export var planet_radius: float = 500.0
-@export var orbit_altitude: float = 1500.0
-@export var num_sections: int = 100
-@export var section_radius: float = 30.0
-@export var section_length: float = 102.83185307179585
+@export var planet_radius: float = 1737400.0
+@export var orbit_altitude: float = 5212200.0
+@export var num_sections: int = 2000
+@export var section_radius: float = 2000.0
+@export var section_length: float = 20000.0
+@export var target_gravity_g: float = 0.7
 @export var planet_node: NodePath = NodePath("")
 
 @export_tool_button("Rebuild Station")
@@ -22,7 +23,8 @@ func _process(delta: float) -> void:
 	_rotate_sections(delta)
 
 func _rotate_sections(delta: float) -> void:
-	var omega := TorusGeometry.compute_section_angular_velocity(section_radius)
+	var target_gravity := TorusGeometry.GRAVITY_1G * target_gravity_g
+	var omega := TorusGeometry.compute_section_angular_velocity(section_radius, target_gravity)
 	for child in get_children():
 		if child.name.begins_with("Section"):
 			child.rotate_object_local(Vector3.UP, omega * delta)

@@ -80,7 +80,7 @@ func _test_negative_bridge_length_does_not_crash() -> int:
 func _test_section_angular_velocity_gives_1g() -> int:
 	# omega = sqrt(g / r); centripetal accel at radius r is omega^2 * r, which must equal g.
 	var section_radius := 30.0
-	var omega: float = TorusGeometry.compute_section_angular_velocity(section_radius)
+	var omega: float = TorusGeometry.compute_section_angular_velocity(section_radius, TorusGeometry.GRAVITY_1G)
 	var resulting_accel: float = omega * omega * section_radius
 	if not is_equal_approx(resulting_accel, TorusGeometry.GRAVITY_1G):
 		print("FAIL _test_section_angular_velocity_gives_1g: resulting_accel=%f expected=%f" % [resulting_accel, TorusGeometry.GRAVITY_1G])
@@ -88,7 +88,7 @@ func _test_section_angular_velocity_gives_1g() -> int:
 	return 0
 
 func _test_section_angular_velocity_zero_radius_does_not_crash() -> int:
-	var omega: float = TorusGeometry.compute_section_angular_velocity(0.0)
+	var omega: float = TorusGeometry.compute_section_angular_velocity(0.0, TorusGeometry.GRAVITY_1G)
 	if omega != 0.0:
 		print("FAIL _test_section_angular_velocity_zero_radius_does_not_crash: expected 0.0, got %f" % omega)
 		return 1

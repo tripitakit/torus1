@@ -2,7 +2,7 @@ extends Node3D
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 
-@export var thrust_power: float = 50.0
+@export var thrust_power: float = 150.0
 @export_range(0.0, 0.999, 0.001) var linear_damping: float = 0.5
 @export var torque_power: float = 2.0
 @export_range(0.0, 0.999, 0.001) var angular_damping: float = 0.5
@@ -21,7 +21,7 @@ func build_ship_mesh() -> void:
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "ShipMesh"
 	var box := BoxMesh.new()
-	box.size = Vector3(0.04, 0.02, 0.08)
+	box.size = Vector3(15.0, 7.5, 30.0)
 	mesh_instance.mesh = box
 	add_child(mesh_instance)
 

@@ -29,6 +29,7 @@ func _make_station(num_sections: int) -> Node3D:
 	station.num_sections = num_sections
 	station.section_radius = 30.0
 	station.section_length = 80.0
+	station.target_gravity_g = 1.0
 	return station
 
 func _test_build_station_child_count() -> int:
@@ -151,7 +152,7 @@ func _test_rotate_sections_applies_correct_local_y_angle() -> int:
 	station._rotate_sections(delta)
 	var new_basis: Basis = section.transform.basis
 	var delta_basis: Basis = original_basis.inverse() * new_basis
-	var expected_omega: float = TorusGeometry.compute_section_angular_velocity(30.0)
+	var expected_omega: float = TorusGeometry.compute_section_angular_velocity(30.0, TorusGeometry.GRAVITY_1G)
 	var expected_delta_basis := Basis(Vector3.UP, expected_omega * delta)
 	var result := 0
 	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \

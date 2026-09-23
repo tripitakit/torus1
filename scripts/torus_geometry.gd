@@ -2,10 +2,10 @@ extends RefCounted
 
 const GRAVITY_1G := 9.81
 
-static func compute_section_angular_velocity(section_radius: float) -> float:
+static func compute_section_angular_velocity(section_radius: float, target_gravity: float) -> float:
 	if section_radius <= 0.0:
 		return 0.0
-	return sqrt(GRAVITY_1G / section_radius)
+	return sqrt(target_gravity / section_radius)
 
 static func compute_section_transforms(planet_radius: float, orbit_altitude: float, num_sections: int) -> Array[Transform3D]:
 	var transforms: Array[Transform3D] = []
