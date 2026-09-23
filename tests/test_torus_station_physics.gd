@@ -26,6 +26,8 @@ func _initialize():
 	_failures += await _test_section_rotation_accumulates_across_physics_ticks()
 	_failures += await _test_bridge_rotation_accumulates_across_physics_ticks()
 	_failures += await _test_section_stays_aligned_with_parent_after_shift()
+	_failures += await _test_rotating_hull_resting_on_section_does_not_jump()
+	_failures += await _test_rotating_hull_resting_on_bridge_does_not_jump()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -157,4 +159,70 @@ func _test_section_stays_aligned_with_parent_after_shift() -> int:
 		result = 1
 	station.free()
 	parent.free()
+	return result
+
+# Full-scale radii (2000 m sections, 600 m bridges): the bug only shows at
+# this size. 200 sections keep the build fast.
+func _make_full_scale_station() -> Node3D:
+	var station: Node3D = TorusStationScript.new()
+	station.planet_radius = 500000.0
+	station.orbit_altitude = 1500000.0
+	station.num_sections = 200
+	station.section_radius = 2000.0
+	station.section_length = 20000.0
+	station.target_gravity_g = 0.7
+	return station
+
+# A ship-sized box, not moving, turning like the mouse turns the ship, while
+# resting on a hull. Returns the biggest distance it was shoved in one tick.
+func _biggest_shove_while_turning_on(body: Node3D, surface_radius: float, along_axis: float) -> float:
+	var hull := CharacterBody3D.new()
+	var shape_node := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(15.0, 7.5, 30.0)
+	shape_node.shape = box
+	hull.add_child(shape_node)
+	root.add_child(hull)
+	var axis: Vector3 = body.global_transform.basis.y.normalized()
+	var outward: Vector3 = (Vector3.UP - axis * Vector3.UP.dot(axis)).normalized()
+	hull.global_position = body.global_position + axis * along_axis + outward * (surface_radius + 3.75 + 0.05)
+	await physics_frame
+	var biggest := 0.0
+	for tick in range(240):
+		var before: Vector3 = hull.global_position
+		hull.move_and_collide(Vector3.ZERO)
+		hull.rotate_object_local(Vector3.RIGHT, -0.7 / 60.0)
+		hull.rotate_object_local(Vector3.UP, -1.4 / 60.0)
+		await physics_frame
+		biggest = maxf(biggest, hull.global_position.distance_to(before))
+	hull.free()
+	return biggest
+
+func _test_rotating_hull_resting_on_section_does_not_jump() -> int:
+	# Flight-log repro of the "teleport": with CylinderShape3D sections, a
+	# still ship turning against the hull was shoved up to ~100 m per tick
+	# (4.7 km in 4 s) by bad contacts from Godot's cylinder collision.
+	var station := _make_full_scale_station()
+	root.add_child(station)
+	station.build_station()
+	await physics_frame
+	var biggest: float = await _biggest_shove_while_turning_on(station.get_node("Section0"), station.section_radius, -2709.0)
+	var result := 0
+	if biggest > 2.0:
+		print("FAIL _test_rotating_hull_resting_on_section_does_not_jump: a still, turning hull was shoved %.1f m in one tick" % biggest)
+		result = 1
+	station.free()
+	return result
+
+func _test_rotating_hull_resting_on_bridge_does_not_jump() -> int:
+	var station := _make_full_scale_station()
+	root.add_child(station)
+	station.build_station()
+	await physics_frame
+	var biggest: float = await _biggest_shove_while_turning_on(station.get_node("Bridge0"), station.section_radius * 0.3, 0.0)
+	var result := 0
+	if biggest > 2.0:
+		print("FAIL _test_rotating_hull_resting_on_bridge_does_not_jump: a still, turning hull was shoved %.1f m in one tick" % biggest)
+		result = 1
+	station.free()
 	return result

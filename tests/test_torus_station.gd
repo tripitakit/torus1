@@ -284,37 +284,51 @@ func _test_bridges_are_animatable_bodies() -> int:
 	station.free()
 	return result
 
+# The collision shape must be a convex prism whose corners are exactly the
+# side-wall corners of the visible CylinderMesh (not a CylinderShape3D: see
+# test_torus_station_physics.gd). Returns an error message, or "" if it matches.
+func _prism_mismatch(body: Node, expected_radius: float) -> String:
+	var collision := body.get_node_or_null("Collision")
+	if collision == null or not (collision is CollisionShape3D) or not ((collision as CollisionShape3D).shape is ConvexPolygonShape3D):
+		return "%s has no CollisionShape3D with a ConvexPolygonShape3D" % body.name
+	var points: PackedVector3Array = ((collision as CollisionShape3D).shape as ConvexPolygonShape3D).points
+	var mesh: CylinderMesh = (body.get_node("Mesh") as MeshInstance3D).mesh
+	if not is_equal_approx(mesh.top_radius, expected_radius):
+		return "%s mesh radius=%f expected %f" % [body.name, mesh.top_radius, expected_radius]
+	if points.size() != mesh.radial_segments * 2:
+		return "%s prism has %d points, expected %d (2 per radial segment)" % [body.name, points.size(), mesh.radial_segments * 2]
+	var mesh_vertices: PackedVector3Array = mesh.get_mesh_arrays()[Mesh.ARRAY_VERTEX]
+	for point in points:
+		var found := false
+		for vertex in mesh_vertices:
+			if point.is_equal_approx(vertex):
+				found = true
+				break
+		if not found:
+			return "%s prism point %s is not a vertex of the visible mesh" % [body.name, point]
+		if not is_equal_approx(absf(point.y), mesh.height * 0.5) or not is_equal_approx(Vector2(point.x, point.z).length(), expected_radius):
+			return "%s prism point %s is not on the side wall rim" % [body.name, point]
+	return ""
+
 func _test_sections_have_matching_collision_shape() -> int:
 	var station := _make_station(4)
 	station.build_station()
-	var section: AnimatableBody3D = station.get_node("Section0")
 	var result := 0
-	var collision := section.get_node_or_null("Collision")
-	if collision == null or not (collision is CollisionShape3D) or not ((collision as CollisionShape3D).shape is CylinderShape3D):
-		print("FAIL _test_sections_have_matching_collision_shape: Section0 has no CollisionShape3D with a CylinderShape3D")
+	var mismatch := _prism_mismatch(station.get_node("Section0"), 30.0)
+	if mismatch != "":
+		print("FAIL _test_sections_have_matching_collision_shape: " + mismatch)
 		result = 1
-	else:
-		var shape: CylinderShape3D = (collision as CollisionShape3D).shape
-		if not is_equal_approx(shape.radius, 30.0) or not is_equal_approx(shape.height, 80.0):
-			print("FAIL _test_sections_have_matching_collision_shape: radius=%f height=%f expected 30.0/80.0" % [shape.radius, shape.height])
-			result = 1
 	station.free()
 	return result
 
 func _test_bridges_have_matching_collision_shape() -> int:
 	var station := _make_station(4)
 	station.build_station()
-	var bridge: AnimatableBody3D = station.get_node("Bridge0")
 	var result := 0
-	var collision := bridge.get_node_or_null("Collision")
-	if collision == null or not (collision is CollisionShape3D) or not ((collision as CollisionShape3D).shape is CylinderShape3D):
-		print("FAIL _test_bridges_have_matching_collision_shape: Bridge0 has no CollisionShape3D with a CylinderShape3D")
+	var mismatch := _prism_mismatch(station.get_node("Bridge0"), 9.0)
+	if mismatch != "":
+		print("FAIL _test_bridges_have_matching_collision_shape: " + mismatch)
 		result = 1
-	else:
-		var shape: CylinderShape3D = (collision as CollisionShape3D).shape
-		if not is_equal_approx(shape.radius, 9.0):
-			print("FAIL _test_bridges_have_matching_collision_shape: radius=%f expected 9.0" % shape.radius)
-			result = 1
 	station.free()
 	return result
 

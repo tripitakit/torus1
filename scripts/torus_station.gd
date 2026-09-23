@@ -62,6 +62,24 @@ func _build_hull_material(circumference: float, length: float) -> StandardMateri
 	mat.uv1_scale = Vector3(circumference / HULL_TILE_SIZE, length / HULL_TILE_SIZE, 1.0)
 	return mat
 
+# Not CylinderShape3D: at this scale Godot's cylinder collision gives bad
+# contacts against the ship's turning box, shoving a still ship up to ~100 m
+# per tick (see tests/test_torus_station_physics.gd). A convex prism with the
+# visible mesh's own side-wall corners collides reliably and matches what the
+# player sees.
+func _build_prism_shape(mesh: CylinderMesh) -> ConvexPolygonShape3D:
+	var half_height: float = mesh.height * 0.5
+	var corners := {}
+	for vertex: Vector3 in mesh.get_mesh_arrays()[Mesh.ARRAY_VERTEX]:
+		var on_rim: bool = is_equal_approx(absf(vertex.y), half_height) \
+				and is_equal_approx(Vector2(vertex.x, vertex.z).length(), mesh.top_radius)
+		if on_rim:
+			# The mesh repeats the seam vertex; the key collapses duplicates.
+			corners[vertex.snappedf(0.001)] = vertex
+	var shape := ConvexPolygonShape3D.new()
+	shape.points = PackedVector3Array(corners.values())
+	return shape
+
 func build_station() -> void:
 	for child in get_children():
 		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
@@ -76,9 +94,7 @@ func build_station() -> void:
 	section_mesh.bottom_radius = section_radius
 	section_mesh.height = section_length
 
-	var section_shape := CylinderShape3D.new()
-	section_shape.radius = section_radius
-	section_shape.height = section_length
+	var section_shape := _build_prism_shape(section_mesh)
 
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
@@ -116,9 +132,7 @@ func build_station() -> void:
 	bridge_mesh.bottom_radius = section_radius * 0.3
 	bridge_mesh.height = max(bridge_length, 0.01)
 
-	var bridge_shape := CylinderShape3D.new()
-	bridge_shape.radius = section_radius * 0.3
-	bridge_shape.height = max(bridge_length, 0.01)
+	var bridge_shape := _build_prism_shape(bridge_mesh)
 
 	for i in range(bridge_transforms.size()):
 		var bridge := AnimatableBody3D.new()
