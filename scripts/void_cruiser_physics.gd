@@ -18,3 +18,7 @@ static func compute_forward_thrust_multiplier(hold_time: float, ramp_duration: f
 
 static func compute_bounce_velocity(velocity: Vector3, normal: Vector3, restitution: float) -> Vector3:
 	return velocity.bounce(normal) * restitution
+
+static func compute_strobe_energy(time: float, period: float, on_duration: float, energy: float) -> float:
+	var phase: float = fmod(time, period)
+	return energy if phase < on_duration else 0.0

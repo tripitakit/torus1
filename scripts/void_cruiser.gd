@@ -12,16 +12,33 @@ const SHIP_MODEL_PATH := "res://assets/models/void_cruiser.glb"
 @export var forward_thrust_ramp_duration: float = 5.0
 @export_range(0.0, 1.0, 0.01) var collision_restitution: float = 0.4
 
+const STROBE_PERIOD := 1.2
+const STROBE_ON_DURATION := 0.1
+const NAV_LIGHT_ENERGY := 3.0
+const TAIL_LIGHT_ENERGY := 5.0
+const HEADLIGHT_ENERGY := 12.0
+const HEADLIGHT_RANGE := 400.0
+const HEADLIGHT_ANGLE := 25.0
+
 var angular_velocity: Vector3 = Vector3.ZERO
 
 var _mouse_delta: Vector2 = Vector2.ZERO
 var _forward_hold_time: float = 0.0
 var _forward_hold_sign: float = 0.0
+var _strobe_time: float = 0.0
 
 func _ready() -> void:
 	build_ship_mesh()
 	build_collision_shape()
+	build_navigation_lights()
+	build_headlights()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+func _process(delta: float) -> void:
+	_strobe_time += delta
+	var tail_light: OmniLight3D = get_node_or_null("TailLight")
+	if tail_light:
+		tail_light.light_energy = VoidCruiserPhysics.compute_strobe_energy(_strobe_time, STROBE_PERIOD, STROBE_ON_DURATION, TAIL_LIGHT_ENERGY)
 
 func build_ship_mesh() -> void:
 	var packed: PackedScene = load(SHIP_MODEL_PATH)
@@ -41,6 +58,53 @@ func build_collision_shape() -> void:
 	box.size = Vector3(15.0, 7.5, 30.0)
 	shape_node.shape = box
 	add_child(shape_node)
+
+func build_navigation_lights() -> void:
+	# Aircraft convention: red = port (left), green = starboard (right),
+	# white = tail. The tail light strobes; position/color are steady.
+	_add_nav_light("PortLight", Color.RED, Vector3(-7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
+	_add_nav_light("StarboardLight", Color.GREEN, Vector3(7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
+	_add_nav_light("TailLight", Color.WHITE, Vector3(0.0, 0.0, 15.0), TAIL_LIGHT_ENERGY)
+
+func _add_nav_light(light_name: String, color: Color, local_position: Vector3, energy: float) -> void:
+	var light := OmniLight3D.new()
+	light.name = light_name
+	light.light_color = color
+	light.light_energy = energy
+	light.omni_range = 50.0
+	light.position = local_position
+	add_child(light)
+
+	var marker := MeshInstance3D.new()
+	marker.name = "Marker"
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.3
+	sphere.height = 0.6
+	marker.mesh = sphere
+	var marker_material := StandardMaterial3D.new()
+	marker_material.emission_enabled = true
+	marker_material.emission = color
+	marker_material.emission_energy_multiplier = 4.0
+	marker.material_override = marker_material
+	light.add_child(marker)
+
+func build_headlights() -> void:
+	# Nose = -Z. Two powerful, deep-reaching spotlights, one per side.
+	_add_headlight("HeadlightLeft", Vector3(-4.0, -1.0, -15.0))
+	_add_headlight("HeadlightRight", Vector3(4.0, -1.0, -15.0))
+
+func _add_headlight(light_name: String, local_position: Vector3) -> void:
+	var light := SpotLight3D.new()
+	light.name = light_name
+	light.position = local_position
+	# SpotLight3D shines toward its own local -Z, which already matches the
+	# ship's forward (-Z) as a direct child — no corrective rotation needed.
+	light.light_color = Color.WHITE
+	light.light_energy = HEADLIGHT_ENERGY
+	light.spot_range = HEADLIGHT_RANGE
+	light.spot_angle = HEADLIGHT_ANGLE
+	light.shadow_enabled = true
+	add_child(light)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:

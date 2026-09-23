@@ -19,6 +19,11 @@ func _init():
 	failures += _test_forward_hold_time_resets_on_direction_reversal()
 	failures += _test_forward_thrust_ramps_up_velocity_over_time()
 	failures += _test_build_collision_shape_adds_box_shape()
+	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
+	failures += _test_build_navigation_lights_port_is_red_on_the_left()
+	failures += _test_build_navigation_lights_starboard_is_green_on_the_right()
+	failures += _test_build_navigation_lights_tail_is_white_toward_the_stern()
+	failures += _test_build_headlights_adds_two_spotlights_near_the_nose()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -257,5 +262,94 @@ func _test_build_collision_shape_adds_box_shape() -> int:
 		if not box.size.is_equal_approx(expected):
 			print("FAIL _test_build_collision_shape_adds_box_shape: size=%s expected=%s" % [box.size, expected])
 			result = 1
+	cruiser.free()
+	return result
+
+func _test_build_navigation_lights_adds_port_and_starboard_and_tail() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_navigation_lights()
+	var result := 0
+	for light_name in ["PortLight", "StarboardLight", "TailLight"]:
+		var light_node := cruiser.get_node_or_null(light_name)
+		if light_node == null or not (light_node is OmniLight3D):
+			print("FAIL _test_build_navigation_lights_adds_port_and_starboard_and_tail: no %s OmniLight3D child" % light_name)
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_build_navigation_lights_port_is_red_on_the_left() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_navigation_lights()
+	var result := 0
+	var port_light: OmniLight3D = cruiser.get_node_or_null("PortLight")
+	if port_light == null:
+		print("FAIL _test_build_navigation_lights_port_is_red_on_the_left: no PortLight child")
+		result = 1
+	else:
+		if not port_light.light_color.is_equal_approx(Color.RED):
+			print("FAIL _test_build_navigation_lights_port_is_red_on_the_left: light_color=%s expected RED" % port_light.light_color)
+			result = 1
+		if port_light.position.x >= 0.0:
+			print("FAIL _test_build_navigation_lights_port_is_red_on_the_left: position.x=%f expected negative (left)" % port_light.position.x)
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_build_navigation_lights_starboard_is_green_on_the_right() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_navigation_lights()
+	var result := 0
+	var starboard_light: OmniLight3D = cruiser.get_node_or_null("StarboardLight")
+	if starboard_light == null:
+		print("FAIL _test_build_navigation_lights_starboard_is_green_on_the_right: no StarboardLight child")
+		result = 1
+	else:
+		if not starboard_light.light_color.is_equal_approx(Color.GREEN):
+			print("FAIL _test_build_navigation_lights_starboard_is_green_on_the_right: light_color=%s expected GREEN" % starboard_light.light_color)
+			result = 1
+		if starboard_light.position.x <= 0.0:
+			print("FAIL _test_build_navigation_lights_starboard_is_green_on_the_right: position.x=%f expected positive (right)" % starboard_light.position.x)
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_build_navigation_lights_tail_is_white_toward_the_stern() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_navigation_lights()
+	var result := 0
+	var tail_light: OmniLight3D = cruiser.get_node_or_null("TailLight")
+	if tail_light == null:
+		print("FAIL _test_build_navigation_lights_tail_is_white_toward_the_stern: no TailLight child")
+		result = 1
+	else:
+		if not tail_light.light_color.is_equal_approx(Color.WHITE):
+			print("FAIL _test_build_navigation_lights_tail_is_white_toward_the_stern: light_color=%s expected WHITE" % tail_light.light_color)
+			result = 1
+		if tail_light.position.z <= 0.0:
+			print("FAIL _test_build_navigation_lights_tail_is_white_toward_the_stern: position.z=%f expected positive (aft, +Z is tail)" % tail_light.position.z)
+			result = 1
+	cruiser.free()
+	return result
+
+func _test_build_headlights_adds_two_spotlights_near_the_nose() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_headlights()
+	var result := 0
+	for light_name in ["HeadlightLeft", "HeadlightRight"]:
+		var light_node := cruiser.get_node_or_null(light_name)
+		if light_node == null or not (light_node is SpotLight3D):
+			print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: no %s SpotLight3D child" % light_name)
+			result = 1
+		else:
+			var spot: SpotLight3D = light_node
+			if spot.position.z >= 0.0:
+				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s position.z=%f expected negative (nose, -Z is forward)" % [light_name, spot.position.z])
+				result = 1
+			if spot.spot_range < 300.0:
+				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s spot_range=%f expected >= 300.0 (deep-reaching)" % [light_name, spot.spot_range])
+				result = 1
+			if not spot.shadow_enabled:
+				print("FAIL _test_build_headlights_adds_two_spotlights_near_the_nose: %s shadow_enabled=false expected true" % light_name)
+				result = 1
 	cruiser.free()
 	return result

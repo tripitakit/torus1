@@ -20,6 +20,10 @@ func _init():
 	failures += _test_bounce_zero_restitution_stops_dead()
 	failures += _test_bounce_grazing_impact_preserves_tangential_component()
 	failures += _test_bounce_oblique_impact()
+	failures += _test_strobe_energy_on_at_start_of_period()
+	failures += _test_strobe_energy_off_after_on_duration()
+	failures += _test_strobe_energy_on_again_after_wrapping_period()
+	failures += _test_strobe_energy_off_right_before_period_wraps()
 	failures += _test_forward_thrust_multiplier_at_zero_hold_time()
 	failures += _test_forward_thrust_multiplier_at_full_ramp()
 	failures += _test_forward_thrust_multiplier_at_half_ramp()
@@ -199,5 +203,35 @@ func _test_forward_thrust_multiplier_zero_duration_is_instant_max() -> int:
 	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 0.0, 10.0)
 	if not is_equal_approx(result, 10.0):
 		print("FAIL _test_forward_thrust_multiplier_zero_duration_is_instant_max: result=%f expected=10.0" % result)
+		return 1
+	return 0
+
+func _test_strobe_energy_on_at_start_of_period() -> int:
+	var result: float = VoidCruiserPhysics.compute_strobe_energy(0.0, 2.0, 0.15, 8.0)
+	if not is_equal_approx(result, 8.0):
+		print("FAIL _test_strobe_energy_on_at_start_of_period: result=%f expected=8.0" % result)
+		return 1
+	return 0
+
+func _test_strobe_energy_off_after_on_duration() -> int:
+	var result: float = VoidCruiserPhysics.compute_strobe_energy(0.2, 2.0, 0.15, 8.0)
+	if not is_equal_approx(result, 0.0):
+		print("FAIL _test_strobe_energy_off_after_on_duration: result=%f expected=0.0" % result)
+		return 1
+	return 0
+
+func _test_strobe_energy_on_again_after_wrapping_period() -> int:
+	# time=2.05 wraps to phase=0.05 within the next period, still inside the
+	# 0.15s "on" window.
+	var result: float = VoidCruiserPhysics.compute_strobe_energy(2.05, 2.0, 0.15, 8.0)
+	if not is_equal_approx(result, 8.0):
+		print("FAIL _test_strobe_energy_on_again_after_wrapping_period: result=%f expected=8.0" % result)
+		return 1
+	return 0
+
+func _test_strobe_energy_off_right_before_period_wraps() -> int:
+	var result: float = VoidCruiserPhysics.compute_strobe_energy(1.99, 2.0, 0.15, 8.0)
+	if not is_equal_approx(result, 0.0):
+		print("FAIL _test_strobe_energy_off_right_before_period_wraps: result=%f expected=0.0" % result)
 		return 1
 	return 0
