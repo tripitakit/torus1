@@ -106,6 +106,8 @@ func _add_nav_light(light_name: String, color: Color, local_position: Vector3, e
 	light.light_color = color
 	light.light_energy = energy
 	light.omni_range = 50.0
+	# Outside lights must not reach the windowless cockpit.
+	light.light_cull_mask &= ~CockpitScript.COCKPIT_LAYER
 	light.position = local_position
 	add_child(light)
 
@@ -140,6 +142,7 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 	light.spot_range = HEADLIGHT_RANGE
 	light.spot_angle = HEADLIGHT_ANGLE
 	light.shadow_enabled = true
+	light.light_cull_mask &= ~CockpitScript.COCKPIT_LAYER
 	add_child(light)
 
 func _unhandled_input(event: InputEvent) -> void:
