@@ -15,6 +15,11 @@ func _init():
 	failures += _test_angular_large_delta_stays_finite()
 	failures += _test_damping_above_one_does_not_produce_nan()
 	failures += _test_angular_damping_above_one_does_not_produce_nan()
+	failures += _test_bounce_reflects_perpendicular_impact()
+	failures += _test_bounce_restitution_scales_result()
+	failures += _test_bounce_zero_restitution_stops_dead()
+	failures += _test_bounce_grazing_impact_preserves_tangential_component()
+	failures += _test_bounce_oblique_impact()
 	failures += _test_forward_thrust_multiplier_at_zero_hold_time()
 	failures += _test_forward_thrust_multiplier_at_full_ramp()
 	failures += _test_forward_thrust_multiplier_at_half_ramp()
@@ -114,6 +119,50 @@ func _test_angular_damping_above_one_does_not_produce_nan() -> int:
 	var result: Vector3 = VoidCruiserPhysics.compute_new_angular_velocity(Vector3(10, 0, 0), Vector3.ZERO, 0.0, 1.5, 1.0 / 60.0)
 	if is_nan(result.x) or is_nan(result.y) or is_nan(result.z):
 		print("FAIL _test_angular_damping_above_one_does_not_produce_nan: result=%s" % result)
+		return 1
+	return 0
+
+func _test_bounce_reflects_perpendicular_impact() -> int:
+	var result: Vector3 = VoidCruiserPhysics.compute_bounce_velocity(Vector3(0, 0, -10), Vector3(0, 0, 1), 1.0)
+	var expected := Vector3(0, 0, 10)
+	if not result.is_equal_approx(expected):
+		print("FAIL _test_bounce_reflects_perpendicular_impact: result=%s expected=%s" % [result, expected])
+		return 1
+	return 0
+
+func _test_bounce_restitution_scales_result() -> int:
+	var result: Vector3 = VoidCruiserPhysics.compute_bounce_velocity(Vector3(0, 0, -10), Vector3(0, 0, 1), 0.4)
+	var expected := Vector3(0, 0, 4.0)
+	if not result.is_equal_approx(expected):
+		print("FAIL _test_bounce_restitution_scales_result: result=%s expected=%s" % [result, expected])
+		return 1
+	return 0
+
+func _test_bounce_zero_restitution_stops_dead() -> int:
+	var result: Vector3 = VoidCruiserPhysics.compute_bounce_velocity(Vector3(5, -3, 2), Vector3(0, 1, 0), 0.0)
+	var expected := Vector3.ZERO
+	if not result.is_equal_approx(expected):
+		print("FAIL _test_bounce_zero_restitution_stops_dead: result=%s expected=%s" % [result, expected])
+		return 1
+	return 0
+
+func _test_bounce_grazing_impact_preserves_tangential_component() -> int:
+	# Velocity parallel to the surface (perpendicular to the normal) has no
+	# component into the surface: bounce() must leave it unchanged.
+	var result: Vector3 = VoidCruiserPhysics.compute_bounce_velocity(Vector3(10, 0, 0), Vector3(0, 0, 1), 1.0)
+	var expected := Vector3(10, 0, 0)
+	if not result.is_equal_approx(expected):
+		print("FAIL _test_bounce_grazing_impact_preserves_tangential_component: result=%s expected=%s" % [result, expected])
+		return 1
+	return 0
+
+func _test_bounce_oblique_impact() -> int:
+	# v=(1,-1,0) hitting a normal=(0,1,0) floor: v - 2*(v.n)*n
+	# = (1,-1,0) - 2*(-1)*(0,1,0) = (1,-1,0) + (0,2,0) = (1,1,0)
+	var result: Vector3 = VoidCruiserPhysics.compute_bounce_velocity(Vector3(1, -1, 0), Vector3(0, 1, 0), 1.0)
+	var expected := Vector3(1, 1, 0)
+	if not result.is_equal_approx(expected):
+		print("FAIL _test_bounce_oblique_impact: result=%s expected=%s" % [result, expected])
 		return 1
 	return 0
 

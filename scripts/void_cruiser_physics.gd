@@ -15,3 +15,6 @@ static func compute_forward_thrust_multiplier(hold_time: float, ramp_duration: f
 		return max_multiplier
 	var t: float = clamp(hold_time / ramp_duration, 0.0, 1.0)
 	return lerp(1.0, max_multiplier, t)
+
+static func compute_bounce_velocity(velocity: Vector3, normal: Vector3, restitution: float) -> Vector3:
+	return velocity.bounce(normal) * restitution
