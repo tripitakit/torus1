@@ -95,6 +95,16 @@ func build_station() -> void:
 	for i in range(section_transforms.size()):
 		var section := AnimatableBody3D.new()
 		section.name = "Section%d" % i
+		# Sections rotate every frame for artificial gravity. With the
+		# default sync_to_physics=true, the physics server treats itself as
+		# the source of truth for the body's transform between physics
+		# steps: transform changes applied outside a physics step (this
+		# rotation runs in _process, not _physics_process) are silently
+		# dropped except for roughly the last one before each physics tick,
+		# and a parent's transform change (as WorldOriginRebase applies) is
+		# not picked up correctly either. Verified empirically — see
+		# tests/test_torus_station_physics.gd.
+		section.sync_to_physics = false
 
 		var section_mesh_instance := MeshInstance3D.new()
 		section_mesh_instance.name = "Mesh"
