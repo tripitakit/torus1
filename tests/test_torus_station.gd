@@ -15,6 +15,8 @@ func _init():
 	failures += _test_sections_have_stripe_marker()
 	failures += _test_rotate_sections_applies_correct_local_y_angle()
 	failures += _test_rotate_sections_does_not_rotate_bridges()
+	failures += _test_sections_and_bridges_share_one_hull_material()
+	failures += _test_stripes_use_yellow_material_distinct_from_hull()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -173,5 +175,48 @@ func _test_rotate_sections_does_not_rotate_bridges() -> int:
 	if not bridge.transform.basis.is_equal_approx(original_basis):
 		print("FAIL _test_rotate_sections_does_not_rotate_bridges: bridge basis changed")
 		result = 1
+	station.free()
+	return result
+
+func _test_sections_and_bridges_share_one_hull_material() -> int:
+	# Sections+bridges must all reference the SAME material resource, not a
+	# fresh StandardMaterial3D per mesh — with num_sections in the thousands,
+	# per-object materials would duplicate a GPU resource needlessly.
+	var station := _make_station(4)
+	station.build_station()
+	var section0: MeshInstance3D = station.get_node("Section0")
+	var section1: MeshInstance3D = station.get_node("Section1")
+	var bridge0: MeshInstance3D = station.get_node("Bridge0")
+	var result := 0
+	if section0.material_override == null:
+		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 has no material_override")
+		result = 1
+	elif section0.material_override != section1.material_override:
+		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 and Section1 use different material resources")
+		result = 1
+	elif section0.material_override != bridge0.material_override:
+		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 and Bridge0 use different material resources")
+		result = 1
+	station.free()
+	return result
+
+func _test_stripes_use_yellow_material_distinct_from_hull() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var section0: MeshInstance3D = station.get_node("Section0")
+	var stripe: MeshInstance3D = section0.get_node("Stripe")
+	var result := 0
+	if stripe.material_override == null or not (stripe.material_override is StandardMaterial3D):
+		print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe has no StandardMaterial3D override")
+		result = 1
+	else:
+		var mat: StandardMaterial3D = stripe.material_override
+		var c: Color = mat.albedo_color
+		if c.r < 0.5 or c.g < 0.3 or c.b > 0.3:
+			print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe albedo_color=%s not yellow-ish" % c)
+			result = 1
+		if mat == section0.material_override:
+			print("FAIL _test_stripes_use_yellow_material_distinct_from_hull: Stripe uses the same material as the hull")
+			result = 1
 	station.free()
 	return result
