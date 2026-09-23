@@ -10,6 +10,7 @@ func _init():
 	failures += _test_velocity_persists_across_steps_without_thrust()
 	failures += _test_read_input_methods_do_not_crash_headless()
 	failures += _test_mouse_look_is_independent_of_tick_rate()
+	failures += _test_mouse_turns_two_thirds_of_the_original_rate()
 	failures += _test_forward_hold_time_starts_at_zero()
 	failures += _test_forward_hold_time_resets_on_first_press()
 	failures += _test_forward_hold_time_accumulates_while_held()
@@ -131,6 +132,23 @@ func _test_mouse_look_is_independent_of_tick_rate() -> int:
 		result = 1
 	cruiser_a.free()
 	cruiser_b.free()
+	return result
+
+func _test_mouse_turns_two_thirds_of_the_original_rate() -> int:
+	# Tuned in game: one third slower than the original 0.01 sensitivity.
+	var fake_event := InputEventMouseMotion.new()
+	fake_event.relative = Vector2(30, 0)
+	var cruiser := _make_cruiser()
+	cruiser._unhandled_input(fake_event)
+	var delta := 0.5
+	var torque: Vector3 = cruiser._read_torque_input(delta)
+	var result := 0
+	var turn: float = torque.y * delta
+	var expected: float = -30.0 * 0.01 * 2.0 / 3.0
+	if not is_equal_approx(turn, expected):
+		print("FAIL _test_mouse_turns_two_thirds_of_the_original_rate: 30 px gave yaw contribution %f, expected %f" % [turn, expected])
+		result = 1
+	cruiser.free()
 	return result
 
 func _test_forward_hold_time_starts_at_zero() -> int:
