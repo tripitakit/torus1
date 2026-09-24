@@ -9,7 +9,7 @@ const BRIDGE_LENGTH := 1834.0
 
 func _init():
 	var failures := 0
-	failures += _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape()
+	failures += _test_two_sections_of_320_dressed_chunks_sharing_one_collision_shape()
 	failures += _test_terrain_vertices_on_the_wall_facing_the_axis()
 	failures += _test_terrain_chunks_tile_the_whole_wall()
 	failures += _test_near_cap_open_far_cap_closed_both_facing_in()
@@ -18,6 +18,9 @@ func _init():
 	failures += _test_dock_platform_spawn_and_sign()
 	failures += _test_all_interior_lights_fit_the_renderer_budget()
 	failures += _test_axis_lights_reach_the_ground_without_distance_falloff()
+	failures += _test_sections_come_from_their_indices()
+	failures += _test_every_lit_object_gets_at_most_eight_lights()
+	failures += _test_building_both_sections_takes_under_three_seconds()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -41,43 +44,42 @@ func _section_start(side: float) -> float:
 # Every vertex of `mesh` placed by `xform`: at `radius` from the axis, normal
 # pointing toward the axis.
 func _check_wall(test_name: String, mesh: Mesh, xform: Transform3D, radius: float) -> int:
-	var arrays: Array = mesh.surface_get_arrays(0)
-	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	for i in range(vertices.size()):
-		var v: Vector3 = xform * vertices[i]
-		var n: Vector3 = xform.basis * normals[i]
-		if absf(Vector2(v.x, v.y).length() - radius) > 0.01:
-			print("FAIL %s: vertex %s is %.3f m from the axis, expected %.1f" % [test_name, v, Vector2(v.x, v.y).length(), radius])
-			return 1
-		if n.dot(Vector3(-v.x, -v.y, 0.0)) <= 0.0:
-			print("FAIL %s: normal %s at %s points away from the axis" % [test_name, n, v])
-			return 1
+	for s in range(mesh.get_surface_count()):
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		for i in range(vertices.size()):
+			var v: Vector3 = xform * vertices[i]
+			var n: Vector3 = xform.basis * normals[i]
+			if absf(Vector2(v.x, v.y).length() - radius) > 0.01:
+				print("FAIL %s: vertex %s is %.3f m from the axis, expected %.1f" % [test_name, v, Vector2(v.x, v.y).length(), radius])
+				return 1
+			if n.dot(Vector3(-v.x, -v.y, 0.0)) <= 0.0:
+				print("FAIL %s: normal %s at %s points away from the axis" % [test_name, n, v])
+				return 1
 	return 0
 
-func _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape() -> int:
+func _test_two_sections_of_320_dressed_chunks_sharing_one_collision_shape() -> int:
 	var world := _make_world()
 	var result := 0
-	var first_mesh: Mesh = null
 	var first_shape: Shape3D = null
 	for section_name in ["SectionAhead", "SectionBehind"]:
 		var section := world.get_node_or_null(section_name)
 		if section == null:
-			print("FAIL _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape: no %s" % section_name)
+			print("FAIL _test_two_sections_of_320_dressed_chunks_sharing_one_collision_shape: no %s" % section_name)
 			result = 1
 			continue
 		var chunks := section.find_children("Chunk_*", "StaticBody3D", false, false)
 		if chunks.size() != 320:
-			print("FAIL _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape: %s has %d chunks, expected 320" % [section_name, chunks.size()])
+			print("FAIL _test_two_sections_of_320_dressed_chunks_sharing_one_collision_shape: %s has %d chunks, expected 320" % [section_name, chunks.size()])
 			result = 1
 		for chunk in chunks:
-			var mesh: Mesh = (chunk.get_node("Mesh") as MeshInstance3D).mesh
 			var shape: Shape3D = (chunk.get_node("Collision") as CollisionShape3D).shape
-			if first_mesh == null:
-				first_mesh = mesh
+			if first_shape == null:
 				first_shape = shape
-			if mesh != first_mesh or shape != first_shape or not (shape is ConcavePolygonShape3D):
-				print("FAIL _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape: %s/%s does not share the chunk mesh and trimesh shape" % [section_name, chunk.name])
+			var dressed: bool = chunk.get_node_or_null("Surface") != null or chunk.get_node_or_null("Water") != null
+			if shape != first_shape or not (shape is ConcavePolygonShape3D) or not dressed or chunk.get_node_or_null("Mesh") != null:
+				print("FAIL _test_two_sections_of_320_dressed_chunks_sharing_one_collision_shape: %s/%s not dressed, still has the old Mesh, or does not share the trimesh shape" % [section_name, chunk.name])
 				result = 1
 				break
 	world.free()
@@ -86,8 +88,11 @@ func _test_two_sections_of_320_chunks_sharing_one_mesh_and_shape() -> int:
 func _test_terrain_vertices_on_the_wall_facing_the_axis() -> int:
 	var world := _make_world()
 	var chunk: Node3D = world.get_node("SectionAhead/Chunk_03_07")
-	var mesh: Mesh = (chunk.get_node("Mesh") as MeshInstance3D).mesh
-	var result := _check_wall("_test_terrain_vertices_on_the_wall_facing_the_axis", mesh, chunk.transform, RADIUS)
+	var result := 0
+	for part in ["Surface", "Water"]:
+		var node := chunk.get_node_or_null(part) as MeshInstance3D
+		if node:
+			result = maxi(result, _check_wall("_test_terrain_vertices_on_the_wall_facing_the_axis", node.mesh, chunk.transform, RADIUS))
 	world.free()
 	return result
 
@@ -256,3 +261,69 @@ func _test_axis_lights_reach_the_ground_without_distance_falloff() -> int:
 			break
 	world.free()
 	return result
+
+func _world_transform(node: Node) -> Transform3D:
+	var xform := Transform3D()
+	var current := node
+	while current != null and current is Node3D:
+		xform = (current as Node3D).transform * xform
+		current = current.get_parent()
+	return xform
+
+func _test_sections_come_from_their_indices() -> int:
+	var world: Node3D = InteriorWorldScript.new()
+	world.behind_section_index = 5
+	world.ahead_section_index = 6
+	world.build()
+	var result := 0
+	var behind = world.get_section_plan(1.0)
+	var ahead = world.get_section_plan(-1.0)
+	if behind.section_index != 5 or ahead.section_index != 6:
+		print("FAIL _test_sections_come_from_their_indices: behind %d ahead %d, expected 5 and 6" % [behind.section_index, ahead.section_index])
+		result = 1
+	var groups: Dictionary = ahead.group_buildings_by_chunk()
+	var key: Vector2i = groups.keys()[0]
+	var buildings := world.get_node("SectionAhead/Chunk_%02d_%02d/Buildings" % [key.x, key.y]) as MultiMeshInstance3D
+	if buildings == null or buildings.multimesh.instance_count != groups[key].size():
+		print("FAIL _test_sections_come_from_their_indices: chunk %s does not hold the plan's %d buildings" % [key, groups[key].size()])
+		result = 1
+	world.free()
+	return result
+
+func _test_every_lit_object_gets_at_most_eight_lights() -> int:
+	# The engine pairs a light with an object when their bounding boxes meet;
+	# an omni light's box is a cube of +/- its range. Past 8, lights drop.
+	var world := _make_world()
+	var light_boxes := []
+	for light: OmniLight3D in world.find_children("*", "OmniLight3D", true, false):
+		var reach := Vector3.ONE * light.omni_range
+		light_boxes.append(AABB(_world_transform(light).origin - reach, reach * 2.0))
+	var result := 0
+	for node in world.find_children("*", "GeometryInstance3D", true, false):
+		if node.name == "Globe" or node is Label3D:
+			continue  # unshaded sun globes and the sign are not lit
+		var geometry := node as GeometryInstance3D
+		var local: AABB = geometry.custom_aabb if geometry.custom_aabb.has_volume() else geometry.get_aabb()
+		var box: AABB = _world_transform(geometry) * local
+		var count := 0
+		for light_box: AABB in light_boxes:
+			if light_box.intersects(box):
+				count += 1
+		if count > 8:
+			print("FAIL _test_every_lit_object_gets_at_most_eight_lights: %s/%s is reached by %d lights" % [geometry.get_parent().name, geometry.name, count])
+			result = 1
+			break
+	world.free()
+	return result
+
+func _test_building_both_sections_takes_under_three_seconds() -> int:
+	# Built on docking, behind the fade to black: target 1.5 s, fail past 3 s.
+	var start := Time.get_ticks_msec()
+	var world := _make_world()
+	var elapsed := Time.get_ticks_msec() - start
+	print("  interior build: %d ms" % elapsed)
+	world.free()
+	if elapsed > 3000:
+		print("FAIL _test_building_both_sections_takes_under_three_seconds: %d ms" % elapsed)
+		return 1
+	return 0

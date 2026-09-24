@@ -4,6 +4,7 @@ extends SceneTree
 # trimesh shape: a still hull turning while resting on the floor.
 
 const InteriorWorldScript = preload("res://scripts/interior_world.gd")
+const SectionPlan = preload("res://scripts/section_plan.gd")
 
 var _failures := 0
 
@@ -27,9 +28,8 @@ func _test_rotating_hull_resting_on_terrain_does_not_jump() -> int:
 	shape_node.shape = box
 	hull.add_child(shape_node)
 	root.add_child(hull)
-	# Floor at the bottom of the ahead section, halfway along it.
-	var center_z: float = -(world.bridge_length + world.section_length) * 0.5
-	hull.global_position = Vector3(0.0, -(world.section_radius - 1.0 - 0.05), center_z)
+	# Resting on a field lot of the ahead section: nothing built there.
+	hull.global_position = _field_point(world, 1.0 + 0.05)
 	await physics_frame
 	var biggest := 0.0
 	for tick in range(240):
@@ -46,3 +46,16 @@ func _test_rotating_hull_resting_on_terrain_does_not_jump() -> int:
 	hull.free()
 	world.free()
 	return result
+
+# A point `height` above the centre of the first field lot of the ahead section.
+func _field_point(world: Node3D, height: float) -> Vector3:
+	var plan = world.get_section_plan(-1.0)
+	var start_z: float = -(world.bridge_length * 0.5 + world.section_length)
+	for along in range(SectionPlan.LOTS_ALONG):
+		for around in range(SectionPlan.LOTS_AROUND):
+			if plan.zone_at(around, along) == SectionPlan.Zone.FIELD:
+				var center: Vector2 = plan.lot_center(around, along)
+				var angle: float = center.x / world.section_radius
+				var r: float = world.section_radius - height
+				return Vector3(cos(angle) * r, sin(angle) * r, start_z + center.y)
+	return Vector3.ZERO

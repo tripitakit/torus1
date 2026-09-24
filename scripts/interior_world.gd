@@ -6,12 +6,19 @@ extends Node3D
 # ground stays still.
 
 const InteriorLayout = preload("res://scripts/interior_layout.gd")
+const SectionGeneratorScript = preload("res://scripts/section_generator.gd")
+const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
 var section_length := 20000.0
 var bridge_radius := 600.0
 var bridge_length := 1834.0
+
+# Which station sections this interior shows: bridge i joins section i
+# (behind, +Z) and section i + 1 (ahead, -Z). Each is generated from its index.
+var behind_section_index := 0
+var ahead_section_index := 1
 
 # Terrain split in chunks: the renderer lights each object with at most 8
 # lights (see InteriorLayout.count_lights_reaching_band).
@@ -35,7 +42,6 @@ const SUN_GLOBE_RADIUS := 30.0
 const BRIDGE_LIGHT_RANGE := 900.0
 const BRIDGE_LIGHT_ENERGY := 1.0
 
-const TERRAIN_COLOR := Color(0.32, 0.42, 0.22)
 const STRUCTURE_COLOR := Color(0.45, 0.47, 0.5)
 
 const DOCK_PLATFORM_SIZE := Vector3(60.0, 4.0, 60.0)
@@ -45,13 +51,12 @@ const SIGN_TEXT := "UNDOCK  [F]"
 const SIGN_READY_COLOR := Color(0.3, 1.0, 0.4)
 const SIGN_IDLE_COLOR := Color(0.5, 0.5, 0.5)
 
-var _terrain_material: StandardMaterial3D
 var _structure_material: StandardMaterial3D
 var _sun_mesh: SphereMesh
 var _sun_material: StandardMaterial3D
+var _plans := {}
 
 func build() -> void:
-	_terrain_material = _make_material(TERRAIN_COLOR, 0.95)
 	_structure_material = _make_material(STRUCTURE_COLOR, 0.6)
 	_sun_mesh = SphereMesh.new()
 	_sun_mesh.radius = SUN_GLOBE_RADIUS
@@ -60,12 +65,13 @@ func build() -> void:
 	_sun_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_sun_material.albedo_color = SUN_COLOR
 
-	# Every chunk is the same piece of wall, turned and shifted: one mesh and
-	# one collision shape for all of them.
-	var chunk_mesh := _build_band_mesh(section_radius, TAU / CHUNKS_AROUND, CHUNK_LENGTH, CHUNK_ARC_SEGMENTS, CHUNK_LENGTH_SEGMENTS)
-	var chunk_shape := chunk_mesh.create_trimesh_shape()
+	# Every chunk's floor collides as the same piece of wall, turned and
+	# shifted: one collision shape for all of them. What is drawn on it comes
+	# from the section's plan.
+	var chunk_shape := _build_band_mesh(section_radius, TAU / CHUNKS_AROUND, CHUNK_LENGTH, CHUNK_ARC_SEGMENTS, CHUNK_LENGTH_SEGMENTS).create_trimesh_shape()
+	var dressing = TerrainDressingScript.new()
 	for side in [-1.0, 1.0]:
-		_build_section(side, chunk_mesh, chunk_shape)
+		_build_section(side, chunk_shape, dressing)
 	_build_bridge_tube()
 	_build_bridge_lights()
 	_build_dock()
@@ -82,13 +88,20 @@ func get_dock_position() -> Vector3:
 func set_undock_ready(ready: bool) -> void:
 	(get_node("Dock/Sign") as Label3D).modulate = SIGN_READY_COLOR if ready else SIGN_IDLE_COLOR
 
+# The plan of the section ahead (side -1) or behind (side +1).
+func get_section_plan(side: float):
+	return _plans[side]
+
 func _platform_position() -> Vector3:
 	return Vector3(0.0, -bridge_radius + DOCK_PLATFORM_SIZE.y * 0.5, 0.0)
 
-func _build_section(side: float, chunk_mesh: ArrayMesh, chunk_shape: Shape3D) -> void:
+func _build_section(side: float, chunk_shape: Shape3D, dressing) -> void:
 	var section := Node3D.new()
 	section.name = "SectionAhead" if side < 0.0 else "SectionBehind"
 	add_child(section)
+	var plan = SectionGeneratorScript.generate(ahead_section_index if side < 0.0 else behind_section_index, section_radius, section_length)
+	_plans[side] = plan
+	var buildings_by_chunk: Dictionary = plan.group_buildings_by_chunk()
 	var center_z: float = InteriorLayout.section_center_z(bridge_length, section_length, side)
 	var start_z: float = center_z - section_length * 0.5
 	var chunks_along: int = roundi(section_length / CHUNK_LENGTH)
@@ -98,7 +111,11 @@ func _build_section(side: float, chunk_mesh: ArrayMesh, chunk_shape: Shape3D) ->
 			var chunk := StaticBody3D.new()
 			chunk.name = "Chunk_%02d_%02d" % [around, along]
 			chunk.transform = Transform3D(Basis(Vector3(0.0, 0.0, 1.0), around * angle_step), Vector3(0.0, 0.0, start_z + along * CHUNK_LENGTH))
-			_add_mesh_and_collision(chunk, chunk_mesh, chunk_shape, _terrain_material)
+			var collision := CollisionShape3D.new()
+			collision.name = "Collision"
+			collision.shape = chunk_shape
+			chunk.add_child(collision)
+			dressing.dress_chunk(chunk, plan, around, along, buildings_by_chunk.get(Vector2i(around, along), []))
 			section.add_child(chunk)
 	# Both caps face into the section. The one by the bridge has the tube's
 	# hole; the far one is closed (its door to the next bridge opens in piece C).
