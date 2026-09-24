@@ -18,6 +18,11 @@ func _init():
 	failures += _test_cylinder_point_on_the_wall()
 	failures += _test_every_terrain_chunk_gets_one_to_seven_axis_lights()
 	failures += _test_every_bridge_tube_segment_gets_one_to_seven_axis_lights()
+	failures += _test_chain_slot_positions()
+	failures += _test_ring_indices_wrap()
+	failures += _test_nearest_bridge_slot()
+	failures += _test_sections_within_reach()
+	failures += _test_bridges_of_sections()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -91,5 +96,84 @@ func _test_every_bridge_tube_segment_gets_one_to_seven_axis_lights() -> int:
 		var count: int = InteriorLayout.count_lights_reaching_band(BRIDGE_RADIUS, z0, z0 + segment_length, lights)
 		if count < 1 or count > 7:
 			print("FAIL _test_every_bridge_tube_segment_gets_one_to_seven_axis_lights: segment %d reached by %d lights" % [k, count])
+			result = 1
+	return result
+
+func _period() -> float:
+	return InteriorLayout.chain_period(SECTION_LENGTH, _bridge_length)
+
+func _test_chain_slot_positions() -> int:
+	var p := _period()
+	var result := 0
+	if not is_equal_approx(p, SECTION_LENGTH + _bridge_length):
+		print("FAIL _test_chain_slot_positions: period %f" % p)
+		result = 1
+	if not is_equal_approx(InteriorLayout.bridge_slot_z(0, p), 0.0) or not is_equal_approx(InteriorLayout.bridge_slot_z(2, p), -2.0 * p) or not is_equal_approx(InteriorLayout.bridge_slot_z(-1, p), p):
+		print("FAIL _test_chain_slot_positions: bridge slots not at -slot * period")
+		result = 1
+	# Slot 0 is piece A's section "ahead", slot -1 the one "behind".
+	if not is_equal_approx(InteriorLayout.section_slot_z(0, p), InteriorLayout.section_center_z(_bridge_length, SECTION_LENGTH, -1.0)) or not is_equal_approx(InteriorLayout.section_slot_z(-1, p), InteriorLayout.section_center_z(_bridge_length, SECTION_LENGTH, 1.0)):
+		print("FAIL _test_chain_slot_positions: sections 0 and -1 are not the old ahead and behind")
+		result = 1
+	# Section s ends exactly where bridges s and s + 1 end.
+	var section_high_end: float = InteriorLayout.section_slot_z(3, p) + SECTION_LENGTH * 0.5
+	var section_low_end: float = InteriorLayout.section_slot_z(3, p) - SECTION_LENGTH * 0.5
+	if not is_equal_approx(section_high_end, InteriorLayout.bridge_slot_z(3, p) - _bridge_length * 0.5) or not is_equal_approx(section_low_end, InteriorLayout.bridge_slot_z(4, p) + _bridge_length * 0.5):
+		print("FAIL _test_chain_slot_positions: section 3 does not meet bridges 3 and 4")
+		result = 1
+	return result
+
+func _test_ring_indices_wrap() -> int:
+	var result := 0
+	var cases := [
+		# [docked, slot, bridge ring index, section ring index]
+		[0, 0, 0, 1],
+		[0, -1, 1999, 0],
+		[1999, 0, 1999, 0],
+		[1999, 1, 0, 1],
+		[5, -7, 1998, 1999],
+	]
+	for c in cases:
+		var bridge: int = InteriorLayout.bridge_ring_index(c[0], c[1], 2000)
+		var section: int = InteriorLayout.section_ring_index(c[0], c[1], 2000)
+		if bridge != c[2] or section != c[3]:
+			print("FAIL _test_ring_indices_wrap: docked %d slot %d gave bridge %d section %d, expected %d and %d" % [c[0], c[1], bridge, section, c[2], c[3]])
+			result = 1
+	return result
+
+func _test_nearest_bridge_slot() -> int:
+	var p := _period()
+	var result := 0
+	for c in [[0.0, 0], [-0.4 * p, 0], [-0.6 * p, 1], [0.7 * p, -1], [-3.2 * p, 3]]:
+		var slot: int = InteriorLayout.nearest_bridge_slot(c[0], p)
+		if slot != c[1]:
+			print("FAIL _test_nearest_bridge_slot: z %f gave slot %d, expected %d" % [c[0], slot, c[1]])
+			result = 1
+	return result
+
+func _test_sections_within_reach() -> int:
+	var p := _period()
+	var result := 0
+	var cases := [
+		# [z, reach in periods, expected slots]
+		[0.0, 1.25, [-1, 0]],
+		[-0.5 * p, 1.25, [-1, 0, 1]],
+		[-2.2 * p, 1.25, [1, 2]],
+		[-2.2 * p, 1.5, [1, 2, 3]],
+		[3.0 * p, 1.25, [-4, -3]],
+	]
+	for c in cases:
+		var slots: Array = InteriorLayout.sections_within(c[0], p, c[1] * p)
+		if slots != c[2]:
+			print("FAIL _test_sections_within_reach: z %f reach %f gave %s, expected %s" % [c[0], c[1], slots, c[2]])
+			result = 1
+	return result
+
+func _test_bridges_of_sections() -> int:
+	var result := 0
+	for c in [[[-1, 0], [-1, 0, 1]], [[2, 1], [1, 2, 3]], [[], []]]:
+		var bridges: Array = InteriorLayout.bridges_of_sections(c[0])
+		if bridges != c[1]:
+			print("FAIL _test_bridges_of_sections: sections %s gave bridges %s, expected %s" % [c[0], bridges, c[1]])
 			result = 1
 	return result
