@@ -16,6 +16,8 @@ func _init():
 	failures += _test_twenty_suns_per_section_on_the_axis()
 	failures += _test_bridge_tube_four_segments_facing_the_axis()
 	failures += _test_dock_platform_spawn_and_sign()
+	failures += _test_all_interior_lights_fit_the_renderer_budget()
+	failures += _test_axis_lights_reach_the_ground_without_distance_falloff()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -219,5 +221,38 @@ func _test_dock_platform_spawn_and_sign() -> int:
 	if not undock_sign.modulate.is_equal_approx(InteriorWorldScript.SIGN_IDLE_COLOR):
 		print("FAIL _test_dock_platform_spawn_and_sign: sign still lit when not ready")
 		result = 1
+	world.free()
+	return result
+
+func _test_all_interior_lights_fit_the_renderer_budget() -> int:
+	# The Compatibility renderer draws at most max_renderable_lights omni lights
+	# per frame and drops the rest in cull order, not by distance: past the
+	# limit, whole stretches of ground go black depending on where you look.
+	var world := _make_world()
+	var budget: int = ProjectSettings.get_setting("rendering/limits/opengl/max_renderable_lights")
+	var count := world.find_children("*", "OmniLight3D", true, false).size()
+	var result := 0
+	if count > budget:
+		print("FAIL _test_all_interior_lights_fit_the_renderer_budget: %d omni lights, renderer draws at most %d per frame" % [count, budget])
+		result = 1
+	world.free()
+	return result
+
+func _test_axis_lights_reach_the_ground_without_distance_falloff() -> int:
+	# With the default attenuation 1.0 a light falls off as 1/d: 2000 m from the
+	# axis a sun gives ~6e-4 of its energy and the ground reads near-black.
+	var world := _make_world()
+	var result := 0
+	var lights: Array = []
+	for section_name in ["SectionAhead", "SectionBehind"]:
+		for sun in world.get_node(section_name).find_children("Sun_*", "Node3D", false, false):
+			lights.append(sun.get_node("Light"))
+	for k in range(3):
+		lights.append(world.get_node("BridgeLight_%d" % k))
+	for light: OmniLight3D in lights:
+		if light.omni_attenuation > 0.1:
+			print("FAIL _test_axis_lights_reach_the_ground_without_distance_falloff: %s omni_attenuation=%f, expected <= 0.1" % [light.get_path() if light.is_inside_tree() else light.name, light.omni_attenuation])
+			result = 1
+			break
 	world.free()
 	return result

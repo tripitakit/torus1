@@ -69,3 +69,4 @@ dock={
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
+limits/opengl/max_renderable_lights=64

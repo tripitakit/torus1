@@ -25,11 +25,15 @@ const TUBE_ARC_SEGMENTS := 64
 
 const SUN_SPACING := 1000.0
 const SUN_RANGE := 2600.0
-const SUN_ENERGY := 3.0
+const SUN_ENERGY := 1.5
+# No distance falloff inside the range (only the range's soft edge): with
+# the default 1/d falloff a sun 2000 m above the ground lights it at ~6e-4
+# of its energy and the interior reads black.
+const AXIS_LIGHT_ATTENUATION := 0.0
 const SUN_COLOR := Color(1.0, 0.93, 0.8)
 const SUN_GLOBE_RADIUS := 30.0
 const BRIDGE_LIGHT_RANGE := 900.0
-const BRIDGE_LIGHT_ENERGY := 2.0
+const BRIDGE_LIGHT_ENERGY := 1.0
 
 const TERRAIN_COLOR := Color(0.32, 0.42, 0.22)
 const STRUCTURE_COLOR := Color(0.45, 0.47, 0.5)
@@ -128,6 +132,7 @@ func _build_sun(sun_name: String, sun_position: Vector3) -> Node3D:
 	light.light_color = SUN_COLOR
 	light.light_energy = SUN_ENERGY
 	light.omni_range = SUN_RANGE
+	light.omni_attenuation = AXIS_LIGHT_ATTENUATION
 	# No shadows: at kilometre scale shadow maps band and flicker (as the
 	# headlights did), and 40 shadowed lights would cost too much.
 	light.shadow_enabled = false
@@ -156,6 +161,7 @@ func _build_bridge_lights() -> void:
 		light.light_color = SUN_COLOR
 		light.light_energy = BRIDGE_LIGHT_ENERGY
 		light.omni_range = BRIDGE_LIGHT_RANGE
+		light.omni_attenuation = AXIS_LIGHT_ATTENUATION
 		light.shadow_enabled = false
 		add_child(light)
 
