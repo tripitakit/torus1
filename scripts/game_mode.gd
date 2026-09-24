@@ -33,6 +33,16 @@ func _ready() -> void:
 	_void_cruiser = get_node(void_cruiser_path)
 	_build_fade()
 
+func _notification(what: int) -> void:
+	# Freed while inside (the game quits): the outside world is out of the
+	# tree and nothing else would ever free it.
+	if what == NOTIFICATION_PREDELETE:
+		for entry in _detached:
+			var node: Node = entry[0]
+			if is_instance_valid(node) and not node.is_inside_tree():
+				node.free()
+		_detached.clear()
+
 func is_inside() -> bool:
 	return mode == Mode.INTERIOR
 
@@ -45,7 +55,8 @@ func _process(_delta: float) -> void:
 		if cockpit:
 			cockpit.set_dock_prompt(_can_dock_now())
 	elif _interior:
-		_interior.set_undock_ready(0, _can_undock_now())
+		var cruiser := _interior.get_node("InternalCruiser") as Node3D
+		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _transitioning or not event.is_action_pressed("dock"):
@@ -59,9 +70,11 @@ func _can_dock_now() -> bool:
 	var port: Node3D = _station.get_docking_port(_station.nearest_bridge_index(_void_cruiser.global_position))
 	return DockingRules.can_dock(port.global_position.distance_to(_void_cruiser.global_position), _void_cruiser.velocity.length())
 
+# Every bridge inside has a dock; the one nearest the craft counts.
 func _can_undock_now() -> bool:
 	var cruiser: CharacterBody3D = _interior.get_node("InternalCruiser")
-	return DockingRules.can_dock(_interior.get_dock_position(0).distance_to(cruiser.position), cruiser.velocity.length())
+	var dock: Vector3 = _interior.get_dock_position(_interior.nearest_dock_slot(cruiser.position))
+	return DockingRules.can_dock(dock.distance_to(cruiser.position), cruiser.velocity.length())
 
 func enter_interior(bridge_index: int) -> void:
 	var parent := get_parent()
@@ -92,6 +105,10 @@ func enter_interior(bridge_index: int) -> void:
 	mode = Mode.INTERIOR
 
 func exit_interior() -> void:
+	# Out through the collar of the bridge whose dock is nearest.
+	var cruiser := _interior.get_node_or_null("InternalCruiser") as Node3D
+	if cruiser != null:
+		docked_bridge = _interior.get_bridge_ring_index(_interior.nearest_dock_slot(cruiser.position))
 	var parent := get_parent()
 	parent.remove_child(_interior)
 	_interior.free()

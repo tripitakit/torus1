@@ -28,6 +28,8 @@ func _initialize():
 	_failures += await _test_undock_key_far_from_dock_does_nothing()
 	_failures += await _test_second_dock_press_during_transition_is_ignored()
 	_failures += await _test_interior_sections_follow_the_docked_bridge()
+	_failures += await _test_undock_from_another_bridge_exits_at_its_collar()
+	_failures += await _test_outside_world_is_freed_if_the_scene_goes_while_inside()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -194,3 +196,54 @@ func _test_interior_sections_follow_the_docked_bridge() -> int:
 			result = 1
 		_game_mode.exit_interior()
 	return result
+
+func _test_undock_from_another_bridge_exits_at_its_collar() -> int:
+	var result := 0
+	var last: int = _station.num_sections - 1
+	# [dock slot, station bridge]: slot 1 is 21.8 km out (the origin shifts),
+	# slot -1 of bridge 0 is the last bridge (the ring closes).
+	for case in [[1, 1], [-1, last]]:
+		_game_mode.enter_interior(0)
+		var interior: Node3D = _scene.get_node("InteriorWorld")
+		var cruiser: CharacterBody3D = interior.get_node("InternalCruiser")
+		cruiser.set_physics_process(false)
+		cruiser.position = interior.get_dock_position(case[0]) + Vector3(0.0, 24.0, 0.0)
+		await _frames(3)
+		var lit: Label3D = interior.get_node("Chain/Bridge_%d/Dock/Sign" % case[0])
+		var docked_sign: Label3D = interior.get_node("Chain/Bridge_0/Dock/Sign")
+		if not lit.modulate.is_equal_approx(InteriorWorldScript.SIGN_READY_COLOR) or not docked_sign.modulate.is_equal_approx(InteriorWorldScript.SIGN_IDLE_COLOR):
+			print("FAIL _test_undock_from_another_bridge_exits_at_its_collar: at dock %d the lit sign is wrong" % case[0])
+			result = 1
+		_press_dock()
+		await _wait_for_transition()
+		if _game_mode.is_inside():
+			print("FAIL _test_undock_from_another_bridge_exits_at_its_collar: could not undock at dock %d" % case[0])
+			_game_mode.exit_interior()
+			result = 1
+			continue
+		var port: Node3D = _station.get_docking_port(case[1])
+		var distance: float = _void_cruiser.global_position.distance_to(port.global_position)
+		if absf(distance - 60.0) > 0.5:
+			print("FAIL _test_undock_from_another_bridge_exits_at_its_collar: dock %d put the ship %.1f m from bridge %d's port (expected 60)" % [case[0], distance, case[1]])
+			result = 1
+	return result
+
+func _test_outside_world_is_freed_if_the_scene_goes_while_inside() -> int:
+	# Quitting while inside: the outside world is out of the tree and only
+	# GameMode holds it.
+	var scene: Node = load("res://scenes/torus1_system.tscn").instantiate()
+	root.add_child(scene)
+	await process_frame
+	var cruiser: Node = scene.get_node("VoidCruiser")
+	var station: Node = scene.get_node("PlanetSystem")
+	scene.get_node("GameMode").enter_interior(0)
+	await process_frame
+	scene.free()
+	if is_instance_valid(cruiser) or is_instance_valid(station):
+		print("FAIL _test_outside_world_is_freed_if_the_scene_goes_while_inside: the detached outside world outlived the scene")
+		if is_instance_valid(cruiser):
+			cruiser.free()
+		if is_instance_valid(station):
+			station.free()
+		return 1
+	return 0
