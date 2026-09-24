@@ -44,3 +44,13 @@ static func _section_transform_at(torus_radius: float, theta: float) -> Transfor
 	var z_axis := x_axis.cross(y_axis).normalized()
 	var basis := Basis(x_axis, y_axis, z_axis)
 	return Transform3D(basis, position)
+
+# Bridge i sits at angle i * step + step / 2 around the ring (see
+# compute_bridge_transforms): round the position's angle to the nearest one.
+static func compute_nearest_bridge_index(station_local_position: Vector3, num_sections: int) -> int:
+	if num_sections < 1:
+		return -1
+	var step := TAU / num_sections
+	var theta: float = fposmod(atan2(station_local_position.z, station_local_position.x), TAU)
+	var index: int = roundi((theta - step * 0.5) / step)
+	return posmod(index, num_sections)

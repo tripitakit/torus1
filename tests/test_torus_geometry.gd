@@ -11,6 +11,10 @@ func _init():
 	failures += _test_negative_bridge_length_does_not_crash()
 	failures += _test_section_angular_velocity_gives_1g()
 	failures += _test_section_angular_velocity_zero_radius_does_not_crash()
+	failures += _test_nearest_bridge_index_at_each_bridge()
+	failures += _test_nearest_bridge_index_either_side_of_section_zero()
+	failures += _test_nearest_bridge_index_ignores_height()
+	failures += _test_nearest_bridge_index_degenerate()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -91,5 +95,44 @@ func _test_section_angular_velocity_zero_radius_does_not_crash() -> int:
 	var omega: float = TorusGeometry.compute_section_angular_velocity(0.0, TorusGeometry.GRAVITY_1G)
 	if omega != 0.0:
 		print("FAIL _test_section_angular_velocity_zero_radius_does_not_crash: expected 0.0, got %f" % omega)
+		return 1
+	return 0
+
+func _ring_point(theta: float, height: float) -> Vector3:
+	return Vector3(cos(theta) * 2000.0, height, sin(theta) * 2000.0)
+
+func _test_nearest_bridge_index_at_each_bridge() -> int:
+	var step := TAU / 4.0
+	var result := 0
+	for i in range(4):
+		var index: int = TorusGeometry.compute_nearest_bridge_index(_ring_point(i * step + step * 0.5, 0.0), 4)
+		if index != i:
+			print("FAIL _test_nearest_bridge_index_at_each_bridge: at bridge %d got %d" % [i, index])
+			result = 1
+	return result
+
+func _test_nearest_bridge_index_either_side_of_section_zero() -> int:
+	# Section 0 sits at angle 0, between bridge 3 (before) and bridge 0 (after).
+	var step := TAU / 4.0
+	var result := 0
+	var after: int = TorusGeometry.compute_nearest_bridge_index(_ring_point(step * 0.1, 0.0), 4)
+	var before: int = TorusGeometry.compute_nearest_bridge_index(_ring_point(-step * 0.1, 0.0), 4)
+	if after != 0 or before != 3:
+		print("FAIL _test_nearest_bridge_index_either_side_of_section_zero: after=%d (expected 0) before=%d (expected 3)" % [after, before])
+		result = 1
+	return result
+
+func _test_nearest_bridge_index_ignores_height() -> int:
+	var step := TAU / 4.0
+	var index: int = TorusGeometry.compute_nearest_bridge_index(_ring_point(2.0 * step + step * 0.5, 800.0), 4)
+	if index != 2:
+		print("FAIL _test_nearest_bridge_index_ignores_height: got %d expected 2" % index)
+		return 1
+	return 0
+
+func _test_nearest_bridge_index_degenerate() -> int:
+	var index: int = TorusGeometry.compute_nearest_bridge_index(_ring_point(0.3, 0.0), 0)
+	if index != -1:
+		print("FAIL _test_nearest_bridge_index_degenerate: got %d expected -1" % index)
 		return 1
 	return 0
