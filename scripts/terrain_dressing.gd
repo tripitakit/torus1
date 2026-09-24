@@ -21,6 +21,9 @@ const CITY_GROUND_COLOR := Color(0.5, 0.5, 0.52)
 const MAIN_ROAD_COLOR := Color(0.2, 0.2, 0.22)
 const STREET_COLOR := Color(0.32, 0.32, 0.34)
 const WATER_COLOR := Color(0.12, 0.32, 0.5)
+const WINDOW_SPACING := 4.0
+const WINDOW_GLOW_COLOR := Color(1.0, 0.85, 0.55)
+const BUILDING_VISIBILITY_END := 12000.0
 
 # Vertex data for one mesh surface. Kept as a class so its packed arrays are
 # mutated in place (packed arrays are values).
@@ -70,6 +73,9 @@ class MeshArrays:
 var field_material: StandardMaterial3D
 var paved_material: StandardMaterial3D
 var water_material: StandardMaterial3D
+var building_material: StandardMaterial3D
+var _box_mesh := BoxMesh.new()
+var _box_shapes := {}
 
 func _init() -> void:
 	field_material = StandardMaterial3D.new()
@@ -83,9 +89,25 @@ func _init() -> void:
 	water_material.albedo_color = WATER_COLOR
 	water_material.roughness = 0.1
 	water_material.metallic = 0.3
+	# Windows projected in world space: the same window size on a house and a
+	# tower (a unit box stretched per building would stretch its UVs). The
+	# instance colour tints the walls; a mask lights the panes.
+	building_material = StandardMaterial3D.new()
+	building_material.vertex_color_use_as_albedo = true
+	building_material.albedo_texture = _window_texture(false)
+	building_material.uv1_triplanar = true
+	building_material.uv1_world_triplanar = true
+	building_material.uv1_scale = Vector3.ONE / WINDOW_SPACING
+	building_material.emission_enabled = true
+	building_material.emission = WINDOW_GLOW_COLOR
+	building_material.emission_energy_multiplier = 0.8
+	building_material.emission_texture = _window_texture(true)
+	building_material.roughness = 0.8
 
-func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, _building_indices: Array) -> void:
+func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array) -> void:
 	_build_ground(chunk, plan, chunk_around, chunk_along)
+	if not building_indices.is_empty():
+		_build_buildings(chunk, plan, chunk_around, chunk_along, building_indices)
 
 # Which road a lot cell carries. The lot is split 3 x 3 by its edge roads:
 # column 0 is the west band, 2 the east band; row 0 south, 2 north. The
@@ -166,6 +188,91 @@ static func _stripe_texture() -> ImageTexture:
 	for x in range(16):
 		var shade := 1.0 if x < 11 else 0.55
 		for y in range(16):
+			image.set_pixel(x, y, Color(shade, shade, shade))
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
+
+# A unit box scaled to size (width around, height, depth along), its base
+# centred on the wall at (x, z) and its "up" toward the axis.
+static func building_transform(radius: float, x: float, z: float, size: Vector3) -> Transform3D:
+	var angle: float = x / radius
+	var up := Vector3(-cos(angle), -sin(angle), 0.0)
+	var around := Vector3(-sin(angle), cos(angle), 0.0)
+	var base := Vector3(cos(angle) * radius, sin(angle) * radius, z)
+	return Transform3D(Basis(around * size.x, up * size.y, Vector3(0.0, 0.0, size.z)), base + up * size.y * 0.5)
+
+# The drawn transform of each listed building, in its chunk's frame. One
+# source for both the MultiMesh and the colliders (headless test runs cannot
+# read MultiMesh instances back: the dummy renderer stores none).
+static func chunk_building_transforms(plan, chunk_around: int, chunk_along: int, indices: Array) -> Array[Transform3D]:
+	var chunk_x0: float = chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND * plan.lot_width
+	var chunk_z0: float = chunk_along * SectionPlanScript.CHUNK_LOTS_ALONG * plan.lot_length
+	var xforms: Array[Transform3D] = []
+	for b: int in indices:
+		xforms.append(building_transform(plan.radius, plan.building_x[b] - chunk_x0, plan.building_z[b] - chunk_z0, plan.building_size[b]))
+	return xforms
+
+func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, indices: Array) -> void:
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = _box_mesh
+	multimesh.instance_count = indices.size()
+	var xforms := chunk_building_transforms(plan, chunk_around, chunk_along, indices)
+	var tallest := 0.0
+	for k in range(indices.size()):
+		var b: int = indices[k]
+		var size: Vector3 = plan.building_size[b]
+		var xform: Transform3D = xforms[k]
+		multimesh.set_instance_transform(k, xform)
+		multimesh.set_instance_color(k, plan.building_color[b])
+		# Colliders straight on the chunk body: thousands of nodes would slow
+		# docking down.
+		var owner_id := chunk.create_shape_owner(chunk)
+		chunk.shape_owner_add_shape(owner_id, _box_shape(size))
+		chunk.shape_owner_set_transform(owner_id, xform.orthonormalized())
+		tallest = maxf(tallest, size.y)
+	var instance := MultiMeshInstance3D.new()
+	instance.name = "Buildings"
+	instance.multimesh = multimesh
+	instance.material_override = building_material
+	instance.visibility_range_end = BUILDING_VISIBILITY_END
+	instance.custom_aabb = _chunk_bounds(plan, tallest)
+	chunk.add_child(instance)
+
+# Boxes with the same (whole-metre) size share one shape.
+func _box_shape(size: Vector3) -> BoxShape3D:
+	var key := Vector3i(size)
+	if not _box_shapes.has(key):
+		var shape := BoxShape3D.new()
+		shape.size = size
+		_box_shapes[key] = shape
+	return _box_shapes[key]
+
+# The chunk's slice of wall up to its tallest building, in the chunk's frame.
+func _chunk_bounds(plan, tallest: float) -> AABB:
+	var span: float = SectionPlanScript.CHUNK_LOTS_AROUND * plan.lot_width / plan.radius
+	var chunk_length: float = SectionPlanScript.CHUNK_LOTS_ALONG * plan.lot_length
+	var bounds := AABB(Vector3(plan.radius, 0.0, 0.0), Vector3.ZERO)
+	for step in range(9):
+		var angle: float = span * step / 8.0
+		for r: float in [plan.radius, plan.radius - tallest]:
+			for z: float in [0.0, chunk_length]:
+				bounds = bounds.expand(Vector3(cos(angle) * r, sin(angle) * r, z))
+	return bounds.grow(1.0)
+
+# One window per repeat. Albedo: white walls (tinted per building) with a
+# darker pane. Glow mask: only the pane.
+static func _window_texture(glow: bool) -> ImageTexture:
+	var image := Image.create(16, 16, false, Image.FORMAT_RGB8)
+	for x in range(16):
+		for y in range(16):
+			var pane := x >= 4 and x < 12 and y >= 3 and y < 11
+			var shade: float
+			if glow:
+				shade = 1.0 if pane else 0.0
+			else:
+				shade = 0.35 if pane else 1.0
 			image.set_pixel(x, y, Color(shade, shade, shade))
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)

@@ -17,6 +17,10 @@ func _init():
 	failures += _test_ground_area_is_the_chunk_area()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
+	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
+	failures += _test_chunk_buildings_match_the_plan()
+	failures += _test_building_colliders_match_the_drawn_buildings()
+	failures += _test_building_bounds_cover_the_tallest_building()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -146,5 +150,84 @@ func _test_road_colours_where_the_plan_has_roads() -> int:
 	if not _has_color(surface, TerrainDressing.STREET_COLOR) or not _has_color(surface, TerrainDressing.MAIN_ROAD_COLOR):
 		print("FAIL _test_road_colours_where_the_plan_has_roads: town chunk lacks street or main-road colour")
 		result = 1
+	chunk.free()
+	return result
+
+func _busiest_chunk() -> Vector2i:
+	var best := Vector2i.ZERO
+	var most := 0
+	for key in _groups:
+		if _groups[key].size() > most:
+			most = _groups[key].size()
+			best = key
+	return best
+
+func _test_building_transform_stands_on_the_wall_facing_the_axis() -> int:
+	var size := Vector3(20.0, 60.0, 30.0)
+	var x := 700.0
+	var xform: Transform3D = TerrainDressing.building_transform(RADIUS, x, 400.0, size)
+	var angle := x / RADIUS
+	var up := Vector3(-cos(angle), -sin(angle), 0.0)
+	var base: Vector3 = xform * Vector3(0.0, -0.5, 0.0)
+	var result := 0
+	if not base.is_equal_approx(Vector3(cos(angle) * RADIUS, sin(angle) * RADIUS, 400.0)):
+		print("FAIL _test_building_transform_stands_on_the_wall_facing_the_axis: base at %s" % base)
+		result = 1
+	if not xform.basis.y.normalized().is_equal_approx(up) or not xform.basis.z.normalized().is_equal_approx(Vector3(0.0, 0.0, 1.0)):
+		print("FAIL _test_building_transform_stands_on_the_wall_facing_the_axis: up %s along %s" % [xform.basis.y.normalized(), xform.basis.z.normalized()])
+		result = 1
+	if not Vector3(xform.basis.x.length(), xform.basis.y.length(), xform.basis.z.length()).is_equal_approx(size) or xform.basis.determinant() <= 0.0:
+		print("FAIL _test_building_transform_stands_on_the_wall_facing_the_axis: scale %s (mirrored: %s)" % [Vector3(xform.basis.x.length(), xform.basis.y.length(), xform.basis.z.length()), xform.basis.determinant() <= 0.0])
+		result = 1
+	return result
+
+func _test_chunk_buildings_match_the_plan() -> int:
+	var key := _busiest_chunk()
+	var indices: Array = _groups[key]
+	var chunk := _dress(key)
+	var result := 0
+	var node := chunk.get_node_or_null("Buildings") as MultiMeshInstance3D
+	if node == null or node.multimesh.instance_count != indices.size() or chunk.get_shape_owners().size() != indices.size():
+		print("FAIL _test_chunk_buildings_match_the_plan: chunk %s expects %d buildings (instances %s, colliders %d)" % [key, indices.size(), str(node.multimesh.instance_count) if node else "none", chunk.get_shape_owners().size()])
+		chunk.free()
+		return 1
+	if node.visibility_range_end != TerrainDressing.BUILDING_VISIBILITY_END:
+		print("FAIL _test_chunk_buildings_match_the_plan: visibility range %f" % node.visibility_range_end)
+		result = 1
+	chunk.free()
+	return result
+
+func _test_building_colliders_match_the_drawn_buildings() -> int:
+	var key := _busiest_chunk()
+	var indices: Array = _groups[key]
+	var chunk := _dress(key)
+	# Headless runs cannot read MultiMesh instances back; compare with the
+	# transforms the dressing draws them with.
+	var drawn_list := TerrainDressing.chunk_building_transforms(_plan, key.x, key.y, indices)
+	var owners: PackedInt32Array = chunk.get_shape_owners()
+	var result := 0
+	for k in range(indices.size()):
+		var drawn: Transform3D = drawn_list[k]
+		var collider: Transform3D = chunk.shape_owner_get_transform(owners[k])
+		var shape := chunk.shape_owner_get_shape(owners[k], 0) as BoxShape3D
+		if not collider.is_equal_approx(drawn.orthonormalized()) or shape == null or not shape.size.is_equal_approx(_plan.building_size[indices[k]]):
+			print("FAIL _test_building_colliders_match_the_drawn_buildings: building %d collider %s / %s vs drawn %s" % [indices[k], collider, str(shape.size) if shape else "none", drawn])
+			result = 1
+			break
+	chunk.free()
+	return result
+
+func _test_building_bounds_cover_the_tallest_building() -> int:
+	# Headless renderers report no MultiMesh bounds; custom_aabb must hold them.
+	var key := _busiest_chunk()
+	var chunk := _dress(key)
+	var node: MultiMeshInstance3D = chunk.get_node("Buildings")
+	var result := 0
+	for xform: Transform3D in TerrainDressing.chunk_building_transforms(_plan, key.x, key.y, _groups[key]):
+		var top: Vector3 = xform * Vector3(0.0, 0.5, 0.0)
+		if not node.custom_aabb.has_point(top):
+			print("FAIL _test_building_bounds_cover_the_tallest_building: top %s outside %s" % [top, node.custom_aabb])
+			result = 1
+			break
 	chunk.free()
 	return result
