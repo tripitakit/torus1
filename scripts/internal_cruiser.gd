@@ -1,14 +1,16 @@
 extends "res://scripts/flying_craft.gd"
 
 # The small craft flown inside the station: same controls as the
-# void-cruiser, but no thrust ramp, no HUD and no gravity.
+# void-cruiser, a shorter thrust ramp (it stops at 10x, about 1 km/s), no HUD
+# and no gravity.
 
 const HULL_SIZE := Vector3(4.0, 2.0, 8.0)
 const CAMERA_POSITION := Vector3(0.0, 0.3, -2.0)
 const CAMERA_HFOV := 90.0
 const CAMERA_NEAR := 0.2
 const CAMERA_FAR := 60000.0
-# With linear_damping 0.5 the top speed is thrust / ln 2: about 101 m/s.
+# With linear_damping 0.5 the top speed is thrust / ln 2: about 101 m/s at
+# 1x, about 1 km/s at the end of the ramp (10x).
 const INTERNAL_THRUST := 70.0
 
 func _init() -> void:
@@ -39,4 +41,4 @@ func build_camera() -> void:
 	add_child(camera)
 
 func _physics_process(delta: float) -> void:
-	_apply_physics_step(delta, _read_thrust_input(), _read_torque_input(delta))
+	_fly(delta)

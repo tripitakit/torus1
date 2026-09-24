@@ -10,11 +10,21 @@ static func compute_new_angular_velocity(angular_velocity: Vector3, local_torque
 	var torque_accel := local_torque_input * torque_power
 	return angular_velocity * damping_factor + torque_accel * delta
 
-static func compute_forward_thrust_multiplier(hold_time: float, ramp_duration: float, max_multiplier: float) -> float:
-	if ramp_duration <= 0.0:
-		return max_multiplier
-	var t: float = clamp(hold_time / ramp_duration, 0.0, 1.0)
-	return lerp(1.0, max_multiplier, t)
+# Forward-thrust multiplier after holding the key `hold_time` seconds. Each
+# entry of `steps` is reached `step_duration` seconds after the previous one,
+# rising in a straight line from it (from 1x for the first); past the last
+# step the multiplier stays there.
+static func compute_forward_thrust_multiplier(hold_time: float, step_duration: float, steps: PackedFloat64Array) -> float:
+	if steps.is_empty():
+		return 1.0
+	if step_duration <= 0.0:
+		return steps[steps.size() - 1]
+	var t: float = maxf(hold_time, 0.0) / step_duration
+	var step: int = floori(t)
+	if step >= steps.size():
+		return steps[steps.size() - 1]
+	var from: float = 1.0 if step == 0 else steps[step - 1]
+	return lerpf(from, steps[step], t - step)
 
 static func compute_bounce_velocity(velocity: Vector3, normal: Vector3, restitution: float) -> Vector3:
 	return velocity.bounce(normal) * restitution

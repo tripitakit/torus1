@@ -8,7 +8,8 @@ func _init():
 	failures += _test_first_person_camera()
 	failures += _test_no_hud()
 	failures += _test_small_hull()
-	failures += _test_top_speed_about_101_without_ramp()
+	failures += _test_ramp_stops_at_10x()
+	failures += _test_top_speed_about_1_km_s_after_the_ramp()
 	failures += _test_same_mouse_sensitivity_as_void_cruiser()
 
 	if failures == 0:
@@ -52,9 +53,18 @@ func _test_small_hull() -> int:
 	cruiser.free()
 	return result
 
-func _test_top_speed_about_101_without_ramp() -> int:
-	# thrust 70, damping 0.5: v = 70 / ln 2 ~ 101 m/s. With the void-cruiser's
-	# 10x ramp it would pass 1000 m/s.
+func _test_ramp_stops_at_10x() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	if cruiser.forward_thrust_steps != PackedFloat64Array([10.0]) or not is_equal_approx(cruiser.forward_thrust_step_duration, 5.0):
+		print("FAIL _test_ramp_stops_at_10x: steps %s every %f s, expected [10] every 5 s" % [cruiser.forward_thrust_steps, cruiser.forward_thrust_step_duration])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_top_speed_about_1_km_s_after_the_ramp() -> int:
+	# thrust 70 x 10, damping 0.5: v = 700 / ln 2 ~ 1010 m/s (1016 with 60 Hz
+	# steps). Without the ramp it would stay near 101 m/s.
 	var cruiser := _make_cruiser()
 	Input.action_press("move_forward")
 	for i in range(1200):
@@ -62,8 +72,8 @@ func _test_top_speed_about_101_without_ramp() -> int:
 	Input.action_release("move_forward")
 	var result := 0
 	var speed: float = cruiser.velocity.length()
-	if speed < 95.0 or speed > 105.0 or cruiser.velocity.z >= 0.0:
-		print("FAIL _test_top_speed_about_101_without_ramp: velocity %s (speed %.1f), expected about 101 m/s toward -Z" % [cruiser.velocity, speed])
+	if speed < 990.0 or speed > 1040.0 or cruiser.velocity.z >= 0.0:
+		print("FAIL _test_top_speed_about_1_km_s_after_the_ramp: velocity %s (speed %.1f), expected about 1016 m/s toward -Z" % [cruiser.velocity, speed])
 		result = 1
 	cruiser.free()
 	return result

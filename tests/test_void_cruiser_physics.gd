@@ -24,11 +24,10 @@ func _init():
 	failures += _test_strobe_energy_off_after_on_duration()
 	failures += _test_strobe_energy_on_again_after_wrapping_period()
 	failures += _test_strobe_energy_off_right_before_period_wraps()
-	failures += _test_forward_thrust_multiplier_at_zero_hold_time()
-	failures += _test_forward_thrust_multiplier_at_full_ramp()
-	failures += _test_forward_thrust_multiplier_at_half_ramp()
-	failures += _test_forward_thrust_multiplier_clamps_past_ramp_duration()
-	failures += _test_forward_thrust_multiplier_zero_duration_is_instant_max()
+	failures += _test_forward_thrust_multiplier_follows_the_steps()
+	failures += _test_forward_thrust_multiplier_stays_at_a_single_step()
+	failures += _test_forward_thrust_multiplier_zero_duration_is_the_last_step()
+	failures += _test_forward_thrust_multiplier_no_steps_is_1x()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -170,39 +169,37 @@ func _test_bounce_oblique_impact() -> int:
 		return 1
 	return 0
 
-func _test_forward_thrust_multiplier_at_zero_hold_time() -> int:
-	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 5.0, 10.0)
-	if not is_equal_approx(result, 1.0):
-		print("FAIL _test_forward_thrust_multiplier_at_zero_hold_time: result=%f expected=1.0" % result)
+func _test_forward_thrust_multiplier_follows_the_steps() -> int:
+	var steps := PackedFloat64Array([10.0, 100.0])
+	var result := 0
+	# [hold time, expected]: 1x -> 10x over 0..5 s, 10x -> 100x over 5..10 s.
+	for c in [[0.0, 1.0], [2.5, 5.5], [5.0, 10.0], [7.5, 55.0], [10.0, 100.0], [50.0, 100.0]]:
+		var got: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(c[0], 5.0, steps)
+		if not is_equal_approx(got, c[1]):
+			print("FAIL _test_forward_thrust_multiplier_follows_the_steps: at %.1f s got %f, expected %f" % [c[0], got, c[1]])
+			result = 1
+	return result
+
+func _test_forward_thrust_multiplier_stays_at_a_single_step() -> int:
+	var steps := PackedFloat64Array([10.0])
+	var at_5: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(5.0, 5.0, steps)
+	var at_20: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(20.0, 5.0, steps)
+	if not is_equal_approx(at_5, 10.0) or not is_equal_approx(at_20, 10.0):
+		print("FAIL _test_forward_thrust_multiplier_stays_at_a_single_step: %f at 5 s, %f at 20 s, expected 10" % [at_5, at_20])
 		return 1
 	return 0
 
-func _test_forward_thrust_multiplier_at_full_ramp() -> int:
-	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(5.0, 5.0, 10.0)
-	if not is_equal_approx(result, 10.0):
-		print("FAIL _test_forward_thrust_multiplier_at_full_ramp: result=%f expected=10.0" % result)
+func _test_forward_thrust_multiplier_zero_duration_is_the_last_step() -> int:
+	var got: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 0.0, PackedFloat64Array([10.0, 100.0]))
+	if not is_equal_approx(got, 100.0):
+		print("FAIL _test_forward_thrust_multiplier_zero_duration_is_the_last_step: %f" % got)
 		return 1
 	return 0
 
-func _test_forward_thrust_multiplier_at_half_ramp() -> int:
-	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(2.5, 5.0, 10.0)
-	var expected := 5.5  # lerp(1, 10, 0.5)
-	if not is_equal_approx(result, expected):
-		print("FAIL _test_forward_thrust_multiplier_at_half_ramp: result=%f expected=%f" % [result, expected])
-		return 1
-	return 0
-
-func _test_forward_thrust_multiplier_clamps_past_ramp_duration() -> int:
-	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(50.0, 5.0, 10.0)
-	if not is_equal_approx(result, 10.0):
-		print("FAIL _test_forward_thrust_multiplier_clamps_past_ramp_duration: result=%f expected=10.0" % result)
-		return 1
-	return 0
-
-func _test_forward_thrust_multiplier_zero_duration_is_instant_max() -> int:
-	var result: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(0.0, 0.0, 10.0)
-	if not is_equal_approx(result, 10.0):
-		print("FAIL _test_forward_thrust_multiplier_zero_duration_is_instant_max: result=%f expected=10.0" % result)
+func _test_forward_thrust_multiplier_no_steps_is_1x() -> int:
+	var got: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(7.0, 5.0, PackedFloat64Array())
+	if not is_equal_approx(got, 1.0):
+		print("FAIL _test_forward_thrust_multiplier_no_steps_is_1x: %f" % got)
 		return 1
 	return 0
 

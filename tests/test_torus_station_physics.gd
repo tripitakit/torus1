@@ -15,6 +15,7 @@ extends SceneTree
 
 const TorusStationScript = preload("res://scripts/torus_station.gd")
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
+const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 
 var _failures := 0
 
@@ -30,6 +31,7 @@ func _initialize():
 	_failures += await _test_rotating_hull_resting_on_bridge_does_not_jump()
 	_failures += await _test_nearest_bridge_index_finds_each_port()
 	_failures += await _test_rotating_hull_resting_on_docking_collar_does_not_jump()
+	_failures += await _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -262,5 +264,34 @@ func _test_rotating_hull_resting_on_docking_collar_does_not_jump() -> int:
 	if biggest > 2.0:
 		print("FAIL _test_rotating_hull_resting_on_docking_collar_does_not_jump: a still, turning hull was shoved %.1f m in one tick" % biggest)
 		result = 1
+	station.free()
+	return result
+
+func _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section() -> int:
+	# At 100x the void-cruiser does ~21.6 km/s, 360 m per tick. The move is
+	# swept, so the hull must still stop at the section, not pass through.
+	var station := _make_full_scale_station()
+	root.add_child(station)
+	station.build_station()
+	await physics_frame
+	var section: Node3D = station.get_node("Section0")
+	var axis: Vector3 = section.global_transform.basis.y.normalized()
+	var outward: Vector3 = (Vector3.UP - axis * Vector3.UP.dot(axis)).normalized()
+	var cruiser: CharacterBody3D = VoidCruiserScript.new()
+	cruiser.set_physics_process(false)
+	root.add_child(cruiser)
+	cruiser.global_position = section.global_position + outward * (station.section_radius + 3000.0)
+	await physics_frame
+	cruiser.velocity = -outward * 21640.0
+	var closest := INF
+	for tick in range(40):
+		cruiser._move(1.0 / 60.0)
+		await physics_frame
+		closest = minf(closest, (cruiser.global_position - section.global_position).dot(outward))
+	var result := 0
+	if closest < station.section_radius or cruiser.velocity.dot(outward) <= 0.0:
+		print("FAIL _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section: came within %.1f m of the axis (hull at %.1f), outward speed %.1f" % [closest, station.section_radius, cruiser.velocity.dot(outward)])
+		result = 1
+	cruiser.free()
 	station.free()
 	return result

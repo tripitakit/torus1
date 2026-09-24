@@ -17,7 +17,8 @@ func _init():
 	failures += _test_forward_hold_time_accumulates_while_held()
 	failures += _test_forward_hold_time_resets_on_release()
 	failures += _test_forward_hold_time_resets_on_direction_reversal()
-	failures += _test_forward_thrust_ramps_up_velocity_over_time()
+	failures += _test_forward_thrust_ramps_to_100x_over_ten_seconds()
+	failures += _test_top_speed_about_21_6_km_s_after_the_full_ramp()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -210,27 +211,39 @@ func _test_forward_hold_time_resets_on_direction_reversal() -> int:
 	cruiser.free()
 	return result
 
-func _test_forward_thrust_ramps_up_velocity_over_time() -> int:
+func _test_forward_thrust_ramps_to_100x_over_ten_seconds() -> int:
 	var cruiser := _make_cruiser()
-	var delta := 1.0
 	var result := 0
-
-	cruiser._update_forward_hold_time(1.0, delta)
-	var multiplier_first_tick: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(
-		cruiser._forward_hold_time, cruiser.forward_thrust_ramp_duration, cruiser.forward_thrust_ramp_multiplier)
-	if not is_equal_approx(multiplier_first_tick, 1.0):
-		print("FAIL _test_forward_thrust_ramps_up_velocity_over_time: first-tick multiplier=%f expected 1.0" % multiplier_first_tick)
+	cruiser._update_forward_hold_time(1.0, 1.0)
+	if not is_equal_approx(cruiser.forward_thrust_multiplier(), 1.0):
+		print("FAIL _test_forward_thrust_ramps_to_100x_over_ten_seconds: first-tick multiplier %f, expected 1" % cruiser.forward_thrust_multiplier())
 		result = 1
-
-	var ticks_needed := int(cruiser.forward_thrust_ramp_duration / delta)
-	for i in range(ticks_needed):
-		cruiser._update_forward_hold_time(1.0, delta)
-	var multiplier_max: float = VoidCruiserPhysics.compute_forward_thrust_multiplier(
-		cruiser._forward_hold_time, cruiser.forward_thrust_ramp_duration, cruiser.forward_thrust_ramp_multiplier)
-	if not is_equal_approx(multiplier_max, cruiser.forward_thrust_ramp_multiplier):
-		print("FAIL _test_forward_thrust_ramps_up_velocity_over_time: after holding %fs multiplier=%f expected=%f" % [cruiser.forward_thrust_ramp_duration, multiplier_max, cruiser.forward_thrust_ramp_multiplier])
+	for i in range(5):
+		cruiser._update_forward_hold_time(1.0, 1.0)
+	if not is_equal_approx(cruiser.forward_thrust_multiplier(), 10.0):
+		print("FAIL _test_forward_thrust_ramps_to_100x_over_ten_seconds: after 5 s multiplier %f, expected 10" % cruiser.forward_thrust_multiplier())
 		result = 1
+	for i in range(5):
+		cruiser._update_forward_hold_time(1.0, 1.0)
+	if not is_equal_approx(cruiser.forward_thrust_multiplier(), 100.0):
+		print("FAIL _test_forward_thrust_ramps_to_100x_over_ten_seconds: after 10 s multiplier %f, expected 100" % cruiser.forward_thrust_multiplier())
+		result = 1
+	cruiser.free()
+	return result
 
+func _test_top_speed_about_21_6_km_s_after_the_full_ramp() -> int:
+	# thrust 150 x 100, damping 0.5: v = 15000 / ln 2 ~ 21.6 km/s (21.8 with
+	# 60 Hz steps). 20 s: 10 s of ramp, then 10 s to settle.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	Input.action_press("move_forward")
+	for i in range(1200):
+		cruiser._physics_process(1.0 / 60.0)
+	Input.action_release("move_forward")
+	var result := 0
+	var speed: float = cruiser.velocity.length()
+	if speed < 21000.0 or speed > 22500.0 or cruiser.velocity.z >= 0.0:
+		print("FAIL _test_top_speed_about_21_6_km_s_after_the_full_ramp: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
+		result = 1
 	cruiser.free()
 	return result
 

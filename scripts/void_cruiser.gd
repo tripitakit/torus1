@@ -2,8 +2,8 @@ extends "res://scripts/flying_craft.gd"
 
 const CockpitScript = preload("res://scripts/cockpit.gd")
 
-@export var forward_thrust_ramp_multiplier: float = 10.0
-@export var forward_thrust_ramp_duration: float = 5.0
+# Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
+const VOID_THRUST_STEPS := [10.0, 100.0]
 
 const STROBE_PERIOD := 1.2
 const STROBE_ON_DURATION := 0.1
@@ -26,9 +26,10 @@ const SENSOR_DIRECTIONS := {
 # The pilot's eye, inside the hull box, 7 m behind the bow face.
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
-var _forward_hold_time: float = 0.0
-var _forward_hold_sign: float = 0.0
 var _strobe_time: float = 0.0
+
+func _init() -> void:
+	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
 
 func _ready() -> void:
 	build_collision_shape()
@@ -138,20 +139,4 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 	add_child(light)
 
 func _physics_process(delta: float) -> void:
-	var thrust_input := _read_thrust_input()
-	_update_forward_hold_time(thrust_input.z, delta)
-	var multiplier := VoidCruiserPhysics.compute_forward_thrust_multiplier(_forward_hold_time, forward_thrust_ramp_duration, forward_thrust_ramp_multiplier)
-	thrust_input.z *= multiplier
-	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
-
-func _update_forward_hold_time(forward_input: float, delta: float) -> void:
-	# Holding W/S continuously ramps forward/backward thrust up to
-	# forward_thrust_ramp_multiplier over forward_thrust_ramp_duration
-	# seconds. Releasing the key, or reversing direction, starts the ramp
-	# over from 1x on the very next press.
-	var current_sign: float = sign(forward_input)
-	if current_sign == 0.0 or current_sign != _forward_hold_sign:
-		_forward_hold_time = 0.0
-	else:
-		_forward_hold_time += delta
-	_forward_hold_sign = current_sign
+	_fly(delta)

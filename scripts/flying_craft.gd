@@ -1,7 +1,7 @@
 extends CharacterBody3D
 
 # Flight model shared by the player's craft: 6-DOF thrust and torque with
-# damping, mouse-look, and a bounce on collision.
+# damping, a forward-thrust ramp, mouse-look, and a bounce on collision.
 
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 
@@ -11,10 +11,17 @@ const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 @export_range(0.0, 0.999, 0.001) var angular_damping: float = 0.5
 @export var mouse_sensitivity: float = 0.01 / 6.0
 @export_range(0.0, 1.0, 0.01) var collision_restitution: float = 0.4
+# Holding forward or back ramps the thrust through these multipliers, one
+# every forward_thrust_step_duration seconds (see
+# VoidCruiserPhysics.compute_forward_thrust_multiplier).
+@export var forward_thrust_steps: PackedFloat64Array = PackedFloat64Array([10.0])
+@export var forward_thrust_step_duration: float = 5.0
 
 var angular_velocity: Vector3 = Vector3.ZERO
 
 var _mouse_delta: Vector2 = Vector2.ZERO
+var _forward_hold_time: float = 0.0
+var _forward_hold_sign: float = 0.0
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
@@ -40,6 +47,26 @@ func _read_torque_input(delta: float) -> Vector3:
 	var roll := Input.get_axis("roll_left", "roll_right")
 	_mouse_delta = Vector2.ZERO
 	return Vector3(pitch, yaw, roll)
+
+# One physics tick of player flight: input, ramped forward thrust, motion.
+func _fly(delta: float) -> void:
+	var thrust_input := _read_thrust_input()
+	_update_forward_hold_time(thrust_input.z, delta)
+	thrust_input.z *= forward_thrust_multiplier()
+	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
+
+func forward_thrust_multiplier() -> float:
+	return VoidCruiserPhysics.compute_forward_thrust_multiplier(_forward_hold_time, forward_thrust_step_duration, forward_thrust_steps)
+
+func _update_forward_hold_time(forward_input: float, delta: float) -> void:
+	# Releasing the key, or reversing direction, starts the ramp over from 1x
+	# on the very next press.
+	var current_sign: float = sign(forward_input)
+	if current_sign == 0.0 or current_sign != _forward_hold_sign:
+		_forward_hold_time = 0.0
+	else:
+		_forward_hold_time += delta
+	_forward_hold_sign = current_sign
 
 func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque_input: Vector3) -> void:
 	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, linear_damping, delta)
