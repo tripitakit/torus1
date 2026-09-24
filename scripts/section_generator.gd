@@ -9,9 +9,6 @@ const SectionPlanScript = preload("res://scripts/section_plan.gd")
 const WATER_SHARE := 0.10
 const TOWN_SHARE := 0.15
 const ZONE_FEATURE_SIZE := 2500.0
-const CROP_FEATURE_SIZE := 800.0
-# Crop bands per unit of noise: neighbouring patches get different crops.
-const CROP_BANDS := 9.0
 const CITY_RADIUS := 700.0
 # Share of the length, from each end, the city centre keeps away from.
 const CITY_END_MARGIN := 0.2
@@ -100,14 +97,45 @@ static func _with_city(plan, zones: PackedByteArray) -> PackedByteArray:
 				zones[plan.lot_index(around, along)] = SectionPlanScript.Zone.CITY
 	return zones
 
+# Crops come in patches: one seed per block of CHUNK lots, jittered inside
+# it with a random crop; every lot takes the crop of its nearest seed. The
+# patches are irregular, about a dozen lots each, and join up where the way
+# round closes (distances wrap). Smooth noise cut into six equal crop bands
+# changed crop almost every lot (checked: 17-50% of neighbours alike).
+@warning_ignore("integer_division")
 static func _crops(plan) -> PackedByteArray:
-	var noise := FastNoiseLite.new()
-	noise.seed = plan.section_index + 7919
-	noise.frequency = 1.0 / CROP_FEATURE_SIZE
+	var block_lots := Vector2i(SectionPlanScript.CHUNK_LOTS_AROUND, SectionPlanScript.CHUNK_LOTS_ALONG)
+	var blocks_around: int = SectionPlanScript.LOTS_AROUND / block_lots.x
+	var blocks_along: int = SectionPlanScript.LOTS_ALONG / block_lots.y
+	var block_size := Vector2(block_lots.x * plan.lot_width, block_lots.y * plan.lot_length)
 	var crop_count: int = SectionPlanScript.Crop.size()
+	var seeds := PackedVector2Array()
+	var seed_crops := PackedByteArray()
+	for block_z in range(blocks_along):
+		for block_x in range(blocks_around):
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash([plan.section_index, block_x, block_z, "crop"])
+			seeds.append(Vector2((block_x + rng.randf()) * block_size.x, (block_z + rng.randf()) * block_size.y))
+			seed_crops.append(rng.randi_range(0, crop_count - 1))
 	var crops := PackedByteArray()
-	for value in _sample_lots(plan, noise):
-		crops.append(posmod(floori((value + 1.0) * CROP_BANDS), crop_count))
+	for along in range(SectionPlanScript.LOTS_ALONG):
+		for around in range(SectionPlanScript.LOTS_AROUND):
+			var center: Vector2 = plan.lot_center(around, along)
+			var home := Vector2i(around / block_lots.x, along / block_lots.y)
+			var best := INF
+			var crop := 0
+			# The nearest seed is in the lot's own block or one next to it.
+			for dz in range(-1, 2):
+				var block_z: int = home.y + dz
+				if block_z < 0 or block_z >= blocks_along:
+					continue
+				for dx in range(-1, 2):
+					var s: int = block_z * blocks_around + posmod(home.x + dx, blocks_around)
+					var distance: float = plan.surface_distance(center, seeds[s])
+					if distance < best:
+						best = distance
+						crop = seed_crops[s]
+			crops.append(crop)
 	return crops
 
 static func _rows(plan) -> PackedByteArray:

@@ -17,6 +17,7 @@ func _init():
 	failures += _test_one_city_centre_in_the_middle()
 	failures += _test_zones_join_up_where_the_way_round_closes()
 	failures += _test_every_crop_appears()
+	failures += _test_crops_come_in_patches()
 	failures += _test_surface_distance_wraps_around()
 	failures += _test_no_road_touches_water()
 	failures += _test_road_kinds()
@@ -265,5 +266,26 @@ func _test_group_buildings_by_chunk_covers_every_building_once() -> int:
 			seen[b] = true
 	if seen.size() != _plan.building_count():
 		print("FAIL _test_group_buildings_by_chunk_covers_every_building_once: %d of %d buildings grouped" % [seen.size(), _plan.building_count()])
+		return 1
+	return 0
+
+func _test_crops_come_in_patches() -> int:
+	# Patches: most neighbouring field lots grow the same crop. Picking a crop
+	# at random per lot would make ~5 in 6 neighbours differ.
+	var pairs := 0
+	var same := 0
+	for along in range(80):
+		for around in range(48):
+			if _plan.zone_at(around, along) != SectionPlan.Zone.FIELD:
+				continue
+			for neighbour in [Vector2i(around + 1, along), Vector2i(around, along + 1)]:
+				if neighbour.y >= 80 or _plan.zone_at(neighbour.x, neighbour.y) != SectionPlan.Zone.FIELD:
+					continue
+				pairs += 1
+				if _plan.crops[_plan.lot_index(around, along)] == _plan.crops[_plan.lot_index(neighbour.x, neighbour.y)]:
+					same += 1
+	var share := float(same) / pairs
+	if share < 0.5:
+		print("FAIL _test_crops_come_in_patches: only %.0f%% of neighbouring field lots share a crop" % (share * 100.0))
 		return 1
 	return 0
