@@ -4,6 +4,7 @@
 [ext_resource type="Script" path="res://scripts/torus_station.gd" id="2_station"]
 [ext_resource type="Script" path="res://scripts/void_cruiser.gd" id="3_cruiser"]
 [ext_resource type="Script" path="res://scripts/world_origin_rebase.gd" id="4_rebase"]
+[ext_resource type="Script" path="res://scripts/game_mode.gd" id="5_game_mode"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -44,3 +45,6 @@ script = ExtResource("3_cruiser")
 [node name="WorldOriginRebase" type="Node" parent="." unique_id=647120983]
 script = ExtResource("4_rebase")
 tracked_node = NodePath("../VoidCruiser")
+
+[node name="GameMode" type="Node" parent="." unique_id=1450392817]
+script = ExtResource("5_game_mode")

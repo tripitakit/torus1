@@ -4,6 +4,7 @@ func _init():
 	var failures := 0
 	failures += _test_scene_wiring()
 	failures += _test_game_starts_fullscreen()
+	failures += _test_dock_action_is_bound_to_f()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -95,5 +96,27 @@ func _test_scene_wiring() -> int:
 			print("FAIL _test_scene_wiring: WorldOriginRebase.tracked_node did not resolve to VoidCruiser")
 			result = 1
 
+	var game_mode := scene.get_node_or_null("GameMode")
+	if game_mode == null or game_mode.get_script() == null or (game_mode.get_script() as Script).resource_path != "res://scripts/game_mode.gd":
+		print("FAIL _test_scene_wiring: no GameMode node with game_mode.gd")
+		result = 1
+	else:
+		if game_mode.get_node_or_null(game_mode.station_path) != scene.get_node_or_null("PlanetSystem/TorusStation"):
+			print("FAIL _test_scene_wiring: GameMode.station_path does not resolve to TorusStation")
+			result = 1
+		if game_mode.get_node_or_null(game_mode.void_cruiser_path) != void_cruiser:
+			print("FAIL _test_scene_wiring: GameMode.void_cruiser_path does not resolve to VoidCruiser")
+			result = 1
+
 	scene.free()
 	return result
+
+func _test_dock_action_is_bound_to_f() -> int:
+	if not InputMap.has_action("dock"):
+		print("FAIL _test_dock_action_is_bound_to_f: no 'dock' input action")
+		return 1
+	for event in InputMap.action_get_events("dock"):
+		if event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_F:
+			return 0
+	print("FAIL _test_dock_action_is_bound_to_f: 'dock' is not on the F key")
+	return 1
