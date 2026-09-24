@@ -18,6 +18,14 @@ func _init():
 	failures += _test_zones_join_up_where_the_way_round_closes()
 	failures += _test_every_crop_appears()
 	failures += _test_surface_distance_wraps_around()
+	failures += _test_no_road_touches_water()
+	failures += _test_road_kinds()
+	failures += _test_buildings_only_in_towns_and_city()
+	failures += _test_buildings_stay_inside_their_lot_clear_of_roads()
+	failures += _test_building_sizes_match_their_zone()
+	failures += _test_towers_only_near_the_city_centre()
+	failures += _test_buildings_do_not_overlap()
+	failures += _test_group_buildings_by_chunk_covers_every_building_once()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -121,3 +129,141 @@ func _test_surface_distance_wraps_around() -> int:
 		print("FAIL _test_surface_distance_wraps_around: along z expected 300")
 		result = 1
 	return result
+
+func _is_built(zone: int) -> bool:
+	return zone == SectionPlan.Zone.TOWN or zone == SectionPlan.Zone.CITY
+
+func _test_no_road_touches_water() -> int:
+	for along in range(80):
+		for around in range(48):
+			if _plan.zone_at(around, along) != SectionPlan.Zone.WATER:
+				continue
+			if _plan.road_on_west(around, along) + _plan.road_on_east(around, along) + _plan.road_on_south(around, along) + _plan.road_on_north(around, along) != 0:
+				print("FAIL _test_no_road_touches_water: lake lot (%d, %d) has a road on an edge" % [around, along])
+				return 1
+	return 0
+
+func _expected_road(zone_a: int, zone_b: int, on_chunk_border: bool) -> int:
+	if zone_a == SectionPlan.Zone.WATER or zone_b == SectionPlan.Zone.WATER:
+		return SectionPlan.Road.NONE
+	if on_chunk_border:
+		return SectionPlan.Road.MAIN
+	if _is_built(zone_a) or _is_built(zone_b):
+		return SectionPlan.Road.STREET
+	return SectionPlan.Road.NONE
+
+func _test_road_kinds() -> int:
+	# West edges include lot 0's, shared with lot 47 across the seam.
+	for along in range(80):
+		for around in range(48):
+			var zone: int = _plan.zone_at(around, along)
+			var west := _expected_road(zone, _plan.zone_at(around - 1, along), around % 3 == 0)
+			var south := SectionPlan.Road.NONE if along == 0 else _expected_road(zone, _plan.zone_at(around, along - 1), along % 4 == 0)
+			if _plan.road_on_west(around, along) != west or _plan.road_on_south(around, along) != south:
+				print("FAIL _test_road_kinds: lot (%d, %d) west %d (expected %d) south %d (expected %d)" % [around, along, _plan.road_on_west(around, along), west, _plan.road_on_south(around, along), south])
+				return 1
+	return 0
+
+func _test_buildings_only_in_towns_and_city() -> int:
+	if _plan.building_count() < 5000:
+		print("FAIL _test_buildings_only_in_towns_and_city: only %d buildings" % _plan.building_count())
+		return 1
+	for b in range(_plan.building_count()):
+		if not _is_built(_plan.zones[_plan.building_lot[b]]):
+			print("FAIL _test_buildings_only_in_towns_and_city: building %d stands on a field or lake lot" % b)
+			return 1
+	return 0
+
+func _test_buildings_stay_inside_their_lot_clear_of_roads() -> int:
+	# Clear of the widest road: half of 12 m on each side of a lot edge.
+	var clearance := 6.0
+	for b in range(_plan.building_count()):
+		var lot: int = _plan.building_lot[b]
+		var x0: float = (lot % 48) * _plan.lot_width
+		var z0: float = floori(lot / 48.0) * _plan.lot_length
+		var size: Vector3 = _plan.building_size[b]
+		var left: float = _plan.building_x[b] - size.x * 0.5
+		var right: float = _plan.building_x[b] + size.x * 0.5
+		var near: float = _plan.building_z[b] - size.z * 0.5
+		var far: float = _plan.building_z[b] + size.z * 0.5
+		if left < x0 + clearance or right > x0 + _plan.lot_width - clearance or near < z0 + clearance or far > z0 + _plan.lot_length - clearance:
+			print("FAIL _test_buildings_stay_inside_their_lot_clear_of_roads: building %d spans x %f..%f z %f..%f in lot x %f.. z %f.." % [b, left, right, near, far, x0, z0])
+			return 1
+	return 0
+
+func _is_whole(value: float) -> bool:
+	return is_equal_approx(value, roundf(value))
+
+func _in_range(value: float, low: float, high: float) -> bool:
+	return value >= low - 0.001 and value <= high + 0.001
+
+func _test_building_sizes_match_their_zone() -> int:
+	for b in range(_plan.building_count()):
+		var lot: int = _plan.building_lot[b]
+		var size: Vector3 = _plan.building_size[b]
+		var ok := _is_whole(size.x) and _is_whole(size.y) and _is_whole(size.z)
+		if _plan.zones[lot] == SectionPlan.Zone.TOWN:
+			ok = ok and _in_range(size.y, 8.0, 40.0) and _in_range(size.x, 12.0, 25.0) and _in_range(size.z, 12.0, 25.0)
+		elif size.y >= 150.0:
+			ok = ok and _in_range(size.y, 150.0, 300.0) and _in_range(size.x, 25.0, 45.0) and _in_range(size.z, 25.0, 45.0)
+		else:
+			ok = ok and _in_range(size.y, 40.0, 120.0) and _in_range(size.x, 30.0, 60.0) and _in_range(size.z, 30.0, 60.0)
+		if not ok:
+			print("FAIL _test_building_sizes_match_their_zone: building %d size %s in a zone-%d lot" % [b, size, _plan.zones[lot]])
+			return 1
+	return 0
+
+func _test_towers_only_near_the_city_centre() -> int:
+	var towers := 0
+	for b in range(_plan.building_count()):
+		var lot: int = _plan.building_lot[b]
+		if _plan.zones[lot] != SectionPlan.Zone.CITY:
+			continue
+		var center: Vector2 = _plan.lot_center(lot % 48, floori(lot / 48.0))
+		var near: bool = _plan.surface_distance(center, _plan.city_center) <= 250.0
+		var tower: bool = _plan.building_size[b].y >= 150.0
+		if tower:
+			towers += 1
+		if near != tower:
+			print("FAIL _test_towers_only_near_the_city_centre: building %d tower=%s, lot within 250 m=%s" % [b, tower, near])
+			return 1
+	if towers == 0:
+		print("FAIL _test_towers_only_near_the_city_centre: no towers at all")
+		return 1
+	return 0
+
+func _test_buildings_do_not_overlap() -> int:
+	var by_lot := {}
+	for b in range(_plan.building_count()):
+		var lot: int = _plan.building_lot[b]
+		if not by_lot.has(lot):
+			by_lot[lot] = []
+		by_lot[lot].append(b)
+	for lot in by_lot:
+		var list: Array = by_lot[lot]
+		for i in range(list.size()):
+			for j in range(i + 1, list.size()):
+				var a: int = list[i]
+				var c: int = list[j]
+				var dx: float = absf(_plan.building_x[a] - _plan.building_x[c])
+				var dz: float = absf(_plan.building_z[a] - _plan.building_z[c])
+				if dx < (_plan.building_size[a].x + _plan.building_size[c].x) * 0.5 and dz < (_plan.building_size[a].z + _plan.building_size[c].z) * 0.5:
+					print("FAIL _test_buildings_do_not_overlap: buildings %d and %d overlap in lot %d" % [a, c, lot])
+					return 1
+	return 0
+
+func _test_group_buildings_by_chunk_covers_every_building_once() -> int:
+	var groups: Dictionary = _plan.group_buildings_by_chunk()
+	var seen := {}
+	for key in groups:
+		for b in groups[key]:
+			var lot: int = _plan.building_lot[b]
+			var expected := Vector2i(floori((lot % 48) / 3.0), floori(floori(lot / 48.0) / 4.0))
+			if key != expected or seen.has(b):
+				print("FAIL _test_group_buildings_by_chunk_covers_every_building_once: building %d under %s (expected %s, seen before %s)" % [b, key, expected, seen.has(b)])
+				return 1
+			seen[b] = true
+	if seen.size() != _plan.building_count():
+		print("FAIL _test_group_buildings_by_chunk_covers_every_building_once: %d of %d buildings grouped" % [seen.size(), _plan.building_count()])
+		return 1
+	return 0
