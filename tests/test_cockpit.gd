@@ -12,6 +12,7 @@ func _init():
 	failures += _test_update_hud_writes_speed_and_distances()
 	failures += _test_update_hud_missing_distances_show_no_reading()
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
+	failures += _test_cruise_line_shown_only_while_cruising()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -93,7 +94,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
+	var expected := ["SpeedLabel", "CruiseLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
@@ -150,6 +151,28 @@ func _test_dock_prompt_hidden_until_docking_is_possible() -> int:
 	cockpit.set_dock_prompt(false)
 	if label.visible:
 		print("FAIL _test_dock_prompt_hidden_until_docking_is_possible: not hidden by set_dock_prompt(false)")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_cruise_line_shown_only_while_cruising() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var label := cockpit.get_node_or_null("Hud/Panel/Lines/CruiseLabel") as Label
+	if label == null or label.text != "CRUISE":
+		print("FAIL _test_cruise_line_shown_only_while_cruising: no CruiseLabel reading 'CRUISE'")
+		cockpit.free()
+		return 1
+	if label.visible:
+		print("FAIL _test_cruise_line_shown_only_while_cruising: visible before cruise is on")
+		result = 1
+	cockpit.set_cruise(true)
+	if not label.visible:
+		print("FAIL _test_cruise_line_shown_only_while_cruising: not shown by set_cruise(true)")
+		result = 1
+	cockpit.set_cruise(false)
+	if label.visible:
+		print("FAIL _test_cruise_line_shown_only_while_cruising: not hidden by set_cruise(false)")
 		result = 1
 	cockpit.free()
 	return result

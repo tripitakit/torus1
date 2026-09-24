@@ -4,6 +4,10 @@ const CockpitScript = preload("res://scripts/cockpit.gd")
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
+# C locks the forward thrust on, as if W were held: the ramp runs on to its
+# last step. A new press of W/A/S/D, or C again, lets go; roll, mouse and
+# up/down do not.
+const CRUISE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right"]
 
 const STROBE_PERIOD := 1.2
 const STROBE_ON_DURATION := 0.1
@@ -27,6 +31,7 @@ const SENSOR_DIRECTIONS := {
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
 var _strobe_time: float = 0.0
+var cruise_locked := false
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -47,6 +52,24 @@ func _process(delta: float) -> void:
 	var cockpit := get_node_or_null("Cockpit")
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
+		cockpit.set_cruise(cruise_locked)
+
+func _unhandled_input(event: InputEvent) -> void:
+	super(event)
+	if event.is_echo():
+		return
+	if event.is_action_pressed("cruise"):
+		cruise_locked = not cruise_locked
+	elif cruise_locked:
+		for action in CRUISE_RELEASE_ACTIONS:
+			if event.is_action_pressed(action):
+				cruise_locked = false
+
+func _read_thrust_input() -> Vector3:
+	var thrust := super()
+	if cruise_locked:
+		thrust.z = -1.0
+	return thrust
 
 func build_collision_shape() -> void:
 	var shape_node := CollisionShape3D.new()

@@ -19,6 +19,12 @@ func _init():
 	failures += _test_forward_hold_time_resets_on_direction_reversal()
 	failures += _test_forward_thrust_ramps_to_100x_over_ten_seconds()
 	failures += _test_top_speed_about_21_6_km_s_after_the_full_ramp()
+	failures += _test_cruise_key_toggles_the_lock()
+	failures += _test_cruise_flies_to_top_speed_with_no_keys_held()
+	failures += _test_cruise_carries_on_the_ramp_from_a_held_w()
+	failures += _test_pressing_w_a_s_or_d_turns_cruise_off()
+	failures += _test_roll_mouse_and_up_down_leave_cruise_on()
+	failures += _test_process_shows_cruise_on_hud()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -481,6 +487,107 @@ func _test_void_cruiser_flies_with_the_shared_flying_craft() -> int:
 	var result := 0
 	if (cruiser.get_script() as Script).get_base_script() != FlyingCraftScript:
 		print("FAIL _test_void_cruiser_flies_with_the_shared_flying_craft: void_cruiser.gd does not extend flying_craft.gd")
+		result = 1
+	cruiser.free()
+	return result
+
+func _press(cruiser: Node, action: String) -> void:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	cruiser._unhandled_input(event)
+
+func _test_cruise_key_toggles_the_lock() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	if cruiser.cruise_locked:
+		print("FAIL _test_cruise_key_toggles_the_lock: cruise on from the start")
+		result = 1
+	_press(cruiser, "cruise")
+	if not cruiser.cruise_locked:
+		print("FAIL _test_cruise_key_toggles_the_lock: C did not turn cruise on")
+		result = 1
+	_press(cruiser, "cruise")
+	if cruiser.cruise_locked:
+		print("FAIL _test_cruise_key_toggles_the_lock: a second C did not turn cruise off")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_cruise_flies_to_top_speed_with_no_keys_held() -> int:
+	# Same as holding W for 20 s: 100x after 10 s, then ~21.6 km/s.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	_press(cruiser, "cruise")
+	for i in range(1200):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	var speed: float = cruiser.velocity.length()
+	if speed < 21000.0 or speed > 22500.0 or cruiser.velocity.z >= 0.0:
+		print("FAIL _test_cruise_flies_to_top_speed_with_no_keys_held: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_cruise_carries_on_the_ramp_from_a_held_w() -> int:
+	# W held 5 s (10x), C pressed, W let go: the ramp goes on, no restart.
+	var cruiser := _make_cruiser()
+	Input.action_press("move_forward")
+	for i in range(300):
+		cruiser._physics_process(1.0 / 60.0)
+	_press(cruiser, "cruise")
+	Input.action_release("move_forward")
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if not cruiser.cruise_locked or cruiser.forward_thrust_multiplier() < 20.0:
+		print("FAIL _test_cruise_carries_on_the_ramp_from_a_held_w: cruise %s, multiplier %f after 6 s (expected about 28)" % [cruiser.cruise_locked, cruiser.forward_thrust_multiplier()])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_pressing_w_a_s_or_d_turns_cruise_off() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	for action in ["move_forward", "move_backward", "move_left", "move_right"]:
+		_press(cruiser, "cruise")
+		_press(cruiser, action)
+		if cruiser.cruise_locked:
+			print("FAIL _test_pressing_w_a_s_or_d_turns_cruise_off: %s left cruise on" % action)
+			result = 1
+			cruiser.cruise_locked = false
+	cruiser.free()
+	return result
+
+func _test_roll_mouse_and_up_down_leave_cruise_on() -> int:
+	var cruiser := _make_cruiser()
+	_press(cruiser, "cruise")
+	for action in ["roll_left", "roll_right", "move_up", "move_down"]:
+		_press(cruiser, action)
+	var mouse := InputEventMouseMotion.new()
+	mouse.relative = Vector2(40.0, -25.0)
+	cruiser._unhandled_input(mouse)
+	var result := 0
+	if not cruiser.cruise_locked:
+		print("FAIL _test_roll_mouse_and_up_down_leave_cruise_on: cruise turned off")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_process_shows_cruise_on_hud() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_proximity_sensors()
+	cruiser.build_cockpit()
+	var label: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/CruiseLabel")
+	var result := 0
+	_press(cruiser, "cruise")
+	cruiser._process(0.016)
+	if not label.visible:
+		print("FAIL _test_process_shows_cruise_on_hud: CRUISE hidden while cruising")
+		result = 1
+	_press(cruiser, "move_left")
+	cruiser._process(0.016)
+	if label.visible:
+		print("FAIL _test_process_shows_cruise_on_hud: CRUISE still shown after A")
 		result = 1
 	cruiser.free()
 	return result
