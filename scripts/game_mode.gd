@@ -36,6 +36,9 @@ func _ready() -> void:
 func is_inside() -> bool:
 	return mode == Mode.INTERIOR
 
+func is_transitioning() -> bool:
+	return _transitioning
+
 func _process(_delta: float) -> void:
 	if mode == Mode.VOID:
 		var cockpit := _void_cruiser.get_node_or_null("Cockpit")
@@ -76,6 +79,9 @@ func enter_interior(bridge_index: int) -> void:
 	_interior.section_length = _station.section_length
 	_interior.bridge_radius = _station.get_bridge_radius()
 	_interior.bridge_length = _station.get_bridge_length()
+	# Bridge i joins section i (behind) and section i + 1 (ahead); the ring closes.
+	_interior.behind_section_index = bridge_index
+	_interior.ahead_section_index = posmod(bridge_index + 1, _station.num_sections)
 	_interior.build()
 	var cruiser: CharacterBody3D = InternalCruiserScript.new()
 	cruiser.name = "InternalCruiser"

@@ -27,6 +27,7 @@ func _initialize():
 	_failures += await _test_undock_sign_and_key_return_outside()
 	_failures += await _test_undock_key_far_from_dock_does_nothing()
 	_failures += await _test_second_dock_press_during_transition_is_ignored()
+	_failures += await _test_interior_sections_follow_the_docked_bridge()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -49,7 +50,13 @@ func _press_dock() -> void:
 	_game_mode._unhandled_input(event)
 
 func _wait_for_transition() -> void:
-	await create_timer(1.2).timeout
+	# Building the interior takes a moment now: wait for the whole fade-out,
+	# swap and fade-in instead of a fixed time.
+	await create_timer(0.1).timeout
+	for i in range(200):
+		if not _game_mode.is_transitioning():
+			return
+		await create_timer(0.05).timeout
 
 func _frames(count: int) -> void:
 	for i in range(count):
@@ -171,5 +178,19 @@ func _test_second_dock_press_during_transition_is_ignored() -> int:
 		print("FAIL _test_second_dock_press_during_transition_is_ignored: inside=%s with %d interiors" % [_game_mode.is_inside(), interiors.size()])
 		result = 1
 	if _game_mode.is_inside():
+		_game_mode.exit_interior()
+	return result
+
+func _test_interior_sections_follow_the_docked_bridge() -> int:
+	var result := 0
+	var last: int = _station.num_sections - 1
+	for case in [[0, 0, 1], [last, last, 0]]:
+		_game_mode.enter_interior(case[0])
+		var interior: Node3D = _scene.get_node("InteriorWorld")
+		var behind: int = interior.get_section_plan(1.0).section_index
+		var ahead: int = interior.get_section_plan(-1.0).section_index
+		if behind != case[1] or ahead != case[2]:
+			print("FAIL _test_interior_sections_follow_the_docked_bridge: bridge %d shows sections %d (behind) and %d (ahead), expected %d and %d" % [case[0], behind, ahead, case[1], case[2]])
+			result = 1
 		_game_mode.exit_interior()
 	return result
