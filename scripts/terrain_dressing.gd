@@ -99,6 +99,9 @@ func _init() -> void:
 	building_material.uv1_world_triplanar = true
 	building_material.uv1_scale = Vector3.ONE / WINDOW_SPACING
 	building_material.emission_enabled = true
+	# Multiply, not the default add: glow colour x pane mask, so walls keep
+	# their own colour and only the panes light up.
+	building_material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 	building_material.emission = WINDOW_GLOW_COLOR
 	building_material.emission_energy_multiplier = 0.8
 	building_material.emission_texture = _window_texture(true)

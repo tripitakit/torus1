@@ -21,6 +21,7 @@ func _init():
 	failures += _test_chunk_buildings_match_the_plan()
 	failures += _test_building_colliders_match_the_drawn_buildings()
 	failures += _test_building_bounds_cover_the_tallest_building()
+	failures += _test_windows_glow_only_on_the_panes()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -231,3 +232,12 @@ func _test_building_bounds_cover_the_tallest_building() -> int:
 			break
 	chunk.free()
 	return result
+
+func _test_windows_glow_only_on_the_panes() -> int:
+	# The default emission operator ADDS the glow colour to the mask (colour +
+	# texture), so the whole facade glows and every building reads the same
+	# cream (seen in an offscreen render). Multiply: glow only where the mask is.
+	if _dressing.building_material.emission_operator != BaseMaterial3D.EMISSION_OP_MULTIPLY:
+		print("FAIL _test_windows_glow_only_on_the_panes: emission operator %d, expected MULTIPLY" % _dressing.building_material.emission_operator)
+		return 1
+	return 0
