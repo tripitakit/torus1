@@ -11,6 +11,7 @@ func _init():
 	failures += _test_hud_lines_in_display_order()
 	failures += _test_update_hud_writes_speed_and_distances()
 	failures += _test_update_hud_missing_distances_show_no_reading()
+	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -92,7 +93,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel"]
+	var expected := ["SpeedLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
@@ -127,6 +128,28 @@ func _test_update_hud_missing_distances_show_no_reading() -> int:
 	var label: Label = cockpit.get_node("Hud/Panel/Lines/BowLabel")
 	if label.text != "BOW  —":
 		print("FAIL _test_update_hud_missing_distances_show_no_reading: BowLabel='%s' expected 'BOW  —'" % label.text)
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_dock_prompt_hidden_until_docking_is_possible() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var label := cockpit.get_node_or_null("Hud/Panel/Lines/DockLabel") as Label
+	if label == null or label.text != "DOCK  [F]":
+		print("FAIL _test_dock_prompt_hidden_until_docking_is_possible: no DockLabel reading 'DOCK  [F]'")
+		cockpit.free()
+		return 1
+	if label.visible:
+		print("FAIL _test_dock_prompt_hidden_until_docking_is_possible: visible before any check")
+		result = 1
+	cockpit.set_dock_prompt(true)
+	if not label.visible:
+		print("FAIL _test_dock_prompt_hidden_until_docking_is_possible: not shown by set_dock_prompt(true)")
+		result = 1
+	cockpit.set_dock_prompt(false)
+	if label.visible:
+		print("FAIL _test_dock_prompt_hidden_until_docking_is_possible: not hidden by set_dock_prompt(false)")
 		result = 1
 	cockpit.free()
 	return result

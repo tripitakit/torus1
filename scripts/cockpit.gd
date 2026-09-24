@@ -21,6 +21,8 @@ const HUD_PADDING := 12.0
 const HUD_FONT_SIZE := 22
 const HUD_TEXT_COLOR := Color(0.4, 0.95, 1.0)
 const HUD_BACKGROUND_COLOR := Color(0.02, 0.05, 0.08, 0.6)
+const DOCK_PROMPT_TEXT := "DOCK  [F]"
+const DOCK_PROMPT_COLOR := Color(0.3, 1.0, 0.4)
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
@@ -43,6 +45,9 @@ func update_hud(speed: float, distances: Dictionary) -> void:
 		var entry: Array = DISTANCE_LABELS[key]
 		var distance: float = distances.get(key, -1.0)
 		(lines.get_node(entry[0]) as Label).text = "%s  %s" % [entry[1], CockpitHudFormat.format_distance(distance)]
+
+func set_dock_prompt(available: bool) -> void:
+	(get_node("Hud/Panel/Lines/DockLabel") as Label).visible = available
 
 func _build_pilot_camera() -> void:
 	var camera := Camera3D.new()
@@ -80,6 +85,14 @@ func _build_hud() -> void:
 	_add_hud_label(lines, "SpeedLabel", label_settings)
 	for key in DISTANCE_LABELS:
 		_add_hud_label(lines, DISTANCE_LABELS[key][0], label_settings)
+
+	var dock_settings := LabelSettings.new()
+	dock_settings.font_size = HUD_FONT_SIZE
+	dock_settings.font_color = DOCK_PROMPT_COLOR
+	_add_hud_label(lines, "DockLabel", dock_settings)
+	var dock_label: Label = lines.get_node("DockLabel")
+	dock_label.text = DOCK_PROMPT_TEXT
+	dock_label.visible = false
 
 	update_hud(0.0, {})
 
