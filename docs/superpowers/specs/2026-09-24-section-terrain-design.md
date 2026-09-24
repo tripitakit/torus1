@@ -78,9 +78,16 @@ Dati puri di una sezione e funzioni di lettura:
 - **Centro città:** un lotto scelto dal seme nella parte centrale della
   sezione (dal 20% all'80% della lunghezza). Tutti i lotti con il centro
   entro 700 m diventano città, anche se erano lago o campo.
-- **Colture:** un secondo rumore a scala più piccola (circa 800 m) sceglie
-  la coltura a chiazze; un generatore casuale per lotto sceglie la
-  direzione dei filari.
+- **Colture a chiazze:** un "seme" per ogni gruppo di 3 × 4 lotti, spostato a
+  caso dentro il gruppo, con una coltura casuale; ogni lotto prende la
+  coltura del seme più vicino (le distanze tengono conto del giro). Ne
+  escono chiazze irregolari di circa una dozzina di lotti; un generatore
+  casuale per lotto sceglie la direzione dei filari.
+  - Correzione dopo la review finale: la prima versione usava un secondo
+    rumore (circa 800 m) tagliato in 6 fasce, ma la coltura cambiava quasi a
+    ogni lotto (17% dei campi vicini uguali, come a caso). Né fasce per
+    quantili (24%) né rumore cellulare (al massimo 47%) bastavano; con i semi
+    circa il 72% dei campi vicini ha la stessa coltura.
 - **Strade:** su un bordo fra due lotti non c'è strada se uno dei due è
   lago; altrimenti c'è una **strada principale** (12 m) se il bordo è sul
   confine di un blocco, una **via** (8 m) se uno dei due lotti è paese o
@@ -125,10 +132,16 @@ prima; la mesh verde uniforme non si disegna più.
 - **Edifici** (`Buildings`): un `MultiMeshInstance3D` per blocco con un
   cubo unitario deformato per edificio, base sul terreno e "su" verso
   l'asse, colore di facciata per istanza.
-  - Finestre: texture a griglia generata nel codice, proiettata in
-    coordinate del mondo (una finestra ogni 4 m su qualsiasi edificio); la
-    stessa maschera accende le finestre con una luce calda tenue. Nessuna
-    luce vera in più.
+  - Finestre: un piccolo shader proietta una texture a griglia generata nel
+    codice nel sistema dell'edificio stesso, in metri (una finestra ogni 4 m
+    su qualsiasi edificio, griglia dritta su ogni facciata); la luce calda
+    tenue è colore × maschera dei vetri, quindi si accendono solo i vetri.
+    Nessuna luce vera in più.
+  - Correzione dopo la review finale: la proiezione in coordinate del mondo
+    ruotava la griglia con l'angolo dell'edificio attorno al cilindro
+    (finestre a rombo a 45°); e l'operatore di emissione predefinito
+    (somma) faceva brillare tutta la facciata, rendendo gli edifici tutti
+    dello stesso crema.
   - Oltre 12 km gli edifici non si disegnano.
   - Il riquadro d'ingombro (`custom_aabb`) è impostato a mano: copre il
     blocco fino all'edificio più alto.
@@ -194,7 +207,7 @@ due viste interne da controllare a occhio prima di passarlo all'utente.
 - **Numero di oggetti disegnati:** circa 1300 oggetti in più (superficie ed
   edifici per blocco). Se il frame rate cala, si accorciano le distanze di
   visibilità.
-- **Finestre sui tetti:** la proiezione in coordinate del mondo mette la
-  griglia anche sui tetti. Accettato nello stile low-poly.
+- **Finestre sui tetti:** la proiezione mette la griglia anche sui tetti.
+  Accettato nello stile low-poly.
 - **Terreno visivo e collisione:** differiscono di meno di un metro
   (spicchi diversi della curvatura).

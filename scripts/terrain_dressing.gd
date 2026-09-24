@@ -23,6 +23,44 @@ const STREET_COLOR := Color(0.32, 0.32, 0.34)
 const WATER_COLOR := Color(0.12, 0.32, 0.5)
 const WINDOW_SPACING := 4.0
 const WINDOW_GLOW_COLOR := Color(1.0, 0.85, 0.55)
+const WINDOW_GLOW_ENERGY := 0.8
+# Windows projected in each building's own frame, scaled to metres: the same
+# window size on a house and a tower, and the grid square to every facade
+# whatever the building's angle round the ring (projecting in world space
+# turned it into diamonds). The instance colour tints the walls; the glow is
+# colour x pane mask, so only the panes light up.
+const BUILDING_SHADER := """
+shader_type spatial;
+
+uniform sampler2D pane_albedo : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D pane_glow : filter_linear_mipmap, repeat_enable;
+uniform vec3 glow_color : source_color;
+uniform float glow_energy;
+uniform float window_spacing;
+
+varying vec3 local_position;
+varying vec3 local_normal;
+
+void vertex() {
+	vec3 scale = vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
+	local_position = VERTEX * scale;
+	local_normal = NORMAL;
+}
+
+void fragment() {
+	vec3 facing = abs(local_normal);
+	vec2 uv = local_position.xy;
+	if (facing.x > facing.y && facing.x > facing.z) {
+		uv = local_position.zy;
+	} else if (facing.y > facing.z) {
+		uv = local_position.xz;
+	}
+	uv /= window_spacing;
+	ALBEDO = COLOR.rgb * texture(pane_albedo, uv).rgb;
+	EMISSION = glow_color * texture(pane_glow, uv).rgb * glow_energy;
+	ROUGHNESS = 0.8;
+}
+"""
 const BUILDING_VISIBILITY_END := 12000.0
 
 # Vertex data for one mesh surface. Kept as a class so its packed arrays are
@@ -73,7 +111,7 @@ class MeshArrays:
 var field_material: StandardMaterial3D
 var paved_material: StandardMaterial3D
 var water_material: StandardMaterial3D
-var building_material: StandardMaterial3D
+var building_material: ShaderMaterial
 var _box_mesh := BoxMesh.new()
 var _box_shapes := {}
 
@@ -89,23 +127,15 @@ func _init() -> void:
 	water_material.albedo_color = WATER_COLOR
 	water_material.roughness = 0.1
 	water_material.metallic = 0.3
-	# Windows projected in world space: the same window size on a house and a
-	# tower (a unit box stretched per building would stretch its UVs). The
-	# instance colour tints the walls; a mask lights the panes.
-	building_material = StandardMaterial3D.new()
-	building_material.vertex_color_use_as_albedo = true
-	building_material.albedo_texture = _window_texture(false)
-	building_material.uv1_triplanar = true
-	building_material.uv1_world_triplanar = true
-	building_material.uv1_scale = Vector3.ONE / WINDOW_SPACING
-	building_material.emission_enabled = true
-	# Multiply, not the default add: glow colour x pane mask, so walls keep
-	# their own colour and only the panes light up.
-	building_material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	building_material.emission = WINDOW_GLOW_COLOR
-	building_material.emission_energy_multiplier = 0.8
-	building_material.emission_texture = _window_texture(true)
-	building_material.roughness = 0.8
+	var shader := Shader.new()
+	shader.code = BUILDING_SHADER
+	building_material = ShaderMaterial.new()
+	building_material.shader = shader
+	building_material.set_shader_parameter("pane_albedo", _window_texture(false))
+	building_material.set_shader_parameter("pane_glow", _window_texture(true))
+	building_material.set_shader_parameter("glow_color", WINDOW_GLOW_COLOR)
+	building_material.set_shader_parameter("glow_energy", WINDOW_GLOW_ENERGY)
+	building_material.set_shader_parameter("window_spacing", WINDOW_SPACING)
 
 func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array) -> void:
 	_build_ground(chunk, plan, chunk_around, chunk_along)

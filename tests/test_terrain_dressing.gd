@@ -21,7 +21,7 @@ func _init():
 	failures += _test_chunk_buildings_match_the_plan()
 	failures += _test_building_colliders_match_the_drawn_buildings()
 	failures += _test_building_bounds_cover_the_tallest_building()
-	failures += _test_windows_glow_only_on_the_panes()
+	failures += _test_windows_follow_each_building()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -233,11 +233,23 @@ func _test_building_bounds_cover_the_tallest_building() -> int:
 	chunk.free()
 	return result
 
-func _test_windows_glow_only_on_the_panes() -> int:
-	# The default emission operator ADDS the glow colour to the mask (colour +
-	# texture), so the whole facade glows and every building reads the same
-	# cream (seen in an offscreen render). Multiply: glow only where the mask is.
-	if _dressing.building_material.emission_operator != BaseMaterial3D.EMISSION_OP_MULTIPLY:
-		print("FAIL _test_windows_glow_only_on_the_panes: emission operator %d, expected MULTIPLY" % _dressing.building_material.emission_operator)
+func _test_windows_follow_each_building() -> int:
+	# World-space projection turned the window grid with each building's angle
+	# round the ring (diamonds at 45 degrees, seen in an offscreen render).
+	# Windows are projected in the building's own scaled frame instead, and
+	# glow as colour x pane mask (not the facade-wide glow of an ADD operator).
+	var material = _dressing.building_material
+	if not (material is ShaderMaterial):
+		print("FAIL _test_windows_follow_each_building: building material is %s, expected a ShaderMaterial projecting in the building's frame" % material.get_class())
 		return 1
-	return 0
+	var code: String = (material as ShaderMaterial).shader.code
+	var result := 0
+	if not code.contains("MODEL_MATRIX") or code.contains("world") or not code.contains("EMISSION = glow_color * texture(pane_glow"):
+		print("FAIL _test_windows_follow_each_building: shader does not project in the instance frame or does not multiply the glow by the pane mask")
+		result = 1
+	for parameter in ["pane_albedo", "pane_glow", "glow_color", "glow_energy", "window_spacing"]:
+		if (material as ShaderMaterial).get_shader_parameter(parameter) == null:
+			print("FAIL _test_windows_follow_each_building: shader parameter %s not set" % parameter)
+			result = 1
+	return result
+
