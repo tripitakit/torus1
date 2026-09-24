@@ -49,7 +49,7 @@ func _test_rotating_hull_resting_on_terrain_does_not_jump() -> int:
 
 # A point `height` above the centre of the first field lot of the ahead section.
 func _field_point(world: Node3D, height: float) -> Vector3:
-	var plan = world.get_section_plan(-1.0)
+	var plan = world.get_section_plan(0)
 	var start_z: float = -(world.bridge_length * 0.5 + world.section_length)
 	for along in range(SectionPlan.LOTS_ALONG):
 		for around in range(SectionPlan.LOTS_AROUND):

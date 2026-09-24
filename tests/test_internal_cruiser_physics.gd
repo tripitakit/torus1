@@ -9,7 +9,7 @@ var _failures := 0
 func _initialize():
 	await process_frame
 	_failures += await _test_bounces_off_the_terrain()
-	_failures += await _test_cannot_fly_through_the_far_cap()
+	_failures += await _test_bounces_off_the_cap_around_the_hole()
 	_failures += await _test_its_camera_is_the_live_camera()
 	_failures += await _test_hits_a_building_and_bounces()
 	_failures += await _test_flies_over_a_lake_without_hitting_anything()
@@ -47,18 +47,20 @@ func _test_bounces_off_the_terrain() -> int:
 	world.free()
 	return result
 
-func _test_cannot_fly_through_the_far_cap() -> int:
-	var far_cap_z: float = -(1834.0 * 0.5 + 20000.0)
-	var nodes := _make_world_with_cruiser(Vector3(0.0, 0.0, far_cap_z + 200.0), Vector3(0.0, 0.0, -100.0))
+func _test_bounces_off_the_cap_around_the_hole() -> int:
+	# Every cap now has the bridge's hole (radius 600) in the middle; 1000 m
+	# from the axis it is still a wall.
+	var cap_z: float = -(1834.0 * 0.5 + 20000.0)
+	var nodes := _make_world_with_cruiser(Vector3(1000.0, 0.0, cap_z + 200.0), Vector3(0.0, 0.0, -100.0))
 	var world: Node3D = nodes[0]
 	var cruiser: CharacterBody3D = nodes[1]
 	var furthest := 0.0
 	for tick in range(240):
 		await physics_frame
-		furthest = minf(furthest, cruiser.position.z)
+		furthest = minf(furthest, world.chain_z(cruiser.position))
 	var result := 0
-	if furthest < far_cap_z or cruiser.velocity.z <= 0.0:
-		print("FAIL _test_cannot_fly_through_the_far_cap: reached z %.2f (cap at %.2f), velocity %s" % [furthest, far_cap_z, cruiser.velocity])
+	if furthest < cap_z or cruiser.velocity.z <= 0.0:
+		print("FAIL _test_bounces_off_the_cap_around_the_hole: reached z %.2f (cap at %.2f), velocity %s" % [furthest, cap_z, cruiser.velocity])
 		result = 1
 	world.free()
 	return result
@@ -87,7 +89,7 @@ func _test_hits_a_building_and_bounces() -> int:
 	# Toward the tallest tower, just below its roof, along +Z.
 	var probe: Node3D = InteriorWorldScript.new()
 	probe.build()
-	var plan = probe.get_section_plan(-1.0)
+	var plan = probe.get_section_plan(0)
 	probe.free()
 	var tallest := 0
 	for b in range(plan.building_count()):
@@ -103,7 +105,7 @@ func _test_hits_a_building_and_bounces() -> int:
 	var deepest := -INF
 	for tick in range(240):
 		await physics_frame
-		deepest = maxf(deepest, cruiser.position.z + 4.0)
+		deepest = maxf(deepest, world.chain_z(cruiser.position) + 4.0)
 	var result := 0
 	if deepest > face_world_z + 0.5 or cruiser.velocity.z >= 0.0:
 		print("FAIL _test_hits_a_building_and_bounces: bow reached z %.2f (face at %.2f), velocity %s" % [deepest, face_world_z, cruiser.velocity])
@@ -114,7 +116,7 @@ func _test_hits_a_building_and_bounces() -> int:
 func _test_flies_over_a_lake_without_hitting_anything() -> int:
 	var probe: Node3D = InteriorWorldScript.new()
 	probe.build()
-	var plan = probe.get_section_plan(-1.0)
+	var plan = probe.get_section_plan(0)
 	probe.free()
 	var lake := Vector2.ZERO
 	for along in range(SectionPlan.LOTS_ALONG):

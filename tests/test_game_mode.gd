@@ -122,7 +122,7 @@ func _test_dock_key_near_port_enters_interior() -> int:
 
 func _test_undock_sign_and_key_return_outside() -> int:
 	var interior: Node3D = _scene.get_node("InteriorWorld")
-	var undock_sign: Label3D = interior.get_node("Dock/Sign")
+	var undock_sign: Label3D = interior.get_node("Chain/Bridge_0/Dock/Sign")
 	await _frames(3)
 	var result := 0
 	if not undock_sign.modulate.is_equal_approx(InteriorWorldScript.SIGN_READY_COLOR):
@@ -154,7 +154,7 @@ func _test_undock_key_far_from_dock_does_nothing() -> int:
 	cruiser.position = Vector3(0.0, 0.0, -5000.0)
 	await _frames(3)
 	var result := 0
-	if not (interior.get_node("Dock/Sign") as Label3D).modulate.is_equal_approx(InteriorWorldScript.SIGN_IDLE_COLOR):
+	if not (interior.get_node("Chain/Bridge_0/Dock/Sign") as Label3D).modulate.is_equal_approx(InteriorWorldScript.SIGN_IDLE_COLOR):
 		print("FAIL _test_undock_key_far_from_dock_does_nothing: sign lit 5 km from the dock")
 		result = 1
 	_press_dock()
@@ -187,8 +187,8 @@ func _test_interior_sections_follow_the_docked_bridge() -> int:
 	for case in [[0, 0, 1], [last, last, 0]]:
 		_game_mode.enter_interior(case[0])
 		var interior: Node3D = _scene.get_node("InteriorWorld")
-		var behind: int = interior.get_section_plan(1.0).section_index
-		var ahead: int = interior.get_section_plan(-1.0).section_index
+		var behind: int = interior.get_section_plan(-1).section_index
+		var ahead: int = interior.get_section_plan(0).section_index
 		if behind != case[1] or ahead != case[2]:
 			print("FAIL _test_interior_sections_follow_the_docked_bridge: bridge %d shows sections %d (behind) and %d (ahead), expected %d and %d" % [case[0], behind, ahead, case[1], case[2]])
 			result = 1

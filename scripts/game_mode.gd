@@ -45,7 +45,7 @@ func _process(_delta: float) -> void:
 		if cockpit:
 			cockpit.set_dock_prompt(_can_dock_now())
 	elif _interior:
-		_interior.set_undock_ready(_can_undock_now())
+		_interior.set_undock_ready(0, _can_undock_now())
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _transitioning or not event.is_action_pressed("dock"):
@@ -61,7 +61,7 @@ func _can_dock_now() -> bool:
 
 func _can_undock_now() -> bool:
 	var cruiser: CharacterBody3D = _interior.get_node("InternalCruiser")
-	return DockingRules.can_dock(_interior.get_dock_position().distance_to(cruiser.global_position), cruiser.velocity.length())
+	return DockingRules.can_dock(_interior.get_dock_position(0).distance_to(cruiser.position), cruiser.velocity.length())
 
 func enter_interior(bridge_index: int) -> void:
 	var parent := get_parent()
@@ -79,9 +79,9 @@ func enter_interior(bridge_index: int) -> void:
 	_interior.section_length = _station.section_length
 	_interior.bridge_radius = _station.get_bridge_radius()
 	_interior.bridge_length = _station.get_bridge_length()
-	# Bridge i joins section i (behind) and section i + 1 (ahead); the ring closes.
-	_interior.behind_section_index = bridge_index
-	_interior.ahead_section_index = posmod(bridge_index + 1, _station.num_sections)
+	# The chain starts at the docked bridge and wraps round the ring.
+	_interior.docked_bridge_index = bridge_index
+	_interior.ring_sections = _station.num_sections
 	_interior.build()
 	var cruiser: CharacterBody3D = InternalCruiserScript.new()
 	cruiser.name = "InternalCruiser"
