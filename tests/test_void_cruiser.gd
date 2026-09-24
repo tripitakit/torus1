@@ -2,6 +2,7 @@ extends SceneTree
 
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
+const FlyingCraftScript = preload("res://scripts/flying_craft.gd")
 
 func _init():
 	var failures := 0
@@ -29,6 +30,7 @@ func _init():
 	failures += _test_process_shows_ship_speed_on_hud()
 	failures += _test_nav_light_markers_hidden_from_onboard_cameras()
 	failures += _test_ship_model_is_gone()
+	failures += _test_void_cruiser_flies_with_the_shared_flying_craft()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -457,5 +459,15 @@ func _test_ship_model_is_gone() -> int:
 		if FileAccess.file_exists(path):
 			print("FAIL _test_ship_model_is_gone: %s still exists" % path)
 			result = 1
+	cruiser.free()
+	return result
+
+func _test_void_cruiser_flies_with_the_shared_flying_craft() -> int:
+	# The internal-cruiser reuses the same flight model: it lives in one place.
+	var cruiser := _make_cruiser()
+	var result := 0
+	if (cruiser.get_script() as Script).get_base_script() != FlyingCraftScript:
+		print("FAIL _test_void_cruiser_flies_with_the_shared_flying_craft: void_cruiser.gd does not extend flying_craft.gd")
+		result = 1
 	cruiser.free()
 	return result

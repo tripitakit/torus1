@@ -1,16 +1,9 @@
-extends CharacterBody3D
+extends "res://scripts/flying_craft.gd"
 
-const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
 
-@export var thrust_power: float = 150.0
-@export_range(0.0, 0.999, 0.001) var linear_damping: float = 0.5
-@export var torque_power: float = 2.0
-@export_range(0.0, 0.999, 0.001) var angular_damping: float = 0.5
-@export var mouse_sensitivity: float = 0.01 / 6.0
 @export var forward_thrust_ramp_multiplier: float = 10.0
 @export var forward_thrust_ramp_duration: float = 5.0
-@export_range(0.0, 1.0, 0.01) var collision_restitution: float = 0.4
 
 const STROBE_PERIOD := 1.2
 const STROBE_ON_DURATION := 0.1
@@ -33,9 +26,6 @@ const SENSOR_DIRECTIONS := {
 # The pilot's eye, inside the hull box, 7 m behind the bow face.
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
-var angular_velocity: Vector3 = Vector3.ZERO
-
-var _mouse_delta: Vector2 = Vector2.ZERO
 var _forward_hold_time: float = 0.0
 var _forward_hold_sign: float = 0.0
 var _strobe_time: float = 0.0
@@ -147,22 +137,12 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 	light.shadow_enabled = false
 	add_child(light)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
-		_mouse_delta += event.relative
-
 func _physics_process(delta: float) -> void:
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
 	var multiplier := VoidCruiserPhysics.compute_forward_thrust_multiplier(_forward_hold_time, forward_thrust_ramp_duration, forward_thrust_ramp_multiplier)
 	thrust_input.z *= multiplier
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
-
-func _read_thrust_input() -> Vector3:
-	var strafe := Input.get_axis("move_left", "move_right")
-	var vertical := Input.get_axis("move_down", "move_up")
-	var forward := Input.get_axis("move_forward", "move_backward")
-	return Vector3(strafe, vertical, forward)
 
 func _update_forward_hold_time(forward_input: float, delta: float) -> void:
 	# Holding W/S continuously ramps forward/backward thrust up to
@@ -175,42 +155,3 @@ func _update_forward_hold_time(forward_input: float, delta: float) -> void:
 	else:
 		_forward_hold_time += delta
 	_forward_hold_sign = current_sign
-
-func _read_torque_input(delta: float) -> Vector3:
-	# Mouse motion is a one-off displacement, not a continuous rate, but it
-	# feeds into compute_new_angular_velocity's `torque_input * delta`
-	# integration alongside continuous keyboard input. Pre-dividing by delta
-	# here cancels that later multiplication, so mouse-look sensitivity stays
-	# constant regardless of the physics tick rate.
-	var pitch := 0.0
-	var yaw := 0.0
-	if delta > 0.0:
-		pitch = -_mouse_delta.y * mouse_sensitivity / delta
-		yaw = -_mouse_delta.x * mouse_sensitivity / delta
-	var roll := Input.get_axis("roll_left", "roll_right")
-	_mouse_delta = Vector2.ZERO
-	return Vector3(pitch, yaw, roll)
-
-func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque_input: Vector3) -> void:
-	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, linear_damping, delta)
-	angular_velocity = VoidCruiserPhysics.compute_new_angular_velocity(angular_velocity, local_torque_input, torque_power, angular_damping, delta)
-
-	_move(delta)
-
-	rotate_object_local(Vector3.RIGHT, angular_velocity.x * delta)
-	rotate_object_local(Vector3.UP, angular_velocity.y * delta)
-	rotate_object_local(Vector3.FORWARD, angular_velocity.z * delta)
-
-func _move(delta: float) -> void:
-	# move_and_collide needs a live physics space, which only exists once
-	# this node is genuinely inside a processed scene tree frame. Off-tree
-	# (every headless unit test in this project, which never adds the
-	# cruiser to a tree) falls back to plain integration — see
-	# docs/superpowers/specs/2026-09-23-station-collisions-design.md for the
-	# empirical verification behind this.
-	if not is_inside_tree():
-		position += velocity * delta
-		return
-	var collision := move_and_collide(velocity * delta)
-	if collision:
-		velocity = VoidCruiserPhysics.compute_bounce_velocity(velocity, collision.get_normal(), collision_restitution)
