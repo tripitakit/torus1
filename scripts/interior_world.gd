@@ -40,6 +40,10 @@ const CHUNKS_DRESSED_PER_FRAME := 16
 const CHUNKS_FREED_PER_FRAME := 32
 const ALL_AT_ONCE := 1 << 30
 
+# Past this distance from the origin along Z, the chain and the craft move
+# back together (Z only: the axis stays at x = y = 0).
+const REBASE_DISTANCE := 10000.0
+
 const SUN_SPACING := 1000.0
 const SUN_RANGE := 2600.0
 const SUN_ENERGY := 1.5
@@ -138,6 +142,36 @@ func load_now(focus_z: float) -> void:
 			_finish_plan(state, focus_z)
 	_dress_chunks(focus_z, ALL_AT_ONCE)
 	_free_unloading(ALL_AT_ONCE)
+
+# One step of loading around chain position `focus_z` that never waits:
+# unfinished plans are picked up on a later step. Returns chunks dressed.
+func stream_step(focus_z: float, chunk_budget: int, free_budget: int) -> int:
+	_plan_window(focus_z)
+	for state: SectionLoad in _sections.values():
+		if state.task_id >= 0 and WorkerThreadPool.is_task_completed(state.task_id):
+			_finish_plan(state, focus_z)
+	var dressed := _dress_chunks(focus_z, chunk_budget)
+	_free_unloading(free_budget)
+	return dressed
+
+func rebase_around(craft: Node3D) -> void:
+	if absf(craft.position.z) <= REBASE_DISTANCE:
+		return
+	var shift: float = craft.position.z
+	_chain.position.z -= shift
+	craft.position.z -= shift
+
+func _process(_delta: float) -> void:
+	var craft := get_node_or_null("InternalCruiser") as Node3D
+	if craft != null and _chain != null:
+		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)
+
+# Before the craft moves this tick (a parent runs before its children); the
+# static bodies follow their moved parent.
+func _physics_process(_delta: float) -> void:
+	var craft := get_node_or_null("InternalCruiser") as Node3D
+	if craft != null and _chain != null:
+		rebase_around(craft)
 
 func period() -> float:
 	return InteriorLayout.chain_period(section_length, bridge_length)
