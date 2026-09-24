@@ -39,6 +39,19 @@ func _effective_planet_radius() -> float:
 		return planet_radius
 	return planet.planet_radius
 
+func get_bridge_radius() -> float:
+	return section_radius * BRIDGE_RADIUS_RATIO
+
+func get_bridge_length() -> float:
+	return TorusGeometry.compute_bridge_length(_effective_planet_radius(), orbit_altitude, num_sections, section_length)
+
+# In-tree only (uses the station's global transform).
+func nearest_bridge_index(world_position: Vector3) -> int:
+	return TorusGeometry.compute_nearest_bridge_index(to_local(world_position), num_sections)
+
+func get_docking_port(bridge_index: int) -> Node3D:
+	return get_node("DockingCollar%d/Port" % bridge_index)
+
 const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
 const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
 const HULL_NORMAL_PATH := "res://assets/textures/station/normal.png"
@@ -46,6 +59,15 @@ const HULL_EMISSION_PATH := "res://assets/textures/station/emission.png"
 const HULL_AO_PATH := "res://assets/textures/station/ao.png"
 const HULL_TILE_SIZE := 500.0
 const HULL_LIGHTS_ENERGY := 3.0
+const BRIDGE_RADIUS_RATIO := 0.3
+# A docking collar around the middle of every bridge. It does not spin, so its
+# port stays still for docking. Sizes are fractions of the bridge radius.
+const COLLAR_INNER_RATIO := 1.05
+const COLLAR_OUTER_RATIO := 1.25
+const PORT_OFFSET_RATIO := 0.01
+const PORT_SIZE_RATIO := Vector3(0.007, 0.1, 0.1)
+const PORT_COLOR := Color(0.2, 1.0, 0.35)
+const COLLAR_COLOR := Color(0.35, 0.37, 0.4)
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -82,7 +104,7 @@ func _build_prism_shape(mesh: CylinderMesh) -> ConvexPolygonShape3D:
 
 func build_station() -> void:
 	for child in get_children():
-		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
+		if child.name.begins_with("Section") or child.name.begins_with("Bridge") or child.name.begins_with("DockingCollar"):
 			remove_child(child)
 			child.queue_free()
 
@@ -128,8 +150,8 @@ func build_station() -> void:
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_mesh := CylinderMesh.new()
-	bridge_mesh.top_radius = section_radius * 0.3
-	bridge_mesh.bottom_radius = section_radius * 0.3
+	bridge_mesh.top_radius = get_bridge_radius()
+	bridge_mesh.bottom_radius = get_bridge_radius()
 	bridge_mesh.height = max(bridge_length, 0.01)
 
 	var bridge_shape := _build_prism_shape(bridge_mesh)
@@ -157,3 +179,52 @@ func build_station() -> void:
 
 		bridge.transform = bridge_transforms[i]
 		add_child(bridge)
+
+	_build_docking_collars(bridge_transforms)
+
+func _build_docking_collars(bridge_transforms: Array[Transform3D]) -> void:
+	var bridge_radius := get_bridge_radius()
+	var collar_mesh := TorusMesh.new()
+	collar_mesh.inner_radius = bridge_radius * COLLAR_INNER_RATIO
+	collar_mesh.outer_radius = bridge_radius * COLLAR_OUTER_RATIO
+	# Triangle shape from the visible mesh: no analytic shape (see the
+	# CylinderShape3D teleport note on _build_prism_shape).
+	var collar_shape := collar_mesh.create_trimesh_shape()
+	var collar_material := StandardMaterial3D.new()
+	collar_material.albedo_color = COLLAR_COLOR
+	collar_material.metallic = 0.6
+	collar_material.roughness = 0.4
+
+	var port_mesh := BoxMesh.new()
+	port_mesh.size = PORT_SIZE_RATIO * bridge_radius
+	# Glowing, not a real light: 2000 extra lights would cost too much.
+	var port_material := StandardMaterial3D.new()
+	port_material.albedo_color = PORT_COLOR
+	port_material.emission_enabled = true
+	port_material.emission = PORT_COLOR
+	port_material.emission_energy_multiplier = 3.0
+
+	for i in range(bridge_transforms.size()):
+		# Named neither Section nor Bridge: _rotate_sections leaves it still.
+		var collar := StaticBody3D.new()
+		collar.name = "DockingCollar%d" % i
+		var mesh_instance := MeshInstance3D.new()
+		mesh_instance.name = "Mesh"
+		mesh_instance.mesh = collar_mesh
+		mesh_instance.material_override = collar_material
+		collar.add_child(mesh_instance)
+		var collision := CollisionShape3D.new()
+		collision.name = "Collision"
+		collision.shape = collar_shape
+		collar.add_child(collision)
+		var port := Node3D.new()
+		port.name = "Port"
+		port.position = Vector3(collar_mesh.outer_radius + bridge_radius * PORT_OFFSET_RATIO, 0.0, 0.0)
+		var platform := MeshInstance3D.new()
+		platform.name = "Platform"
+		platform.mesh = port_mesh
+		platform.material_override = port_material
+		port.add_child(platform)
+		collar.add_child(port)
+		collar.transform = bridge_transforms[i]
+		add_child(collar)
