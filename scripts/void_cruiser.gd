@@ -9,6 +9,10 @@ const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 @export var planet_path: NodePath = NodePath("../PlanetSystem/Planet")
 @export var planet_gm: float = OrbitalFrame.MOON_GM
 @export var ring_radius: float = 6949600.0
+const ORBIT_LINE_POINTS := 256
+const ORBIT_LINE_COLOR := Color(0.4, 0.8, 1.0, 0.6)
+# An open orbit is drawn out to this many times the ship's distance.
+const ESCAPE_LINE_REACH := 5.0
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
@@ -60,6 +64,7 @@ func _ready() -> void:
 	build_navigation_lights()
 	build_headlights()
 	build_cockpit()
+	build_orbit_line()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _process(delta: float) -> void:
@@ -73,6 +78,7 @@ func _process(delta: float) -> void:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
 		cockpit.update_orbit(flight_assist, orbit_readout())
+	_update_orbit_line()
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)
@@ -182,6 +188,43 @@ func build_cockpit() -> void:
 	cockpit.position = COCKPIT_POSITION
 	add_child(cockpit)
 	cockpit.build()
+
+# The predicted orbit, relative to the stars, drawn around the planet. It
+# does not move with the ship (top_level): _update_orbit_line puts it on
+# the planet and redraws it every frame.
+func build_orbit_line() -> void:
+	var line := MeshInstance3D.new()
+	line.name = "OrbitLine"
+	line.top_level = true
+	line.mesh = ArrayMesh.new()
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = ORBIT_LINE_COLOR
+	line.material_override = material
+	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	line.visible = false
+	add_child(line)
+
+func _update_orbit_line() -> void:
+	var line := get_node_or_null("OrbitLine") as MeshInstance3D
+	if line == null:
+		return
+	line.visible = has_planet
+	if not has_planet:
+		return
+	var reach: float = (_world_position() - planet_center).length() * ESCAPE_LINE_REACH
+	var points := OrbitalFrame.orbit_points(current_orbit(), ORBIT_LINE_POINTS, reach)
+	if line.is_inside_tree():
+		line.global_position = planet_center
+	else:
+		line.position = planet_center
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = points
+	var mesh := line.mesh as ArrayMesh
+	mesh.clear_surfaces()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINE_STRIP, arrays)
 
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),

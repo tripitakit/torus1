@@ -33,6 +33,8 @@ func _init():
 	failures += _test_cruise_without_assist_holds_velocity_in_strong_gravity()
 	failures += _test_orbit_readout_on_the_ring()
 	failures += _test_process_shows_orbit_on_hud()
+	failures += _test_orbit_line_has_256_points_around_the_planet()
+	failures += _test_orbit_line_hidden_without_planet()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -745,6 +747,48 @@ func _test_process_shows_orbit_on_hud() -> int:
 	var result := 0
 	if altitude.text != "ALTITUDE  5222 km" or assist.text != "ASSIST  ON":
 		print("FAIL _test_process_shows_orbit_on_hud: '%s' / '%s'" % [altitude.text, assist.text])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_orbit_line_has_256_points_around_the_planet() -> int:
+	var cruiser := _orbiting_cruiser()
+	cruiser.planet_center = Vector3(10.0, -20.0, 30.0)
+	cruiser.position = cruiser.planet_center + Vector3(cruiser.ring_radius, 0.0, 0.0)
+	cruiser.build_orbit_line()
+	cruiser._process(0.016)
+	var line := cruiser.get_node_or_null("OrbitLine") as MeshInstance3D
+	var result := 0
+	if line == null or not line.visible or not line.top_level or not line.position.is_equal_approx(cruiser.planet_center):
+		print("FAIL _test_orbit_line_has_256_points_around_the_planet: line missing, hidden, not top-level or not on the planet")
+		cruiser.free()
+		return 1
+	var mesh := line.mesh as ArrayMesh
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	if mesh.surface_get_primitive_type(0) != Mesh.PRIMITIVE_LINE_STRIP or points.size() != 256:
+		print("FAIL _test_orbit_line_has_256_points_around_the_planet: %d points, primitive %d" % [points.size(), mesh.surface_get_primitive_type(0)])
+		result = 1
+	for p in points:
+		# At rest on the ring the orbit is the ring's circle.
+		if absf(p.length() - cruiser.ring_radius) > 2.0:
+			print("FAIL _test_orbit_line_has_256_points_around_the_planet: point at %.1f m from the centre" % p.length())
+			result = 1
+			break
+	cruiser._process(0.016)
+	if (line.mesh as ArrayMesh).get_surface_count() != 1:
+		print("FAIL _test_orbit_line_has_256_points_around_the_planet: surfaces pile up (%d)" % (line.mesh as ArrayMesh).get_surface_count())
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_orbit_line_hidden_without_planet() -> int:
+	var cruiser: Node3D = VoidCruiserScript.new()
+	cruiser.build_orbit_line()
+	cruiser._process(0.016)
+	var result := 0
+	if (cruiser.get_node("OrbitLine") as MeshInstance3D).visible:
+		print("FAIL _test_orbit_line_hidden_without_planet: line shown with no planet")
 		result = 1
 	cruiser.free()
 	return result
