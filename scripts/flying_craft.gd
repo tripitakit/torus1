@@ -68,9 +68,21 @@ func _update_forward_hold_time(forward_input: float, delta: float) -> void:
 		_forward_hold_time += delta
 	_forward_hold_sign = current_sign
 
+# What this tick of flight uses; a craft can change them (see void_cruiser.gd).
+func _linear_damping_now() -> float:
+	return linear_damping
+
+func _angular_damping_now() -> float:
+	return angular_damping
+
+# Pulls from outside the craft (gravity and the like), in world space.
+func _external_acceleration() -> Vector3:
+	return Vector3.ZERO
+
 func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque_input: Vector3) -> void:
-	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, linear_damping, delta)
-	angular_velocity = VoidCruiserPhysics.compute_new_angular_velocity(angular_velocity, local_torque_input, torque_power, angular_damping, delta)
+	var outside := _external_acceleration()
+	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, _linear_damping_now(), delta) + outside * delta
+	angular_velocity = VoidCruiserPhysics.compute_new_angular_velocity(angular_velocity, local_torque_input, torque_power, _angular_damping_now(), delta)
 
 	_move(delta)
 

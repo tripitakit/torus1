@@ -6,6 +6,7 @@ func _init():
 	failures += _test_game_starts_fullscreen()
 	failures += _test_dock_action_is_bound_to_f()
 	failures += _test_up_and_down_thrust_on_z_and_x()
+	failures += _test_flight_assist_on_tab()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -136,5 +137,12 @@ func _test_up_and_down_thrust_on_z_and_x() -> int:
 	var down := _key_codes("move_down")
 	if up != [KEY_Z] or down != [KEY_X]:
 		print("FAIL _test_up_and_down_thrust_on_z_and_x: move_up keys %s, move_down keys %s, expected [Z] and [X]" % [up, down])
+		return 1
+	return 0
+
+func _test_flight_assist_on_tab() -> int:
+	var keys := _key_codes("flight_assist")
+	if keys != [KEY_TAB]:
+		print("FAIL _test_flight_assist_on_tab: flight_assist keys %s, expected [Tab]" % [keys])
 		return 1
 	return 0

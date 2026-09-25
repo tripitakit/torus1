@@ -4,8 +4,9 @@ const CockpitScript = preload("res://scripts/cockpit.gd")
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
-# C locks the forward thrust on, as if W were held: the ramp runs on to its
-# last step. A new press of W/A/S/D, or C again, lets go; roll, mouse and
+# C locks the thrust. With flight assist it pushes forward as if W were held
+# (the ramp runs on to its last step); without, it holds the current
+# velocity. A new press of W/A/S/D, or C again, lets go; roll, mouse and
 # up/down do not.
 const CRUISE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right"]
 
@@ -32,6 +33,9 @@ const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
 var _strobe_time: float = 0.0
 var cruise_locked := false
+# Tab. On: drag on motion and spin, and the thrust ramp (arcade flight).
+# Off: pure inertia, plain 1x thrust, no top speed.
+var flight_assist := true
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -58,7 +62,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	super(event)
 	if event.is_echo():
 		return
-	if event.is_action_pressed("cruise"):
+	if event.is_action_pressed("flight_assist"):
+		# The lock means something else in the other mode: let it go.
+		flight_assist = not flight_assist
+		cruise_locked = false
+	elif event.is_action_pressed("cruise"):
 		cruise_locked = not cruise_locked
 	elif cruise_locked:
 		for action in CRUISE_RELEASE_ACTIONS:
@@ -67,9 +75,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _read_thrust_input() -> Vector3:
 	var thrust := super()
-	if cruise_locked:
+	if cruise_locked and flight_assist:
 		thrust.z = -1.0
 	return thrust
+
+func forward_thrust_multiplier() -> float:
+	return super() if flight_assist else 1.0
+
+func _linear_damping_now() -> float:
+	return linear_damping if flight_assist else 0.0
+
+func _angular_damping_now() -> float:
+	return angular_damping if flight_assist else 0.0
 
 func build_collision_shape() -> void:
 	var shape_node := CollisionShape3D.new()

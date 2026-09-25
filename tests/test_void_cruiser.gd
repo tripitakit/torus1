@@ -25,6 +25,10 @@ func _init():
 	failures += _test_pressing_w_a_s_or_d_turns_cruise_off()
 	failures += _test_roll_mouse_and_up_down_leave_cruise_on()
 	failures += _test_process_shows_cruise_on_hud()
+	failures += _test_tab_toggles_flight_assist_and_drops_cruise()
+	failures += _test_without_assist_speed_and_spin_do_not_fade()
+	failures += _test_without_assist_thrust_is_1x_and_unbounded()
+	failures += _test_cruise_without_assist_does_not_push_forward()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -588,6 +592,68 @@ func _test_process_shows_cruise_on_hud() -> int:
 	cruiser._process(0.016)
 	if label.visible:
 		print("FAIL _test_process_shows_cruise_on_hud: CRUISE still shown after A")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_tab_toggles_flight_assist_and_drops_cruise() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	if not cruiser.flight_assist:
+		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: assist off at start")
+		result = 1
+	_press(cruiser, "cruise")
+	_press(cruiser, "flight_assist")
+	if cruiser.flight_assist or cruiser.cruise_locked:
+		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: after Tab assist %s cruise %s, expected both off" % [cruiser.flight_assist, cruiser.cruise_locked])
+		result = 1
+	_press(cruiser, "flight_assist")
+	if not cruiser.flight_assist:
+		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: a second Tab did not turn assist back on")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_without_assist_speed_and_spin_do_not_fade() -> int:
+	# Default damping 0.5 would halve both every second; without assist, none.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	cruiser.flight_assist = false
+	cruiser.velocity = Vector3(0.0, 0.0, -100.0)
+	cruiser.angular_velocity = Vector3(0.2, 0.0, 0.0)
+	for i in range(120):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if absf(cruiser.velocity.length() - 100.0) > 1e-6 or absf(cruiser.angular_velocity.length() - 0.2) > 1e-9:
+		print("FAIL _test_without_assist_speed_and_spin_do_not_fade: speed %f spin %f after 2 s" % [cruiser.velocity.length(), cruiser.angular_velocity.length()])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_without_assist_thrust_is_1x_and_unbounded() -> int:
+	# 150 m/s^2 for 10 s: 1500 m/s, no ramp and no drag to cap it.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	cruiser.flight_assist = false
+	Input.action_press("move_forward")
+	for i in range(600):
+		cruiser._physics_process(1.0 / 60.0)
+	Input.action_release("move_forward")
+	var result := 0
+	if absf(cruiser.velocity.length() - 1500.0) > 5.0 or not is_equal_approx(cruiser.forward_thrust_multiplier(), 1.0):
+		print("FAIL _test_without_assist_thrust_is_1x_and_unbounded: speed %.1f (expected 1500), multiplier %f" % [cruiser.velocity.length(), cruiser.forward_thrust_multiplier()])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_cruise_without_assist_does_not_push_forward() -> int:
+	# Without assist C holds the current velocity instead of pushing.
+	var cruiser := _make_cruiser()
+	cruiser.flight_assist = false
+	_press(cruiser, "cruise")
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if not cruiser.cruise_locked or not cruiser.velocity.is_zero_approx():
+		print("FAIL _test_cruise_without_assist_does_not_push_forward: cruise %s velocity %s" % [cruiser.cruise_locked, cruiser.velocity])
 		result = 1
 	cruiser.free()
 	return result
