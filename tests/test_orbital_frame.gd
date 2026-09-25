@@ -17,6 +17,8 @@ func _init():
 	failures += _test_faster_than_escape_is_an_open_orbit()
 	failures += _test_radial_fall_is_an_impact_without_nan()
 	failures += _test_orbit_points_follow_the_conic()
+	failures += _test_gravity_inside_the_planet_falls_to_zero_at_the_centre()
+	failures += _test_orbit_at_the_centre_has_no_nan()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -137,6 +139,41 @@ func _test_orbit_points_follow_the_conic() -> int:
 	for p in branch:
 		if p.length() > RING * 5.0 + 1.0 or p.length() < open.periapsis - 1.0:
 			print("FAIL _test_orbit_points_follow_the_conic: open branch point at %.1f m" % p.length())
+			result = 1
+			break
+	return result
+
+func _test_gravity_inside_the_planet_falls_to_zero_at_the_centre() -> int:
+	# The planet has no collision: a ship can fly through it. Inside, the
+	# pull is a uniform sphere's (linear in r), never the 1/r^2 blow-up.
+	var result := 0
+	var half := Vector3(0.0, PLANET_RADIUS * 0.5, 0.0)
+	var a: Vector3 = OrbitalFrame.frame_acceleration(half, Vector3.ZERO, GM, _omega(), PLANET_RADIUS)
+	var expected := -half * (GM / pow(PLANET_RADIUS, 3.0))
+	if not a.is_equal_approx(expected):
+		print("FAIL _test_gravity_inside_the_planet_falls_to_zero_at_the_centre: halfway in %s, expected %s" % [a, expected])
+		result = 1
+	var centre: Vector3 = OrbitalFrame.frame_acceleration(Vector3.ZERO, Vector3.ZERO, GM, _omega(), PLANET_RADIUS)
+	if not centre.is_zero_approx():
+		print("FAIL _test_gravity_inside_the_planet_falls_to_zero_at_the_centre: %s at the centre" % centre)
+		result = 1
+	var outside := Vector3(0.0, 3.0e6, 0.0)
+	var out: Vector3 = OrbitalFrame.frame_acceleration(outside, Vector3.ZERO, GM, _omega(), PLANET_RADIUS)
+	if not out.is_equal_approx(Vector3(0.0, -GM / (3.0e6 * 3.0e6), 0.0)):
+		print("FAIL _test_gravity_inside_the_planet_falls_to_zero_at_the_centre: outside the planet %s is not GM/r^2" % out)
+		result = 1
+	return result
+
+func _test_orbit_at_the_centre_has_no_nan() -> int:
+	var orbit: Dictionary = OrbitalFrame.orbit_of(Vector3.ZERO, Vector3(0.0, 0.0, -100.0), GM)
+	var points: PackedVector3Array = OrbitalFrame.orbit_points(orbit, 16, RING)
+	var result := 0
+	if is_nan(orbit.periapsis) or is_nan(orbit.apoapsis) or orbit.periapsis > PLANET_RADIUS:
+		print("FAIL _test_orbit_at_the_centre_has_no_nan: periapsis %f apoapsis %f" % [orbit.periapsis, orbit.apoapsis])
+		result = 1
+	for p in points:
+		if is_nan(p.x) or is_nan(p.y) or is_nan(p.z):
+			print("FAIL _test_orbit_at_the_centre_has_no_nan: NaN in the orbit points")
 			result = 1
 			break
 	return result

@@ -30,6 +30,7 @@ func _init():
 	failures += _test_without_assist_thrust_is_1x_and_unbounded()
 	failures += _test_cruise_without_assist_does_not_push_forward()
 	failures += _test_circular_orbit_holds_without_assist()
+	failures += _test_diving_through_the_planet_does_not_fling_the_ship()
 	failures += _test_cruise_without_assist_holds_velocity_in_strong_gravity()
 	failures += _test_orbit_readout_on_the_ring()
 	failures += _test_process_shows_orbit_on_hud()
@@ -789,6 +790,27 @@ func _test_orbit_line_hidden_without_planet() -> int:
 	var result := 0
 	if (cruiser.get_node("OrbitLine") as MeshInstance3D).visible:
 		print("FAIL _test_orbit_line_hidden_without_planet: line shown with no planet")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_diving_through_the_planet_does_not_fling_the_ship() -> int:
+	# The planet has no collision. A dive 200 m off the centre, 1000 km
+	# inside, at 2 km/s: with 1/r^2 all the way in, the 60 Hz step shoots
+	# the ship out at hundreds of km/s. A uniform-sphere pull tops out near
+	# 2.1 km/s at the centre.
+	var cruiser := _orbiting_cruiser()
+	cruiser.flight_assist = false
+	cruiser.planet_axis = Vector3.RIGHT  # no centrifugal push along the dive
+	cruiser.position = Vector3(200.0, 0.0, 1.0e6)
+	cruiser.velocity = Vector3(0.0, 0.0, -2000.0)
+	var fastest := 0.0
+	for i in range(36000):
+		cruiser._physics_process(1.0 / 60.0)
+		fastest = maxf(fastest, cruiser.velocity.length())
+	var result := 0
+	if fastest > 3000.0:
+		print("FAIL _test_diving_through_the_planet_does_not_fling_the_ship: reached %.0f m/s" % fastest)
 		result = 1
 	cruiser.free()
 	return result

@@ -14,9 +14,12 @@ static func orbit_angular_velocity(gm: float, orbit_radius: float) -> float:
 
 # `offset`: position minus the planet centre. `velocity`: relative to the
 # turning frame. `omega`: the frame's rotation (axis times angular speed).
-static func frame_acceleration(offset: Vector3, velocity: Vector3, gm: float, omega: Vector3) -> Vector3:
-	var r := offset.length()
-	var gravity := Vector3.ZERO if r <= 0.0 else -offset * (gm / (r * r * r))
+# `body_radius`: the planet's radius. The planet has no collision, so a ship
+# can fly through it: inside, the pull is a uniform sphere's, falling to
+# zero at the centre, instead of 1/r^2 blowing up there.
+static func frame_acceleration(offset: Vector3, velocity: Vector3, gm: float, omega: Vector3, body_radius := 0.0) -> Vector3:
+	var reach := maxf(offset.length(), body_radius)
+	var gravity := Vector3.ZERO if reach <= 0.0 else -offset * (gm / (reach * reach * reach))
 	var centrifugal := -omega.cross(omega.cross(offset))
 	var coriolis := -2.0 * omega.cross(velocity)
 	return gravity + centrifugal + coriolis
@@ -29,6 +32,9 @@ static func inertial_velocity(offset: Vector3, velocity: Vector3, omega: Vector3
 # are from the planet centre; apoapsis is INF for an open orbit.
 static func orbit_of(offset: Vector3, inertial: Vector3, gm: float) -> Dictionary:
 	var r := offset.length()
+	if r <= 0.0:
+		# Right at the centre (inside the planet): no orbit to speak of.
+		return {"periapsis": 0.0, "apoapsis": 0.0, "escape": false, "eccentricity": Vector3.ZERO, "semi_latus": 0.0, "normal": Vector3.UP}
 	var h := offset.cross(inertial)
 	var e_vec := inertial.cross(h) / gm - offset / r
 	var e := e_vec.length()

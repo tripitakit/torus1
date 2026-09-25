@@ -114,7 +114,7 @@ func _external_acceleration() -> Vector3:
 	# Holding velocity without assist: the thrusters cancel the orbital pulls.
 	if not has_planet or (cruise_locked and not flight_assist):
 		return Vector3.ZERO
-	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega())
+	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
 
 func ring_omega() -> Vector3:
 	return planet_axis * OrbitalFrame.orbit_angular_velocity(planet_gm, ring_radius)
