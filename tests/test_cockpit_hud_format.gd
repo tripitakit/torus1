@@ -11,6 +11,7 @@ func _init():
 	failures += _test_format_distance_zero_metres()
 	failures += _test_format_distance_rounds_up_into_kilometres()
 	failures += _test_format_distance_kilometres_one_decimal()
+	failures += _test_format_altitude_in_whole_kilometres()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -49,3 +50,11 @@ func _test_format_distance_rounds_up_into_kilometres() -> int:
 
 func _test_format_distance_kilometres_one_decimal() -> int:
 	return _check("_test_format_distance_kilometres_one_decimal", CockpitHudFormat.format_distance(3140.0), "3.1 km")
+
+func _test_format_altitude_in_whole_kilometres() -> int:
+	var result := 0
+	result += _check("_test_format_altitude_in_whole_kilometres", CockpitHudFormat.format_altitude(5222201.0), "5222 km")
+	result += _check("_test_format_altitude_in_whole_kilometres", CockpitHudFormat.format_altitude(-1200400.0), "-1200 km")
+	result += _check("_test_format_altitude_in_whole_kilometres", CockpitHudFormat.format_altitude(INF), "—")
+	result += _check("_test_format_altitude_in_whole_kilometres", CockpitHudFormat.format_altitude(NAN), "—")
+	return mini(result, 1)

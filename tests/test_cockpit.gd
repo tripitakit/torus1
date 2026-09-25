@@ -13,6 +13,8 @@ func _init():
 	failures += _test_update_hud_missing_distances_show_no_reading()
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
+	failures += _test_update_orbit_writes_assist_and_altitudes()
+	failures += _test_orbit_warnings_only_when_needed()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -94,7 +96,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "CruiseLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
+	var expected := ["SpeedLabel", "CruiseLabel", "AssistLabel", "AltitudeLabel", "PeriapsisLabel", "ApoapsisLabel", "ImpactLabel", "EscapeLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
@@ -173,6 +175,54 @@ func _test_cruise_line_shown_only_while_cruising() -> int:
 	cockpit.set_cruise(false)
 	if label.visible:
 		print("FAIL _test_cruise_line_shown_only_while_cruising: not hidden by set_cruise(false)")
+		result = 1
+	cockpit.free()
+	return result
+
+func _line(cockpit: Node, label_name: String) -> Label:
+	return cockpit.get_node("Hud/Panel/Lines/" + label_name) as Label
+
+func _test_update_orbit_writes_assist_and_altitudes() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	cockpit.update_orbit(false, {"altitude": 5222201.0, "periapsis": 5100000.0, "apoapsis": 5300400.0})
+	var expected := {
+		"AssistLabel": "ASSIST  OFF",
+		"AltitudeLabel": "ALTITUDE  5222 km",
+		"PeriapsisLabel": "PERIAPSIS  5100 km",
+		"ApoapsisLabel": "APOAPSIS  5300 km",
+	}
+	for label_name in expected:
+		if _line(cockpit, label_name).text != expected[label_name]:
+			print("FAIL _test_update_orbit_writes_assist_and_altitudes: %s='%s' expected '%s'" % [label_name, _line(cockpit, label_name).text, expected[label_name]])
+			result = 1
+	if _line(cockpit, "AssistLabel").label_settings.font_color != CockpitScript.CRUISE_COLOR:
+		print("FAIL _test_update_orbit_writes_assist_and_altitudes: ASSIST OFF is not yellow")
+		result = 1
+	cockpit.update_orbit(true, {})
+	if _line(cockpit, "AssistLabel").text != "ASSIST  ON" or _line(cockpit, "AltitudeLabel").text != "ALTITUDE  —" or _line(cockpit, "ApoapsisLabel").text != "APOAPSIS  —":
+		print("FAIL _test_update_orbit_writes_assist_and_altitudes: with no orbit data got '%s' / '%s' / '%s'" % [_line(cockpit, "AssistLabel").text, _line(cockpit, "AltitudeLabel").text, _line(cockpit, "ApoapsisLabel").text])
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_orbit_warnings_only_when_needed() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var cases := [
+		# [readout, IMPACT visible, ESCAPE visible]
+		[{}, false, false],
+		[{"altitude": 5.0e6, "periapsis": 4.0e6, "apoapsis": 6.0e6}, false, false],
+		[{"altitude": 5.0e6, "periapsis": -3.0e5, "apoapsis": 5.0e6}, true, false],
+		[{"altitude": 5.0e6, "periapsis": 5.0e6, "apoapsis": INF}, false, true],
+	]
+	for c in cases:
+		cockpit.update_orbit(true, c[0])
+		if _line(cockpit, "ImpactLabel").visible != c[1] or _line(cockpit, "EscapeLabel").visible != c[2]:
+			print("FAIL _test_orbit_warnings_only_when_needed: %s gave IMPACT %s ESCAPE %s" % [c[0], _line(cockpit, "ImpactLabel").visible, _line(cockpit, "EscapeLabel").visible])
+			result = 1
+	if _line(cockpit, "ImpactLabel").text != "IMPACT" or _line(cockpit, "EscapeLabel").text != "ESCAPE":
+		print("FAIL _test_orbit_warnings_only_when_needed: warning texts wrong")
 		result = 1
 	cockpit.free()
 	return result

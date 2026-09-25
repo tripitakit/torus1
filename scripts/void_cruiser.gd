@@ -63,6 +63,7 @@ func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _process(delta: float) -> void:
+	_sync_planet()
 	_strobe_time += delta
 	var tail_light: OmniLight3D = get_node_or_null("TailLight")
 	if tail_light:
@@ -71,6 +72,7 @@ func _process(delta: float) -> void:
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
+		cockpit.update_orbit(flight_assist, orbit_readout())
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)

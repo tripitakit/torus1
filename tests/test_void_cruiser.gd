@@ -32,6 +32,7 @@ func _init():
 	failures += _test_circular_orbit_holds_without_assist()
 	failures += _test_cruise_without_assist_holds_velocity_in_strong_gravity()
 	failures += _test_orbit_readout_on_the_ring()
+	failures += _test_process_shows_orbit_on_hud()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -730,5 +731,20 @@ func _test_orbit_readout_on_the_ring() -> int:
 		print("FAIL _test_orbit_readout_on_the_ring: a ship without a planet reports an orbit")
 		result = 1
 	loose.free()
+	cruiser.free()
+	return result
+
+func _test_process_shows_orbit_on_hud() -> int:
+	var cruiser := _orbiting_cruiser()
+	cruiser.build_proximity_sensors()
+	cruiser.build_cockpit()
+	cruiser.position = Vector3(cruiser.ring_radius + 10000.0, 0.0, 0.0)
+	cruiser._process(0.016)
+	var altitude: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/AltitudeLabel")
+	var assist: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/AssistLabel")
+	var result := 0
+	if altitude.text != "ALTITUDE  5222 km" or assist.text != "ASSIST  ON":
+		print("FAIL _test_process_shows_orbit_on_hud: '%s' / '%s'" % [altitude.text, assist.text])
+		result = 1
 	cruiser.free()
 	return result
