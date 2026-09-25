@@ -5,6 +5,7 @@ func _init():
 	failures += _test_scene_wiring()
 	failures += _test_game_starts_fullscreen()
 	failures += _test_dock_action_is_bound_to_f()
+	failures += _test_up_and_down_thrust_on_z_and_x()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -120,3 +121,20 @@ func _test_dock_action_is_bound_to_f() -> int:
 			return 0
 	print("FAIL _test_dock_action_is_bound_to_f: 'dock' is not on the F key")
 	return 1
+
+func _key_codes(action: String) -> Array:
+	var codes := []
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			codes.append((event as InputEventKey).physical_keycode)
+	return codes
+
+func _test_up_and_down_thrust_on_z_and_x() -> int:
+	# Dorsal thrust (toward the ship's top) on Z, ventral on X; Space and
+	# Ctrl are free again.
+	var up := _key_codes("move_up")
+	var down := _key_codes("move_down")
+	if up != [KEY_Z] or down != [KEY_X]:
+		print("FAIL _test_up_and_down_thrust_on_z_and_x: move_up keys %s, move_down keys %s, expected [Z] and [X]" % [up, down])
+		return 1
+	return 0
