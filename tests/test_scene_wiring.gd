@@ -7,6 +7,7 @@ func _init():
 	failures += _test_dock_action_is_bound_to_f()
 	failures += _test_up_and_down_thrust_on_z_and_x()
 	failures += _test_flight_assist_on_tab()
+	failures += _test_void_cruiser_orbits_with_the_station()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -146,3 +147,17 @@ func _test_flight_assist_on_tab() -> int:
 		print("FAIL _test_flight_assist_on_tab: flight_assist keys %s, expected [Tab]" % [keys])
 		return 1
 	return 0
+
+func _test_void_cruiser_orbits_with_the_station() -> int:
+	var scene: Node = load("res://scenes/torus1_system.tscn").instantiate()
+	var cruiser: Node = scene.get_node("VoidCruiser")
+	var station: Node = scene.get_node("PlanetSystem/TorusStation")
+	var result := 0
+	if cruiser.get_node_or_null(cruiser.planet_path) != scene.get_node("PlanetSystem/Planet"):
+		print("FAIL _test_void_cruiser_orbits_with_the_station: planet_path does not reach PlanetSystem/Planet")
+		result = 1
+	if not is_equal_approx(cruiser.ring_radius, station.planet_radius + station.orbit_altitude):
+		print("FAIL _test_void_cruiser_orbits_with_the_station: ring_radius %f, station ring at %f" % [cruiser.ring_radius, station.planet_radius + station.orbit_altitude])
+		result = 1
+	scene.free()
+	return result

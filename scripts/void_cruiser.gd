@@ -1,6 +1,14 @@
 extends "res://scripts/flying_craft.gd"
 
 const CockpitScript = preload("res://scripts/cockpit.gd")
+const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
+
+# The planet the ship orbits, and the ring's circular orbit around it. The
+# ship flies in the frame turning with the ring (see orbital_frame.gd); the
+# ring's axis is the planet node's Y axis.
+@export var planet_path: NodePath = NodePath("../PlanetSystem/Planet")
+@export var planet_gm: float = OrbitalFrame.MOON_GM
+@export var ring_radius: float = 6949600.0
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
@@ -36,6 +44,12 @@ var cruise_locked := false
 # Tab. On: drag on motion and spin, and the thrust ramp (arcade flight).
 # Off: pure inertia, plain 1x thrust, no top speed.
 var flight_assist := true
+# The planet as last read from the scene (see _sync_planet); without one,
+# no orbital forces and no orbit readout.
+var has_planet := false
+var planet_center := Vector3.ZERO
+var planet_axis := Vector3.UP
+var planet_radius := 1737400.0
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -87,6 +101,48 @@ func _linear_damping_now() -> float:
 
 func _angular_damping_now() -> float:
 	return angular_damping if flight_assist else 0.0
+
+func _external_acceleration() -> Vector3:
+	# Holding velocity without assist: the thrusters cancel the orbital pulls.
+	if not has_planet or (cruise_locked and not flight_assist):
+		return Vector3.ZERO
+	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega())
+
+func ring_omega() -> Vector3:
+	return planet_axis * OrbitalFrame.orbit_angular_velocity(planet_gm, ring_radius)
+
+# The ship's orbit relative to the stars (see OrbitalFrame.orbit_of).
+func current_orbit() -> Dictionary:
+	var offset := _world_position() - planet_center
+	return OrbitalFrame.orbit_of(offset, OrbitalFrame.inertial_velocity(offset, velocity, ring_omega()), planet_gm)
+
+# Heights above the surface: now, at periapsis, at apoapsis (INF when the
+# orbit is open). Empty without a planet.
+func orbit_readout() -> Dictionary:
+	if not has_planet:
+		return {}
+	var orbit := current_orbit()
+	return {
+		"altitude": (_world_position() - planet_center).length() - planet_radius,
+		"periapsis": orbit.periapsis - planet_radius,
+		"apoapsis": orbit.apoapsis - planet_radius,
+	}
+
+# The origin shift moves the planet: read it again every tick and frame.
+func _sync_planet() -> void:
+	if not is_inside_tree():
+		return
+	var planet := get_node_or_null(planet_path) as Node3D
+	if planet == null or not planet.is_inside_tree():
+		return
+	has_planet = true
+	planet_center = planet.global_position
+	planet_axis = planet.global_transform.basis.y.normalized()
+	if "planet_radius" in planet:
+		planet_radius = planet.planet_radius
+
+func _world_position() -> Vector3:
+	return global_position if is_inside_tree() else position
 
 func build_collision_shape() -> void:
 	var shape_node := CollisionShape3D.new()
@@ -179,4 +235,5 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 	add_child(light)
 
 func _physics_process(delta: float) -> void:
+	_sync_planet()
 	_fly(delta)

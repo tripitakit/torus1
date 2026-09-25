@@ -29,6 +29,9 @@ func _init():
 	failures += _test_without_assist_speed_and_spin_do_not_fade()
 	failures += _test_without_assist_thrust_is_1x_and_unbounded()
 	failures += _test_cruise_without_assist_does_not_push_forward()
+	failures += _test_circular_orbit_holds_without_assist()
+	failures += _test_cruise_without_assist_holds_velocity_in_strong_gravity()
+	failures += _test_orbit_readout_on_the_ring()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -655,5 +658,77 @@ func _test_cruise_without_assist_does_not_push_forward() -> int:
 	if not cruiser.cruise_locked or not cruiser.velocity.is_zero_approx():
 		print("FAIL _test_cruise_without_assist_does_not_push_forward: cruise %s velocity %s" % [cruiser.cruise_locked, cruiser.velocity])
 		result = 1
+	cruiser.free()
+	return result
+
+func _orbiting_cruiser() -> Node3D:
+	# A ship in the ring's frame around a planet at the origin (off-tree, so
+	# the planet is set by hand instead of read from the scene).
+	var cruiser: Node3D = VoidCruiserScript.new()
+	cruiser.has_planet = true
+	cruiser.planet_center = Vector3.ZERO
+	cruiser.planet_axis = Vector3.UP
+	return cruiser
+
+func _test_circular_orbit_holds_without_assist() -> int:
+	# A true circular orbit at 2500 km from the centre, seen from the ring's
+	# frame. Without the forces the ship would fly straight and end ~87 km
+	# higher after 600 s.
+	var cruiser := _orbiting_cruiser()
+	cruiser.flight_assist = false
+	var r0 := 2.5e6
+	var circular: float = sqrt(cruiser.planet_gm / r0)
+	cruiser.position = Vector3(r0, 0.0, 0.0)
+	cruiser.velocity = Vector3(0.0, 0.0, -circular) - cruiser.ring_omega().cross(cruiser.position)
+	for i in range(36000):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	var drift: float = cruiser.position.length() - r0
+	if absf(drift) > 50.0:
+		print("FAIL _test_circular_orbit_holds_without_assist: radius off by %.1f m after 600 s" % drift)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_cruise_without_assist_holds_velocity_in_strong_gravity() -> int:
+	# 2000 km from the centre gravity is ~1.2 m/s^2: the lock cancels it.
+	var cruiser := _orbiting_cruiser()
+	cruiser.flight_assist = false
+	cruiser.position = Vector3(2.0e6, 0.0, 0.0)
+	cruiser.velocity = Vector3(0.0, 0.0, -300.0)
+	_press(cruiser, "cruise")
+	for i in range(120):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if not cruiser.velocity.is_equal_approx(Vector3(0.0, 0.0, -300.0)):
+		print("FAIL _test_cruise_without_assist_holds_velocity_in_strong_gravity: velocity drifted to %s" % cruiser.velocity)
+		result = 1
+	# Z (dorsal thrust) changes it; the lock then holds the new velocity.
+	Input.action_press("move_up")
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	Input.action_release("move_up")
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	if not cruiser.cruise_locked or absf(cruiser.velocity.y - 150.0) > 0.5 or absf(cruiser.velocity.z + 300.0) > 0.5:
+		print("FAIL _test_cruise_without_assist_holds_velocity_in_strong_gravity: after Z velocity %s, cruise %s (expected y ~150, z -300, still locked)" % [cruiser.velocity, cruiser.cruise_locked])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_orbit_readout_on_the_ring() -> int:
+	var cruiser := _orbiting_cruiser()
+	cruiser.position = Vector3(cruiser.ring_radius, 0.0, 0.0)
+	var readout: Dictionary = cruiser.orbit_readout()
+	var expected: float = cruiser.ring_radius - cruiser.planet_radius
+	var result := 0
+	if absf(readout.altitude - expected) > 1.0 or absf(readout.periapsis - expected) > 1.0 or absf(readout.apoapsis - expected) > 1.0:
+		print("FAIL _test_orbit_readout_on_the_ring: %s, expected all about %.1f" % [readout, expected])
+		result = 1
+	var loose: Node3D = VoidCruiserScript.new()
+	if not loose.orbit_readout().is_empty():
+		print("FAIL _test_orbit_readout_on_the_ring: a ship without a planet reports an orbit")
+		result = 1
+	loose.free()
 	cruiser.free()
 	return result
