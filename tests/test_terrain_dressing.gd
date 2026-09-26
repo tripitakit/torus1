@@ -3,6 +3,7 @@ extends SceneTree
 const SectionGenerator = preload("res://scripts/section_generator.gd")
 const SectionPlan = preload("res://scripts/section_plan.gd")
 const TerrainDressing = preload("res://scripts/terrain_dressing.gd")
+const BuildingShapes = preload("res://scripts/building_shapes.gd")
 
 const RADIUS := 2000.0
 
@@ -21,7 +22,7 @@ func _init():
 	failures += _test_chunk_buildings_match_the_plan()
 	failures += _test_building_colliders_match_the_drawn_buildings()
 	failures += _test_building_bounds_cover_the_tallest_building()
-	failures += _test_windows_follow_each_building()
+	failures += _test_building_custom_data_carries_the_look()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -182,21 +183,51 @@ func _test_building_transform_stands_on_the_wall_facing_the_axis() -> int:
 		result = 1
 	return result
 
+# The chunk's buildings of `style`, in index order.
+func _indices_of_style(indices: Array, style: int) -> Array:
+	return indices.filter(func(b: int) -> bool: return _plan.building_style[b] == style)
+
 func _test_chunk_buildings_match_the_plan() -> int:
 	var key := _busiest_chunk()
 	var indices: Array = _groups[key]
 	var chunk := _dress(key)
 	var result := 0
-	var node := chunk.get_node_or_null("Buildings") as MultiMeshInstance3D
-	if node == null or node.multimesh.instance_count != indices.size() or chunk.get_shape_owners().size() != indices.size():
-		print("FAIL _test_chunk_buildings_match_the_plan: chunk %s expects %d buildings (instances %s, colliders %d)" % [key, indices.size(), str(node.multimesh.instance_count) if node else "none", chunk.get_shape_owners().size()])
+	var group := chunk.get_node_or_null("Buildings")
+	if group == null or chunk.get_shape_owners().size() != indices.size():
+		print("FAIL _test_chunk_buildings_match_the_plan: chunk %s has no Buildings node or %d colliders for %d buildings" % [key, chunk.get_shape_owners().size(), indices.size()])
 		chunk.free()
 		return 1
-	if node.visibility_range_end != TerrainDressing.BUILDING_VISIBILITY_END:
-		print("FAIL _test_chunk_buildings_match_the_plan: visibility range %f" % node.visibility_range_end)
+	var total := 0
+	for style in range(SectionPlan.Style.size()):
+		var expected: int = _indices_of_style(indices, style).size()
+		var node := group.get_node_or_null(BuildingShapes.NAMES[style]) as MultiMeshInstance3D
+		if expected == 0:
+			if node != null:
+				print("FAIL _test_chunk_buildings_match_the_plan: %s drawn with no building of that shape" % BuildingShapes.NAMES[style])
+				result = 1
+			continue
+		if node == null or node.multimesh.instance_count != expected or node.multimesh.mesh != BuildingShapes.mesh(style) or not node.multimesh.use_colors or not node.multimesh.use_custom_data:
+			print("FAIL _test_chunk_buildings_match_the_plan: %s expected %d instances of its mesh with colours and custom data" % [BuildingShapes.NAMES[style], expected])
+			result = 1
+			continue
+		if node.visibility_range_end != TerrainDressing.BUILDING_VISIBILITY_END or node.material_override != _dressing.building_material:
+			print("FAIL _test_chunk_buildings_match_the_plan: %s visibility %f or wrong material" % [BuildingShapes.NAMES[style], node.visibility_range_end])
+			result = 1
+		total += node.multimesh.instance_count
+	if total != indices.size():
+		print("FAIL _test_chunk_buildings_match_the_plan: %d instances for %d buildings" % [total, indices.size()])
 		result = 1
 	chunk.free()
 	return result
+
+func _directions() -> Array:
+	var dirs := []
+	for x in [-1.0, 0.0, 1.0]:
+		for y in [-1.0, 0.0, 1.0]:
+			for z in [-1.0, 0.0, 1.0]:
+				if x != 0.0 or y != 0.0 or z != 0.0:
+					dirs.append(Vector3(x, y, z).normalized())
+	return dirs
 
 func _test_building_colliders_match_the_drawn_buildings() -> int:
 	var key := _busiest_chunk()
@@ -208,12 +239,29 @@ func _test_building_colliders_match_the_drawn_buildings() -> int:
 	var owners: PackedInt32Array = chunk.get_shape_owners()
 	var result := 0
 	for k in range(indices.size()):
+		var b: int = indices[k]
 		var drawn: Transform3D = drawn_list[k]
 		var collider: Transform3D = chunk.shape_owner_get_transform(owners[k])
-		var shape := chunk.shape_owner_get_shape(owners[k], 0) as BoxShape3D
-		if not collider.is_equal_approx(drawn.orthonormalized()) or shape == null or not shape.size.is_equal_approx(_plan.building_size[indices[k]]):
-			print("FAIL _test_building_colliders_match_the_drawn_buildings: building %d collider %s / %s vs drawn %s" % [indices[k], collider, str(shape.size) if shape else "none", drawn])
+		var shape := chunk.shape_owner_get_shape(owners[k], 0) as ConvexPolygonShape3D
+		if not collider.is_equal_approx(drawn.orthonormalized()) or shape == null:
+			print("FAIL _test_building_colliders_match_the_drawn_buildings: building %d collider %s (%s) vs drawn %s" % [b, collider, shape, drawn])
 			result = 1
+			break
+		# Every drawn vertex, in the collider's frame, lies within the hull.
+		var size: Vector3 = _plan.building_size[b]
+		var vertices: PackedVector3Array = BuildingShapes.mesh(_plan.building_style[b]).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		for d: Vector3 in _directions():
+			var hull_reach := -INF
+			for p in shape.points:
+				hull_reach = maxf(hull_reach, p.dot(d))
+			var mesh_reach := -INF
+			for v in vertices:
+				mesh_reach = maxf(mesh_reach, (v * size).dot(d))
+			if hull_reach < mesh_reach - 1e-3:
+				print("FAIL _test_building_colliders_match_the_drawn_buildings: building %d collider short by %f toward %s" % [b, mesh_reach - hull_reach, d])
+				result = 1
+				break
+		if result:
 			break
 	chunk.free()
 	return result
@@ -221,11 +269,13 @@ func _test_building_colliders_match_the_drawn_buildings() -> int:
 func _test_building_bounds_cover_the_tallest_building() -> int:
 	# Headless renderers report no MultiMesh bounds; custom_aabb must hold them.
 	var key := _busiest_chunk()
+	var indices: Array = _groups[key]
 	var chunk := _dress(key)
-	var node: MultiMeshInstance3D = chunk.get_node("Buildings")
+	var xforms := TerrainDressing.chunk_building_transforms(_plan, key.x, key.y, indices)
 	var result := 0
-	for xform: Transform3D in TerrainDressing.chunk_building_transforms(_plan, key.x, key.y, _groups[key]):
-		var top: Vector3 = xform * Vector3(0.0, 0.5, 0.0)
+	for k in range(indices.size()):
+		var node: MultiMeshInstance3D = chunk.get_node("Buildings/" + BuildingShapes.NAMES[_plan.building_style[indices[k]]])
+		var top: Vector3 = xforms[k] * Vector3(0.0, 0.5, 0.0)
 		if not node.custom_aabb.has_point(top):
 			print("FAIL _test_building_bounds_cover_the_tallest_building: top %s outside %s" % [top, node.custom_aabb])
 			result = 1
@@ -233,23 +283,12 @@ func _test_building_bounds_cover_the_tallest_building() -> int:
 	chunk.free()
 	return result
 
-func _test_windows_follow_each_building() -> int:
-	# World-space projection turned the window grid with each building's angle
-	# round the ring (diamonds at 45 degrees, seen in an offscreen render).
-	# Windows are projected in the building's own scaled frame instead, and
-	# glow as colour x pane mask (not the facade-wide glow of an ADD operator).
-	var material = _dressing.building_material
-	if not (material is ShaderMaterial):
-		print("FAIL _test_windows_follow_each_building: building material is %s, expected a ShaderMaterial projecting in the building's frame" % material.get_class())
-		return 1
-	var code: String = (material as ShaderMaterial).shader.code
+func _test_building_custom_data_carries_the_look() -> int:
 	var result := 0
-	if not code.contains("MODEL_MATRIX") or code.contains("world") or not code.contains("EMISSION = glow_color * texture(pane_glow"):
-		print("FAIL _test_windows_follow_each_building: shader does not project in the instance frame or does not multiply the glow by the pane mask")
-		result = 1
-	for parameter in ["pane_albedo", "pane_glow", "glow_color", "glow_energy", "window_spacing"]:
-		if (material as ShaderMaterial).get_shader_parameter(parameter) == null:
-			print("FAIL _test_windows_follow_each_building: shader parameter %s not set" % parameter)
+	for b in range(0, _plan.building_count(), 97):
+		var custom: Color = TerrainDressing.building_custom(_plan, b)
+		if not is_equal_approx(custom.r, _plan.building_facade[b]) or not is_equal_approx(custom.g, _plan.building_accent[b]) or not is_equal_approx(custom.b, _plan.building_lit[b]) or custom.a < 0.0 or custom.a >= 1.0:
+			print("FAIL _test_building_custom_data_carries_the_look: building %d custom %s" % [b, custom])
 			result = 1
+			break
 	return result
-

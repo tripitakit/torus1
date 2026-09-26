@@ -86,18 +86,23 @@ func _ahead_point(x: float, z: float, height: float) -> Vector3:
 	return Vector3(cos(angle) * r, sin(angle) * r, start_z + z)
 
 func _test_hits_a_building_and_bounces() -> int:
-	# Toward the tallest tower, just below its roof, along +Z.
+	# Toward a tall tower, a third of the way up (shapes narrow toward the
+	# top), along +Z. At that height other buildings can stand in the way:
+	# take the tallest whose 150 m approach lane is clear.
 	var probe: Node3D = InteriorWorldScript.new()
 	probe.build()
 	var plan = probe.get_section_plan(0)
 	probe.free()
-	var tallest := 0
+	var tallest := -1
 	for b in range(plan.building_count()):
-		if plan.building_size[b].y > plan.building_size[tallest].y:
+		if (tallest < 0 or plan.building_size[b].y > plan.building_size[tallest].y) and _approach_is_clear(plan, b):
 			tallest = b
+	if tallest < 0:
+		print("FAIL _test_hits_a_building_and_bounces: no tower with a clear approach")
+		return 1
 	var size: Vector3 = plan.building_size[tallest]
 	var face_z: float = plan.building_z[tallest] - size.z * 0.5
-	var start: Vector3 = _ahead_point(plan.building_x[tallest], face_z - 100.0, size.y - 3.0)
+	var start: Vector3 = _ahead_point(plan.building_x[tallest], face_z - 100.0, size.y * 0.3)
 	var nodes := _make_world_with_cruiser(start, Vector3(0.0, 0.0, 50.0))
 	var world: Node3D = nodes[0]
 	var cruiser: CharacterBody3D = nodes[1]
@@ -134,3 +139,18 @@ func _test_flies_over_a_lake_without_hitting_anything() -> int:
 		result = 1
 	world.free()
 	return result
+
+# No other building in the 150 m lane in front of building b's -Z face.
+func _approach_is_clear(plan, b: int) -> bool:
+	var size: Vector3 = plan.building_size[b]
+	var face_z: float = plan.building_z[b] - size.z * 0.5
+	for other in range(plan.building_count()):
+		if other == b:
+			continue
+		var other_size: Vector3 = plan.building_size[other]
+		var across: float = absf(plan.building_x[other] - plan.building_x[b])
+		var other_back: float = plan.building_z[other] + other_size.z * 0.5
+		var other_front: float = plan.building_z[other] - other_size.z * 0.5
+		if across < (size.x + other_size.x) * 0.5 + 10.0 and other_back > face_z - 150.0 and other_front < face_z:
+			return false
+	return true

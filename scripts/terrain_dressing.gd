@@ -7,6 +7,7 @@ extends RefCounted
 # separate surfaces less than a metre apart at 2 km, so layers would flicker.
 
 const SectionPlanScript = preload("res://scripts/section_plan.gd")
+const BuildingShapesScript = preload("res://scripts/building_shapes.gd")
 
 const CROP_COLORS := [
 	Color(0.85, 0.72, 0.3),   # wheat
@@ -112,8 +113,8 @@ var field_material: StandardMaterial3D
 var paved_material: StandardMaterial3D
 var water_material: StandardMaterial3D
 var building_material: ShaderMaterial
-var _box_mesh := BoxMesh.new()
-var _box_shapes := {}
+# Convex colliders by (style, whole-metre size): equal buildings share one.
+var _convex_shapes := {}
 
 func _init() -> void:
 	field_material = StandardMaterial3D.new()
@@ -245,42 +246,63 @@ static func chunk_building_transforms(plan, chunk_around: int, chunk_along: int,
 		xforms.append(building_transform(plan.radius, plan.building_x[b] - chunk_x0, plan.building_z[b] - chunk_z0, plan.building_size[b]))
 	return xforms
 
+# Per-instance data for the building shader: facade, light colour, share of
+# windows lit, and a seed in 0..1 that varies the pattern between buildings.
+static func building_custom(plan, b: int) -> Color:
+	return Color(float(plan.building_facade[b]), float(plan.building_accent[b]), plan.building_lit[b], fposmod(b * 0.618034, 1.0))
+
 func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, indices: Array) -> void:
-	var multimesh := MultiMesh.new()
-	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.use_colors = true
-	multimesh.mesh = _box_mesh
-	multimesh.instance_count = indices.size()
 	var xforms := chunk_building_transforms(plan, chunk_around, chunk_along, indices)
-	var tallest := 0.0
+	# Colliders straight on the chunk body, in index order: thousands of
+	# nodes would slow docking down.
+	var by_style := {}
 	for k in range(indices.size()):
 		var b: int = indices[k]
-		var size: Vector3 = plan.building_size[b]
-		var xform: Transform3D = xforms[k]
-		multimesh.set_instance_transform(k, xform)
-		multimesh.set_instance_color(k, plan.building_color[b])
-		# Colliders straight on the chunk body: thousands of nodes would slow
-		# docking down.
+		var style: int = plan.building_style[b]
+		if not by_style.has(style):
+			by_style[style] = []
+		by_style[style].append(k)
 		var owner_id := chunk.create_shape_owner(chunk)
-		chunk.shape_owner_add_shape(owner_id, _box_shape(size))
-		chunk.shape_owner_set_transform(owner_id, xform.orthonormalized())
-		tallest = maxf(tallest, size.y)
-	var instance := MultiMeshInstance3D.new()
-	instance.name = "Buildings"
-	instance.multimesh = multimesh
-	instance.material_override = building_material
-	instance.visibility_range_end = BUILDING_VISIBILITY_END
-	instance.custom_aabb = _chunk_bounds(plan, tallest)
-	chunk.add_child(instance)
+		chunk.shape_owner_add_shape(owner_id, _convex_shape(style, plan.building_size[b]))
+		chunk.shape_owner_set_transform(owner_id, xforms[k].orthonormalized())
+	var group := Node3D.new()
+	group.name = "Buildings"
+	chunk.add_child(group)
+	# One MultiMesh per shape present in the chunk.
+	for style: int in by_style:
+		var ks: Array = by_style[style]
+		var multimesh := MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.use_colors = true
+		multimesh.use_custom_data = true
+		multimesh.mesh = BuildingShapesScript.mesh(style)
+		multimesh.instance_count = ks.size()
+		var tallest := 0.0
+		for i in range(ks.size()):
+			var k: int = ks[i]
+			var b: int = indices[k]
+			multimesh.set_instance_transform(i, xforms[k])
+			multimesh.set_instance_color(i, plan.building_color[b])
+			multimesh.set_instance_custom_data(i, building_custom(plan, b))
+			tallest = maxf(tallest, plan.building_size[b].y)
+		var instance := MultiMeshInstance3D.new()
+		instance.name = BuildingShapesScript.NAMES[style]
+		instance.multimesh = multimesh
+		instance.material_override = building_material
+		instance.visibility_range_end = BUILDING_VISIBILITY_END
+		instance.custom_aabb = _chunk_bounds(plan, tallest)
+		group.add_child(instance)
 
-# Boxes with the same (whole-metre) size share one shape.
-func _box_shape(size: Vector3) -> BoxShape3D:
-	var key := Vector3i(size)
-	if not _box_shapes.has(key):
-		var shape := BoxShape3D.new()
-		shape.size = size
-		_box_shapes[key] = shape
-	return _box_shapes[key]
+func _convex_shape(style: int, size: Vector3) -> ConvexPolygonShape3D:
+	var key := Vector4i(style, roundi(size.x), roundi(size.y), roundi(size.z))
+	if not _convex_shapes.has(key):
+		var points := PackedVector3Array()
+		for p in BuildingShapesScript.hull_points(style):
+			points.append(p * size)
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = points
+		_convex_shapes[key] = shape
+	return _convex_shapes[key]
 
 # The chunk's slice of wall up to its tallest building, in the chunk's frame.
 func _chunk_bounds(plan, tallest: float) -> AABB:

@@ -298,9 +298,13 @@ func _test_sections_come_from_their_ring_indices() -> int:
 		return 1
 	var groups: Dictionary = ahead.group_buildings_by_chunk()
 	var key: Vector2i = groups.keys()[0]
-	var buildings := world.get_node("Chain/Section_0/Chunk_%02d_%02d/Buildings" % [key.x, key.y]) as MultiMeshInstance3D
-	if buildings == null or buildings.multimesh.instance_count != groups[key].size():
-		print("FAIL _test_sections_come_from_their_ring_indices: chunk %s does not hold the plan's %d buildings" % [key, groups[key].size()])
+	var buildings := world.get_node_or_null("Chain/Section_0/Chunk_%02d_%02d/Buildings" % [key.x, key.y])
+	var drawn := 0
+	if buildings != null:
+		for node in buildings.get_children():
+			drawn += (node as MultiMeshInstance3D).multimesh.instance_count
+	if drawn != groups[key].size():
+		print("FAIL _test_sections_come_from_their_ring_indices: chunk %s draws %d of the plan's %d buildings" % [key, drawn, groups[key].size()])
 		result = 1
 	world.free()
 	return result
