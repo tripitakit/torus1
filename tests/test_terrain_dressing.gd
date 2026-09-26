@@ -24,6 +24,7 @@ func _init():
 	failures += _test_building_bounds_cover_the_tallest_building()
 	failures += _test_building_custom_data_carries_the_look()
 	failures += _test_building_shader_reads_each_building()
+	failures += _test_clearing_the_shape_cache_keeps_built_chunks_whole()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -309,4 +310,26 @@ func _test_building_shader_reads_each_building() -> int:
 	if (material as ShaderMaterial).get_shader_parameter("glow_energy") == null:
 		print("FAIL _test_building_shader_reads_each_building: glow_energy not set")
 		result = 1
+	return result
+
+func _test_clearing_the_shape_cache_keeps_built_chunks_whole() -> int:
+	# Convex shapes are cached by (style, size): thousands per section, so
+	# the interior clears the cache as sections go. Chunks already built keep
+	# their own shapes.
+	var dressing = TerrainDressing.new()
+	var chunk := StaticBody3D.new()
+	var key := _busiest_chunk()
+	dressing.dress_chunk(chunk, _plan, key.x, key.y, _groups[key])
+	var cached: int = dressing._convex_shapes.size()
+	dressing.clear_shape_cache()
+	var result := 0
+	if cached == 0 or dressing._convex_shapes.size() != 0:
+		print("FAIL _test_clearing_the_shape_cache_keeps_built_chunks_whole: %d cached, %d left after clearing" % [cached, dressing._convex_shapes.size()])
+		result = 1
+	for owner_id in chunk.get_shape_owners():
+		if chunk.shape_owner_get_shape(owner_id, 0) == null:
+			print("FAIL _test_clearing_the_shape_cache_keeps_built_chunks_whole: a built building lost its collider")
+			result = 1
+			break
+	chunk.free()
 	return result

@@ -340,6 +340,12 @@ func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along:
 		instance.custom_aabb = _chunk_bounds(plan, tallest)
 		group.add_child(instance)
 
+# Forgets the cached collider shapes; built chunks keep theirs. The interior
+# calls it as sections go: sizes rarely repeat across sections, and the
+# cache would otherwise grow by thousands of shapes (~50 MB) per section.
+func clear_shape_cache() -> void:
+	_convex_shapes.clear()
+
 func _convex_shape(style: int, size: Vector3) -> ConvexPolygonShape3D:
 	var key := Vector4i(style, roundi(size.x), roundi(size.y), roundi(size.z))
 	if not _convex_shapes.has(key):

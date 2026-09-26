@@ -298,6 +298,7 @@ func _free_unloading(budget: int) -> void:
 			freed += 1
 		state.node.free()
 		_sections.erase(slot)
+		_dressing.clear_shape_cache()
 
 func _update_bridges() -> void:
 	var wanted := InteriorLayout.bridges_of_sections(get_loaded_section_slots())
