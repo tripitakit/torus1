@@ -2,6 +2,8 @@ extends "res://scripts/flying_craft.gd"
 
 const CockpitScript = preload("res://scripts/cockpit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
+const ApproachGuide = preload("res://scripts/approach_guide.gd")
+const VelocityCross = preload("res://scripts/velocity_cross.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -9,6 +11,9 @@ const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 @export var planet_path: NodePath = NodePath("../PlanetSystem/Planet")
 @export var planet_gm: float = OrbitalFrame.MOON_GM
 @export var ring_radius: float = 6949600.0
+# The station whose nearest dock the approach guide points at.
+@export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
+const APPROACH_COLOR := Color(0.3, 1.0, 0.4, 0.7)
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
@@ -56,6 +61,7 @@ func _ready() -> void:
 	build_navigation_lights()
 	build_headlights()
 	build_cockpit()
+	build_approach_guide()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _process(delta: float) -> void:
@@ -68,6 +74,8 @@ func _process(delta: float) -> void:
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
+		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
+	_update_approach_guide()
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)
@@ -146,6 +154,48 @@ func build_cockpit() -> void:
 	cockpit.position = COCKPIT_POSITION
 	add_child(cockpit)
 	cockpit.build()
+
+# Square gates on the line to the nearest dock (see approach_guide.gd). Not
+# moved by the ship (top_level): _update_approach_guide places and redraws
+# it every frame.
+func build_approach_guide() -> void:
+	var guide := MeshInstance3D.new()
+	guide.name = "ApproachGuide"
+	guide.top_level = true
+	guide.mesh = ArrayMesh.new()
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = APPROACH_COLOR
+	guide.material_override = material
+	guide.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	guide.visible = false
+	add_child(guide)
+
+func _update_approach_guide() -> void:
+	var guide := get_node_or_null("ApproachGuide") as MeshInstance3D
+	if guide == null:
+		return
+	var segments := PackedVector3Array()
+	var station: Node3D = null
+	if is_inside_tree():
+		station = get_node_or_null(station_path) as Node3D
+	if station != null and station.is_inside_tree():
+		var port: Node3D = station.get_docking_port(station.nearest_bridge_index(global_position))
+		segments = ApproachGuide.gate_segments(global_position, port.global_position, global_transform.basis.y)
+	guide.visible = not segments.is_empty()
+	if segments.is_empty():
+		return
+	guide.global_transform = Transform3D(Basis(), global_position)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = segments
+	var mesh := guide.mesh as ArrayMesh
+	mesh.clear_surfaces()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+
+func _world_basis() -> Basis:
+	return global_transform.basis if is_inside_tree() else transform.basis
 
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),

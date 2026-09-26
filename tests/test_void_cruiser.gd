@@ -42,6 +42,8 @@ func _init():
 	failures += _test_nav_light_markers_hidden_from_onboard_cameras()
 	failures += _test_ship_model_is_gone()
 	failures += _test_void_cruiser_flies_with_the_shared_flying_craft()
+	failures += _test_approach_guide_hidden_without_a_station()
+	failures += _test_process_feeds_the_velocity_cross()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -673,6 +675,32 @@ func _test_one_flight_mode_and_no_orbit_line() -> int:
 	var result := 0
 	if "flight_assist" in cruiser or cruiser.has_method("build_orbit_line"):
 		print("FAIL _test_one_flight_mode_and_no_orbit_line: flight assist or the orbit line are still there")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_approach_guide_hidden_without_a_station() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_approach_guide()
+	cruiser._process(0.016)
+	var guide := cruiser.get_node_or_null("ApproachGuide") as MeshInstance3D
+	var result := 0
+	if guide == null or not guide.top_level or guide.visible or not (guide.mesh is ArrayMesh):
+		print("FAIL _test_approach_guide_hidden_without_a_station: guide missing, not top-level, not a mesh, or shown with no station")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_process_feeds_the_velocity_cross() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.build_proximity_sensors()
+	cruiser.build_cockpit()
+	cruiser.velocity = Vector3(2.0, 0.0, -50.0)
+	cruiser._process(0.016)
+	var cross = cruiser.get_node("Cockpit/Hud/VelocityCross")
+	var result := 0
+	if not cross.components.is_equal_approx(Vector3(2.0, 0.0, 50.0)):
+		print("FAIL _test_process_feeds_the_velocity_cross: cross got %s, expected (2, 0, 50)" % cross.components)
 		result = 1
 	cruiser.free()
 	return result
