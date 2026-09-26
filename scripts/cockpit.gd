@@ -1,6 +1,7 @@
 extends Node3D
 
 const CockpitHudFormat = preload("res://scripts/cockpit_hud_format.gd")
+const VelocityCrossScript = preload("res://scripts/velocity_cross.gd")
 
 # The ship's own exterior markers (nav-light spheres) sit on this visual
 # layer; the pilot camera, inside the hull, skips them.
@@ -54,6 +55,10 @@ func set_dock_prompt(available: bool) -> void:
 func set_cruise(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/CruiseLabel") as Label).visible = active
 
+# Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
+func update_velocity(components: Vector3, cruise: bool) -> void:
+	(get_node("Hud/VelocityCross") as Control).set_velocity(components, cruise)
+
 func _build_pilot_camera() -> void:
 	var camera := Camera3D.new()
 	camera.name = "PilotCamera"
@@ -105,6 +110,19 @@ func _build_hud() -> void:
 	var dock_label: Label = lines.get_node("DockLabel")
 	dock_label.text = DOCK_PROMPT_TEXT
 	dock_label.visible = false
+
+	# Bottom-left corner, clear of the text panel at the top.
+	var cross: Control = VelocityCrossScript.new()
+	cross.name = "VelocityCross"
+	cross.anchor_left = 0.0
+	cross.anchor_right = 0.0
+	cross.anchor_top = 1.0
+	cross.anchor_bottom = 1.0
+	cross.offset_left = HUD_MARGIN
+	cross.offset_right = HUD_MARGIN + VelocityCrossScript.PANEL_SIZE.x
+	cross.offset_top = -HUD_MARGIN - VelocityCrossScript.PANEL_SIZE.y
+	cross.offset_bottom = -HUD_MARGIN
+	hud.add_child(cross)
 
 	update_hud(0.0, {})
 

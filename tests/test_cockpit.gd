@@ -13,6 +13,7 @@ func _init():
 	failures += _test_update_hud_missing_distances_show_no_reading()
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
+	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -173,6 +174,24 @@ func _test_cruise_line_shown_only_while_cruising() -> int:
 	cockpit.set_cruise(false)
 	if label.visible:
 		print("FAIL _test_cruise_line_shown_only_while_cruising: not hidden by set_cruise(false)")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_hud_hosts_the_velocity_cross_bottom_left() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var cross := cockpit.get_node_or_null("Hud/VelocityCross") as Control
+	if cross == null:
+		print("FAIL _test_hud_hosts_the_velocity_cross_bottom_left: no Hud/VelocityCross")
+		cockpit.free()
+		return 1
+	if not is_equal_approx(cross.anchor_left, 0.0) or not is_equal_approx(cross.anchor_top, 1.0) or cross.offset_bottom > 0.0 or cross.offset_left < 0.0:
+		print("FAIL _test_hud_hosts_the_velocity_cross_bottom_left: anchors %f/%f offsets %f/%f" % [cross.anchor_left, cross.anchor_top, cross.offset_left, cross.offset_bottom])
+		result = 1
+	cockpit.update_velocity(Vector3(-5.0, 0.0, 120.0), true)
+	if not cross.components.is_equal_approx(Vector3(-5.0, 0.0, 120.0)) or not cross.cruise:
+		print("FAIL _test_hud_hosts_the_velocity_cross_bottom_left: update_velocity did not reach the cross")
 		result = 1
 	cockpit.free()
 	return result
