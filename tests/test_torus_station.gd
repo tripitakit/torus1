@@ -1,6 +1,7 @@
 extends SceneTree
 
 const TorusStationScript = preload("res://scripts/torus_station.gd")
+const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 const PlanetScript = preload("res://scripts/planet.gd")
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 
@@ -25,9 +26,10 @@ func _init():
 	failures += _test_bridges_have_matching_collision_shape()
 	failures += _test_section_collision_shapes_are_shared()
 	failures += _test_bridge_collision_shapes_are_shared()
-	failures += _test_each_bridge_has_a_docking_collar()
-	failures += _test_docking_collars_share_mesh_and_shape()
-	failures += _test_rotate_sections_does_not_rotate_docking_collars()
+	failures += _test_no_docking_collars_left()
+	failures += _test_each_bridge_has_a_dock_pad_flat_on_one_face()
+	failures += _test_dock_pads_share_mesh_and_textured_material()
+	failures += _test_port_turns_with_its_bridge()
 	failures += _test_bridge_radius_and_length_helpers()
 
 	if failures == 0:
@@ -50,8 +52,8 @@ func _test_build_station_child_count() -> int:
 	var station := _make_station(4)
 	station.build_station()
 	var result := 0
-	if station.get_child_count() != 12:
-		print("FAIL _test_build_station_child_count: expected 12 children, got %d" % station.get_child_count())
+	if station.get_child_count() != 8:
+		print("FAIL _test_build_station_child_count: expected 8 children (4 sections, 4 bridges), got %d" % station.get_child_count())
 		result = 1
 	station.free()
 	return result
@@ -81,8 +83,8 @@ func _test_rebuild_does_not_leak() -> int:
 	station.build_station()
 	station.build_station()
 	var result := 0
-	if station.get_child_count() != 12:
-		print("FAIL _test_rebuild_does_not_leak: expected 12 children after rebuild, got %d" % station.get_child_count())
+	if station.get_child_count() != 8:
+		print("FAIL _test_rebuild_does_not_leak: expected 8 children after rebuild, got %d" % station.get_child_count())
 		result = 1
 	station.free()
 	return result
@@ -97,8 +99,8 @@ func _test_build_station_preserves_unrelated_children() -> int:
 	if station.get_node_or_null("Marker") == null:
 		print("FAIL _test_build_station_preserves_unrelated_children: Marker was removed by build_station()")
 		result = 1
-	if station.get_child_count() != 13:
-		print("FAIL _test_build_station_preserves_unrelated_children: expected 13 children (12 generated + Marker), got %d" % station.get_child_count())
+	if station.get_child_count() != 9:
+		print("FAIL _test_build_station_preserves_unrelated_children: expected 9 children (8 generated + Marker), got %d" % station.get_child_count())
 		result = 1
 	station.free()
 	return result
@@ -360,77 +362,6 @@ func _test_bridge_collision_shapes_are_shared() -> int:
 	station.free()
 	return result
 
-func _test_each_bridge_has_a_docking_collar() -> int:
-	# Small station: bridge radius 9 -> collar radii 9.45 / 11.25, port at 11.34.
-	var station := _make_station(4)
-	station.build_station()
-	var result := 0
-	for i in range(4):
-		var collar := station.get_node_or_null("DockingCollar%d" % i)
-		if collar == null or not (collar is StaticBody3D):
-			print("FAIL _test_each_bridge_has_a_docking_collar: no DockingCollar%d StaticBody3D" % i)
-			result = 1
-			continue
-		var bridge: Node3D = station.get_node("Bridge%d" % i)
-		if not (collar as Node3D).transform.is_equal_approx(bridge.transform):
-			print("FAIL _test_each_bridge_has_a_docking_collar: DockingCollar%d transform differs from Bridge%d" % [i, i])
-			result = 1
-		var mesh_node := collar.get_node_or_null("Mesh") as MeshInstance3D
-		if mesh_node == null or not (mesh_node.mesh is TorusMesh):
-			print("FAIL _test_each_bridge_has_a_docking_collar: DockingCollar%d has no TorusMesh" % i)
-			result = 1
-		else:
-			var torus: TorusMesh = mesh_node.mesh
-			if not is_equal_approx(torus.inner_radius, 9.45) or not is_equal_approx(torus.outer_radius, 11.25):
-				print("FAIL _test_each_bridge_has_a_docking_collar: radii %f / %f expected 9.45 / 11.25" % [torus.inner_radius, torus.outer_radius])
-				result = 1
-		var collision := collar.get_node_or_null("Collision") as CollisionShape3D
-		if collision == null or not (collision.shape is ConcavePolygonShape3D):
-			print("FAIL _test_each_bridge_has_a_docking_collar: DockingCollar%d has no ConcavePolygonShape3D" % i)
-			result = 1
-		var port := collar.get_node_or_null("Port") as Node3D
-		if port == null or not port.position.is_equal_approx(Vector3(11.34, 0.0, 0.0)):
-			print("FAIL _test_each_bridge_has_a_docking_collar: DockingCollar%d Port missing or at %s, expected (11.34, 0, 0)" % [i, str(port.position) if port else "none"])
-			result = 1
-		elif port.get_node_or_null("Platform") == null:
-			print("FAIL _test_each_bridge_has_a_docking_collar: DockingCollar%d/Port has no Platform" % i)
-			result = 1
-	station.free()
-	return result
-
-func _test_docking_collars_share_mesh_and_shape() -> int:
-	var station := _make_station(4)
-	station.build_station()
-	var result := 0
-	var mesh0: Mesh = (station.get_node("DockingCollar0/Mesh") as MeshInstance3D).mesh
-	var mesh1: Mesh = (station.get_node("DockingCollar1/Mesh") as MeshInstance3D).mesh
-	var shape0: Shape3D = (station.get_node("DockingCollar0/Collision") as CollisionShape3D).shape
-	var shape1: Shape3D = (station.get_node("DockingCollar1/Collision") as CollisionShape3D).shape
-	if mesh0 == null or mesh0 != mesh1 or shape0 == null or shape0 != shape1:
-		print("FAIL _test_docking_collars_share_mesh_and_shape: collars do not share one mesh and one shape")
-		result = 1
-	station.free()
-	return result
-
-func _test_rotate_sections_does_not_rotate_docking_collars() -> int:
-	# The collar must stay still so its port can be docked at.
-	var station := _make_station(4)
-	station.build_station()
-	var collar: Node3D = station.get_node("DockingCollar0")
-	var bridge: Node3D = station.get_node("Bridge0")
-	var collar_before: Transform3D = collar.transform
-	var bridge_before: Transform3D = bridge.transform
-	station._rotate_sections(1.0)
-	var result := 0
-	if not collar.transform.is_equal_approx(collar_before):
-		print("FAIL _test_rotate_sections_does_not_rotate_docking_collars: the collar rotated")
-		result = 1
-	if bridge.transform.is_equal_approx(bridge_before):
-		print("FAIL _test_rotate_sections_does_not_rotate_docking_collars: the bridge did not rotate (test setup broken)")
-		result = 1
-	station.free()
-	return result
-
 func _test_bridge_radius_and_length_helpers() -> int:
 	var station := _make_station(4)
 	var result := 0
@@ -440,6 +371,99 @@ func _test_bridge_radius_and_length_helpers() -> int:
 	var expected_length: float = TorusGeometry.compute_bridge_length(500.0, 1500.0, 4, 80.0)
 	if not is_equal_approx(station.get_bridge_length(), expected_length):
 		print("FAIL _test_bridge_radius_and_length_helpers: bridge length %f expected %f" % [station.get_bridge_length(), expected_length])
+		result = 1
+	station.free()
+	return result
+
+func _test_no_docking_collars_left() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var result := 0
+	for child in station.get_children():
+		if String(child.name).begins_with("DockingCollar"):
+			print("FAIL _test_no_docking_collars_left: %s still there" % child.name)
+			result = 1
+			break
+	station.free()
+	return result
+
+# The two top-ring vertices of the bridge prism closest to `direction`
+# (bridge-local, perpendicular to the axis).
+func _face_vertices(bridge: Node3D, direction: Vector3) -> Array:
+	var mesh: CylinderMesh = (bridge.get_node("Mesh") as MeshInstance3D).mesh
+	var vertices: PackedVector3Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var top := mesh.height * 0.5
+	var ring := []
+	for v in vertices:
+		if is_equal_approx(v.y, top) and Vector2(v.x, v.z).length() > mesh.top_radius * 0.99 and not ring.has(v):
+			ring.append(v)
+	ring.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.normalized().dot(direction) > b.normalized().dot(direction))
+	return [ring[0], ring[1]]
+
+func _test_each_bridge_has_a_dock_pad_flat_on_one_face() -> int:
+	# Small station: bridge radius 9. The pad lies on one flat face of the
+	# prism, lifted by PAD_LIFT_RATIO of the radius, inside the face's width.
+	var station := _make_station(4)
+	station.build_station()
+	var result := 0
+	var lift: float = 9.0 * TorusStationScript.PAD_LIFT_RATIO
+	for i in range(4):
+		var bridge: Node3D = station.get_node("Bridge%d" % i)
+		var pad := bridge.get_node_or_null("DockPad") as MeshInstance3D
+		var port := bridge.get_node_or_null("Port") as Node3D
+		if pad == null or port == null or not (pad.mesh is PlaneMesh):
+			print("FAIL _test_each_bridge_has_a_dock_pad_flat_on_one_face: Bridge%d has no DockPad plane or no Port" % i)
+			result = 1
+			continue
+		var normal: Vector3 = pad.transform.basis.y.normalized()
+		var face: Array = _face_vertices(bridge, normal)
+		var plane_distance: float = face[0].dot(normal)
+		var face_width: float = (face[0] - face[1]).length()
+		if absf(face[1].dot(normal) - plane_distance) > 1e-3 or absf(normal.y) > 1e-6:
+			print("FAIL _test_each_bridge_has_a_dock_pad_flat_on_one_face: Bridge%d pad is not parallel to a prism face" % i)
+			result = 1
+		var plane: PlaneMesh = pad.mesh
+		for corner in [Vector3(-0.5, 0.0, -0.5), Vector3(0.5, 0.0, -0.5), Vector3(-0.5, 0.0, 0.5), Vector3(0.5, 0.0, 0.5)]:
+			var p: Vector3 = pad.transform * Vector3(corner.x * plane.size.x, 0.0, corner.z * plane.size.y)
+			var across: float = absf((p - normal * p.dot(normal)).dot((face[0] - face[1]).normalized()))
+			if absf(p.dot(normal) - plane_distance - lift) > 1e-3 or across > face_width * 0.5:
+				print("FAIL _test_each_bridge_has_a_dock_pad_flat_on_one_face: Bridge%d pad corner %s is %.4f above the face (expected %.4f) and %.3f across (face half-width %.3f)" % [i, p, p.dot(normal) - plane_distance, lift, across, face_width * 0.5])
+				result = 1
+				break
+		if not port.position.is_equal_approx(pad.position) or not port.transform.basis.x.normalized().is_equal_approx(normal) or not port.transform.basis.y.normalized().is_equal_approx(Vector3.UP):
+			print("FAIL _test_each_bridge_has_a_dock_pad_flat_on_one_face: Bridge%d port not at the pad centre facing out along the axis" % i)
+			result = 1
+	station.free()
+	return result
+
+func _test_dock_pads_share_mesh_and_textured_material() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var pad0: MeshInstance3D = station.get_node("Bridge0/DockPad")
+	var pad1: MeshInstance3D = station.get_node("Bridge1/DockPad")
+	var result := 0
+	if pad0.mesh != pad1.mesh or pad0.material_override != pad1.material_override or pad0.material_override != DockPadTexture.pad_material():
+		print("FAIL _test_dock_pads_share_mesh_and_textured_material: pads do not share the mesh and the dock pad material")
+		result = 1
+	if not is_equal_approx(pad0.visibility_range_end, 9.0 * TorusStationScript.PAD_VISIBLE_RATIO):
+		print("FAIL _test_dock_pads_share_mesh_and_textured_material: pad drawn up to %f m" % pad0.visibility_range_end)
+		result = 1
+	station.free()
+	return result
+
+func _test_port_turns_with_its_bridge() -> int:
+	var station := _make_station(4)
+	station.build_station()
+	var bridge: Node3D = station.get_node("Bridge0")
+	var port: Node3D = station.get_docking_port(0)
+	var result := 0
+	if port.get_parent() != bridge:
+		print("FAIL _test_port_turns_with_its_bridge: the port is not on the bridge")
+		result = 1
+	var before: Vector3 = bridge.transform * port.position
+	station._rotate_sections(1.0)
+	if (bridge.transform * port.position).is_equal_approx(before):
+		print("FAIL _test_port_turns_with_its_bridge: the port did not move as the bridge turned")
 		result = 1
 	station.free()
 	return result

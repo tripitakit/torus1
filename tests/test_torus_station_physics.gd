@@ -30,7 +30,7 @@ func _initialize():
 	_failures += await _test_rotating_hull_resting_on_section_does_not_jump()
 	_failures += await _test_rotating_hull_resting_on_bridge_does_not_jump()
 	_failures += await _test_nearest_bridge_index_finds_each_port()
-	_failures += await _test_rotating_hull_resting_on_docking_collar_does_not_jump()
+	_failures += await _test_port_velocity_matches_its_motion()
 	_failures += await _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section()
 
 	if _failures == 0:
@@ -240,30 +240,14 @@ func _test_nearest_bridge_index_finds_each_port() -> int:
 	var result := 0
 	for i in range(station.num_sections):
 		var port: Node3D = station.get_docking_port(i)
-		if port != station.get_node("DockingCollar%d/Port" % i):
-			print("FAIL _test_nearest_bridge_index_finds_each_port: get_docking_port(%d) is not DockingCollar%d/Port" % [i, i])
+		if port != station.get_node("Bridge%d/Port" % i):
+			print("FAIL _test_nearest_bridge_index_finds_each_port: get_docking_port(%d) is not Bridge%d/Port" % [i, i])
 			result = 1
 			continue
 		var index: int = station.nearest_bridge_index(port.global_position)
 		if index != i:
 			print("FAIL _test_nearest_bridge_index_finds_each_port: port %d resolved to bridge %d" % [i, index])
 			result = 1
-	station.free()
-	return result
-
-func _test_rotating_hull_resting_on_docking_collar_does_not_jump() -> int:
-	# Same failure mode as the teleport bug, on the collar's trimesh shape.
-	var station := _make_full_scale_station()
-	root.add_child(station)
-	station.set_process(false)
-	station.build_station()
-	await physics_frame
-	var outer_radius: float = station.get_bridge_radius() * 1.25
-	var biggest: float = await _biggest_shove_while_turning_on(station.get_node("DockingCollar0"), outer_radius, 0.0)
-	var result := 0
-	if biggest > 2.0:
-		print("FAIL _test_rotating_hull_resting_on_docking_collar_does_not_jump: a still, turning hull was shoved %.1f m in one tick" % biggest)
-		result = 1
 	station.free()
 	return result
 
@@ -293,5 +277,24 @@ func _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section() -> int:
 		print("FAIL _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section: came within %.1f m of the axis (hull at %.1f), outward speed %.1f" % [closest, station.section_radius, cruiser.velocity.dot(outward)])
 		result = 1
 	cruiser.free()
+	station.free()
+	return result
+
+func _test_port_velocity_matches_its_motion() -> int:
+	# The pad spins with the bridge; docking needs its velocity to match it.
+	var station := _make_full_scale_station()
+	root.add_child(station)
+	station.set_process(false)
+	station.build_station()
+	await process_frame
+	var port: Node3D = station.get_docking_port(0)
+	var velocity: Vector3 = station.get_docking_port_velocity(0)
+	var before: Vector3 = port.global_position
+	station._rotate_sections(0.01)
+	var measured: Vector3 = (port.global_position - before) / 0.01
+	var result := 0
+	if velocity.length() < 30.0 or velocity.distance_to(measured) > velocity.length() * 0.01:
+		print("FAIL _test_port_velocity_matches_its_motion: reported %s, measured %s" % [velocity, measured])
+		result = 1
 	station.free()
 	return result

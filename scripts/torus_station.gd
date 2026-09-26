@@ -2,6 +2,7 @@
 extends Node3D
 
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
+const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 
 @export var planet_radius: float = 1737400.0
 @export var orbit_altitude: float = 5212200.0
@@ -25,11 +26,14 @@ func _process(delta: float) -> void:
 func _rotate_sections(delta: float) -> void:
 	# Bridges spin rigidly together with the sections they connect: the
 	# whole ring rotates as one piece.
-	var target_gravity := TorusGeometry.GRAVITY_1G * target_gravity_g
-	var omega := TorusGeometry.compute_section_angular_velocity(section_radius, target_gravity)
+	var omega := _spin_rate()
 	for child in get_children():
 		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
 			child.rotate_object_local(Vector3.UP, omega * delta)
+
+# How fast sections and bridges spin (rad/s) for the target gravity.
+func _spin_rate() -> float:
+	return TorusGeometry.compute_section_angular_velocity(section_radius, TorusGeometry.GRAVITY_1G * target_gravity_g)
 
 func _effective_planet_radius() -> float:
 	if planet_node.is_empty():
@@ -50,7 +54,17 @@ func nearest_bridge_index(world_position: Vector3) -> int:
 	return TorusGeometry.compute_nearest_bridge_index(to_local(world_position), num_sections)
 
 func get_docking_port(bridge_index: int) -> Node3D:
-	return get_node("DockingCollar%d/Port" % bridge_index)
+	return get_node("Bridge%d/Port" % bridge_index)
+
+# How fast a point of bridge `bridge_index` moves as the bridge spins:
+# spin x (point - bridge centre). In-tree only (global positions).
+func get_bridge_point_velocity(bridge_index: int, world_point: Vector3) -> Vector3:
+	var bridge: Node3D = get_node("Bridge%d" % bridge_index)
+	var spin: Vector3 = bridge.global_transform.basis.y.normalized() * _spin_rate()
+	return spin.cross(world_point - bridge.global_position)
+
+func get_docking_port_velocity(bridge_index: int) -> Vector3:
+	return get_bridge_point_velocity(bridge_index, get_docking_port(bridge_index).global_position)
 
 const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
 const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
@@ -60,14 +74,17 @@ const HULL_AO_PATH := "res://assets/textures/station/ao.png"
 const HULL_TILE_SIZE := 500.0
 const HULL_LIGHTS_ENERGY := 3.0
 const BRIDGE_RADIUS_RATIO := 0.3
-# A docking collar around the middle of every bridge. It does not spin, so its
-# port stays still for docking. Sizes are fractions of the bridge radius.
-const COLLAR_INNER_RATIO := 1.05
-const COLLAR_OUTER_RATIO := 1.25
-const PORT_OFFSET_RATIO := 0.01
-const PORT_SIZE_RATIO := Vector3(0.007, 0.1, 0.1)
-const PORT_COLOR := Color(0.2, 1.0, 0.35)
-const COLLAR_COLOR := Color(0.35, 0.37, 0.4)
+# A docking pad on one flat face of every bridge prism, halfway along it,
+# spinning with the bridge. BRIDGE_SEGMENTS faces; PAD_FACE is the one just
+# past local +X. The pad sits PAD_LIFT_RATIO of the radius above the face
+# (0.3 m on a 600 m bridge): it reads as painted on, and the depth buffer
+# still separates it from the face up to PAD_VISIBLE_RATIO radii (3 km),
+# past which it is not drawn (a couple of pixels anyway).
+const BRIDGE_SEGMENTS := 64
+const PAD_FACE := 15
+const PAD_FACE_FILL := 0.985
+const PAD_LIFT_RATIO := 0.0005
+const PAD_VISIBLE_RATIO := 5.0
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -104,7 +121,7 @@ func _build_prism_shape(mesh: CylinderMesh) -> ConvexPolygonShape3D:
 
 func build_station() -> void:
 	for child in get_children():
-		if child.name.begins_with("Section") or child.name.begins_with("Bridge") or child.name.begins_with("DockingCollar"):
+		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
 			remove_child(child)
 			child.queue_free()
 
@@ -153,8 +170,12 @@ func build_station() -> void:
 	bridge_mesh.top_radius = get_bridge_radius()
 	bridge_mesh.bottom_radius = get_bridge_radius()
 	bridge_mesh.height = max(bridge_length, 0.01)
+	bridge_mesh.radial_segments = BRIDGE_SEGMENTS
 
 	var bridge_shape := _build_prism_shape(bridge_mesh)
+	var pad_face := _pad_face()
+	var pad_mesh := PlaneMesh.new()
+	pad_mesh.size = Vector2.ONE * pad_face.width * PAD_FACE_FILL
 
 	for i in range(bridge_transforms.size()):
 		var bridge := AnimatableBody3D.new()
@@ -177,54 +198,39 @@ func build_station() -> void:
 		bridge_collision.shape = bridge_shape
 		bridge.add_child(bridge_collision)
 
+		_add_dock(bridge, pad_mesh, pad_face)
+
 		bridge.transform = bridge_transforms[i]
 		add_child(bridge)
 
-	_build_docking_collars(bridge_transforms)
+# The pad's face of the bridge prism: outward normal, distance of its plane
+# from the axis, and its width (CylinderMesh puts vertex i at the sin/cos of
+# i * TAU / segments; the face runs from vertex PAD_FACE to the next).
+func _pad_face() -> Dictionary:
+	var step := TAU / BRIDGE_SEGMENTS
+	var angle := (PAD_FACE + 0.5) * step
+	var radius := get_bridge_radius()
+	return {
+		"normal": Vector3(sin(angle), 0.0, cos(angle)),
+		"distance": radius * cos(step * 0.5),
+		"width": 2.0 * radius * sin(step * 0.5),
+	}
 
-func _build_docking_collars(bridge_transforms: Array[Transform3D]) -> void:
-	var bridge_radius := get_bridge_radius()
-	var collar_mesh := TorusMesh.new()
-	collar_mesh.inner_radius = bridge_radius * COLLAR_INNER_RATIO
-	collar_mesh.outer_radius = bridge_radius * COLLAR_OUTER_RATIO
-	# Triangle shape from the visible mesh: no analytic shape (see the
-	# CylinderShape3D teleport note on _build_prism_shape).
-	var collar_shape := collar_mesh.create_trimesh_shape()
-	var collar_material := StandardMaterial3D.new()
-	collar_material.albedo_color = COLLAR_COLOR
-	collar_material.metallic = 0.6
-	collar_material.roughness = 0.4
-
-	var port_mesh := BoxMesh.new()
-	port_mesh.size = PORT_SIZE_RATIO * bridge_radius
-	# Glowing, not a real light: 2000 extra lights would cost too much.
-	var port_material := StandardMaterial3D.new()
-	port_material.albedo_color = PORT_COLOR
-	port_material.emission_enabled = true
-	port_material.emission = PORT_COLOR
-	port_material.emission_energy_multiplier = 3.0
-
-	for i in range(bridge_transforms.size()):
-		# Named neither Section nor Bridge: _rotate_sections leaves it still.
-		var collar := StaticBody3D.new()
-		collar.name = "DockingCollar%d" % i
-		var mesh_instance := MeshInstance3D.new()
-		mesh_instance.name = "Mesh"
-		mesh_instance.mesh = collar_mesh
-		mesh_instance.material_override = collar_material
-		collar.add_child(mesh_instance)
-		var collision := CollisionShape3D.new()
-		collision.name = "Collision"
-		collision.shape = collar_shape
-		collar.add_child(collision)
-		var port := Node3D.new()
-		port.name = "Port"
-		port.position = Vector3(collar_mesh.outer_radius + bridge_radius * PORT_OFFSET_RATIO, 0.0, 0.0)
-		var platform := MeshInstance3D.new()
-		platform.name = "Platform"
-		platform.mesh = port_mesh
-		platform.material_override = port_material
-		port.add_child(platform)
-		collar.add_child(port)
-		collar.transform = bridge_transforms[i]
-		add_child(collar)
+func _add_dock(bridge: Node3D, pad_mesh: PlaneMesh, face: Dictionary) -> void:
+	var normal: Vector3 = face.normal
+	var across := Vector3(normal.z, 0.0, -normal.x)
+	var centre: Vector3 = normal * (face.distance + get_bridge_radius() * PAD_LIFT_RATIO)
+	var pad := MeshInstance3D.new()
+	pad.name = "DockPad"
+	pad.mesh = pad_mesh
+	pad.material_override = DockPadTexture.pad_material()
+	# The plane faces its +Y: turn that to the face's normal.
+	pad.transform = Transform3D(Basis(across, normal, across.cross(normal)), centre)
+	pad.visibility_range_end = get_bridge_radius() * PAD_VISIBLE_RATIO
+	pad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bridge.add_child(pad)
+	# Docking and undocking read the port: x out of the face, y along the axis.
+	var port := Node3D.new()
+	port.name = "Port"
+	port.transform = Transform3D(Basis(normal, Vector3.UP, normal.cross(Vector3.UP)), centre)
+	bridge.add_child(port)
