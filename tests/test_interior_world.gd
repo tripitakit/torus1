@@ -2,6 +2,7 @@ extends SceneTree
 
 const InteriorWorldScript = preload("res://scripts/interior_world.gd")
 const SectionGenerator = preload("res://scripts/section_generator.gd")
+const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -17,7 +18,7 @@ func _init():
 	failures += _test_terrain_chunks_tile_the_whole_wall()
 	failures += _test_both_caps_open_and_facing_in()
 	failures += _test_twenty_suns_per_section_on_the_axis()
-	failures += _test_every_bridge_has_its_tube_lights_and_dock()
+	failures += _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights()
 	failures += _test_spawn_above_the_docked_bridge_platform()
 	failures += _test_nearest_dock_slot_and_ring_numbers()
 	failures += _test_only_the_named_sign_lights()
@@ -200,7 +201,7 @@ func _test_twenty_suns_per_section_on_the_axis() -> int:
 	world.free()
 	return result
 
-func _test_every_bridge_has_its_tube_lights_and_dock() -> int:
+func _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights() -> int:
 	var world := _make_world()
 	var result := 0
 	for slot in [-1, 0, 1]:
@@ -208,23 +209,26 @@ func _test_every_bridge_has_its_tube_lights_and_dock() -> int:
 		for k in range(4):
 			var segment := bridge.get_node_or_null("Segment_%d" % k) as StaticBody3D
 			if segment == null or not is_equal_approx(segment.position.z, -BRIDGE_LENGTH * 0.5 + k * BRIDGE_LENGTH / 4.0):
-				print("FAIL _test_every_bridge_has_its_tube_lights_and_dock: bridge %d Segment_%d missing or misplaced" % [slot, k])
+				print("FAIL _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights: bridge %d Segment_%d missing or misplaced" % [slot, k])
 				result = 1
 				continue
 			var mesh: Mesh = (segment.get_node("Mesh") as MeshInstance3D).mesh
-			result = maxi(result, _check_wall("_test_every_bridge_has_its_tube_lights_and_dock", mesh, _world_transform(segment), BRIDGE_RADIUS))
-		for k in range(3):
-			var light := bridge.get_node_or_null("Light_%d" % k) as OmniLight3D
-			if light == null or not light.position.is_equal_approx(Vector3(0.0, 0.0, BRIDGE_LENGTH * (k - 1) / 3.0)):
-				print("FAIL _test_every_bridge_has_its_tube_lights_and_dock: bridge %d Light_%d missing or misplaced" % [slot, k])
-				result = 1
+			result = maxi(result, _check_wall("_test_every_bridge_has_its_tube_and_textured_dock_but_no_lights", mesh, _world_transform(segment), BRIDGE_RADIUS))
+		# No suns of its own: the tube is lit by the sections' suns.
+		if bridge.find_children("Light_*", "OmniLight3D", false, false).size() > 0:
+			print("FAIL _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights: bridge %d still has its own lights" % slot)
+			result = 1
+		var platform_mesh := bridge.get_node_or_null("Dock/Platform/Mesh") as MeshInstance3D
+		if platform_mesh == null or platform_mesh.material_override != DockPadTexture.platform_material(60.0):
+			print("FAIL _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights: bridge %d platform does not wear the dock pad texture" % slot)
+			result = 1
 		var platform := bridge.get_node_or_null("Dock/Platform") as StaticBody3D
 		var undock_sign := bridge.get_node_or_null("Dock/Sign") as Label3D
 		if platform == null or not platform.position.is_equal_approx(Vector3(0.0, -BRIDGE_RADIUS + 2.0, 0.0)) or bridge.get_node_or_null("Dock/Light") == null:
-			print("FAIL _test_every_bridge_has_its_tube_lights_and_dock: bridge %d dock platform or light wrong" % slot)
+			print("FAIL _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights: bridge %d dock platform or light wrong" % slot)
 			result = 1
 		if undock_sign == null or undock_sign.text != "UNDOCK  [F]" or not undock_sign.modulate.is_equal_approx(InteriorWorldScript.SIGN_IDLE_COLOR):
-			print("FAIL _test_every_bridge_has_its_tube_lights_and_dock: bridge %d sign missing, wrong text or not idle" % slot)
+			print("FAIL _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights: bridge %d sign missing, wrong text or not idle" % slot)
 			result = 1
 	world.free()
 	return result
@@ -334,9 +338,6 @@ func _axis_lights(world: Node3D) -> Array:
 	for slot in world.get_loaded_section_slots():
 		for sun in world.get_node("Chain/Section_%d" % slot).find_children("Sun_*", "Node3D", false, false):
 			lights.append(sun.get_node("Light"))
-	for slot in world.get_bridge_slots():
-		for k in range(3):
-			lights.append(world.get_node("Chain/Bridge_%d/Light_%d" % [slot, k]))
 	return lights
 
 func _test_axis_lights_reach_the_ground_without_distance_falloff() -> int:

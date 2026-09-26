@@ -7,7 +7,6 @@ const SECTION_RADIUS := 2000.0
 const SECTION_LENGTH := 20000.0
 const BRIDGE_RADIUS := 600.0
 const SUN_RANGE := 2600.0
-const BRIDGE_LIGHT_RANGE := 900.0
 
 var _bridge_length: float = TorusGeometry.compute_bridge_length(1737400.0, 5212200.0, 2000, SECTION_LENGTH)
 
@@ -36,8 +35,7 @@ func _all_axis_lights() -> PackedVector2Array:
 		var center: float = InteriorLayout.section_center_z(_bridge_length, SECTION_LENGTH, side)
 		for sun in InteriorLayout.sun_positions(center, SECTION_LENGTH, 1000.0):
 			lights.append(Vector2(sun.z, SUN_RANGE))
-	for k in range(3):
-		lights.append(Vector2(_bridge_length * (k - 1) / 3.0, BRIDGE_LIGHT_RANGE))
+	# Bridges have no lights of their own: the sections' suns light them.
 	return lights
 
 func _test_sections_sit_either_side_of_the_bridge() -> int:

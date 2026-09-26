@@ -9,6 +9,7 @@ extends Node3D
 const InteriorLayout = preload("res://scripts/interior_layout.gd")
 const SectionGeneratorScript = preload("res://scripts/section_generator.gd")
 const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
+const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -53,10 +54,10 @@ const SUN_ENERGY := 1.5
 const AXIS_LIGHT_ATTENUATION := 0.0
 const SUN_COLOR := Color(1.0, 0.93, 0.8)
 const SUN_GLOBE_RADIUS := 30.0
-const BRIDGE_LIGHT_RANGE := 900.0
-const BRIDGE_LIGHT_ENERGY := 1.0
-# Up to 76 lights are loaded; the renderer draws at most 64. Past 25 km from
-# the camera a light is gone, which leaves about 54.
+# Bridges have no suns of their own: the nearest suns of the sections on
+# either side (500 m inside them) reach the whole tube. With 3 sections and
+# 4 bridges loaded that is 64 lights (60 suns, 4 dock lights), the most the
+# renderer draws; past 25 km from the camera a light is gone anyway.
 const LIGHT_FADE_BEGIN := 24000.0
 const LIGHT_FADE_LENGTH := 1000.0
 
@@ -93,7 +94,6 @@ class SectionLoad:
 
 var _chain: Node3D
 var _structure_material: StandardMaterial3D
-var _dock_material: StandardMaterial3D
 var _sun_mesh: SphereMesh
 var _sun_material: StandardMaterial3D
 var _chunk_shape: Shape3D
@@ -107,10 +107,6 @@ var _bridges := {}
 
 func build() -> void:
 	_structure_material = _make_material(STRUCTURE_COLOR, 0.6)
-	_dock_material = _make_material(SIGN_READY_COLOR, 0.5)
-	_dock_material.emission_enabled = true
-	_dock_material.emission = SIGN_READY_COLOR
-	_dock_material.emission_energy_multiplier = 1.5
 	_sun_mesh = SphereMesh.new()
 	_sun_mesh.radius = SUN_GLOBE_RADIUS
 	_sun_mesh.height = SUN_GLOBE_RADIUS * 2.0
@@ -390,17 +386,6 @@ func _build_bridge(slot: int) -> Node3D:
 		segment.position = Vector3(0.0, 0.0, -bridge_length * 0.5 + k * segment_length)
 		_add_mesh_and_collision(segment, _tube_mesh, _tube_shape, _structure_material)
 		bridge.add_child(segment)
-	for k in range(3):
-		var light := OmniLight3D.new()
-		light.name = "Light_%d" % k
-		light.position = Vector3(0.0, 0.0, bridge_length * (k - 1) / 3.0)
-		light.light_color = SUN_COLOR
-		light.light_energy = BRIDGE_LIGHT_ENERGY
-		light.omni_range = BRIDGE_LIGHT_RANGE
-		light.omni_attenuation = AXIS_LIGHT_ATTENUATION
-		light.shadow_enabled = false
-		_fade_with_distance(light)
-		bridge.add_child(light)
 	bridge.add_child(_build_dock())
 	return bridge
 
@@ -415,7 +400,8 @@ func _build_dock() -> Node3D:
 	box.size = DOCK_PLATFORM_SIZE
 	var box_shape := BoxShape3D.new()
 	box_shape.size = DOCK_PLATFORM_SIZE
-	_add_mesh_and_collision(platform, box, box_shape, _dock_material)
+	# Same sci-fi pad as outside, on the box's top.
+	_add_mesh_and_collision(platform, box, box_shape, DockPadTexture.platform_material(DOCK_PLATFORM_SIZE.x))
 	dock.add_child(platform)
 
 	var light := OmniLight3D.new()
