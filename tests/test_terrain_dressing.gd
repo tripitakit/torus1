@@ -23,6 +23,7 @@ func _init():
 	failures += _test_building_colliders_match_the_drawn_buildings()
 	failures += _test_building_bounds_cover_the_tallest_building()
 	failures += _test_building_custom_data_carries_the_look()
+	failures += _test_building_shader_reads_each_building()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -291,4 +292,21 @@ func _test_building_custom_data_carries_the_look() -> int:
 			print("FAIL _test_building_custom_data_carries_the_look: building %d custom %s" % [b, custom])
 			result = 1
 			break
+	return result
+
+func _test_building_shader_reads_each_building() -> int:
+	# Headless has no real renderer: check the code; Task 4 renders it too.
+	var material = _dressing.building_material
+	if not (material is ShaderMaterial):
+		print("FAIL _test_building_shader_reads_each_building: building material is %s" % material.get_class())
+		return 1
+	var code: String = (material as ShaderMaterial).shader.code
+	var result := 0
+	for needle in ["INSTANCE_CUSTOM", "abs(local_normal.y) >= 0.5", "atan(local_position.z, local_position.x)", "ACCENTS[", "EMISSION = accent * glow"]:
+		if not code.contains(needle):
+			print("FAIL _test_building_shader_reads_each_building: shader lacks '%s'" % needle)
+			result = 1
+	if (material as ShaderMaterial).get_shader_parameter("glow_energy") == null:
+		print("FAIL _test_building_shader_reads_each_building: glow_energy not set")
+		result = 1
 	return result

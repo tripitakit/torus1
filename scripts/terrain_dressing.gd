@@ -22,44 +22,95 @@ const CITY_GROUND_COLOR := Color(0.5, 0.5, 0.52)
 const MAIN_ROAD_COLOR := Color(0.2, 0.2, 0.22)
 const STREET_COLOR := Color(0.32, 0.32, 0.34)
 const WATER_COLOR := Color(0.12, 0.32, 0.5)
-const WINDOW_SPACING := 4.0
-const WINDOW_GLOW_COLOR := Color(1.0, 0.85, 0.55)
-const WINDOW_GLOW_ENERGY := 0.8
-# Windows projected in each building's own frame, scaled to metres: the same
-# window size on a house and a tower, and the grid square to every facade
-# whatever the building's angle round the ring (projecting in world space
-# turned it into diamonds). The instance colour tints the walls; the glow is
-# colour x pane mask, so only the panes light up.
+# One shader for every building (see BUILDING_SHADER): facades only on walls,
+# driven by each instance's colour and custom data (building_custom).
+const BUILDING_GLOW_ENERGY := 1.2
 const BUILDING_SHADER := """
 shader_type spatial;
 
-uniform sampler2D pane_albedo : source_color, filter_linear_mipmap, repeat_enable;
-uniform sampler2D pane_glow : filter_linear_mipmap, repeat_enable;
-uniform vec3 glow_color : source_color;
-uniform float glow_energy;
-uniform float window_spacing;
+uniform float glow_energy = 1.2;
 
+// Filled in vertex(): position in metres in the building's own frame (base
+// centre at the origin), the surface normal after the stretch, and the
+// per-building data (TerrainDressing.building_custom).
 varying vec3 local_position;
 varying vec3 local_normal;
+varying vec4 look;
+varying float half_width;
+varying float height;
+
+// Warm white, cool white, cyan, amber, magenta.
+const vec3 ACCENTS[5] = vec3[5](
+	vec3(1.0, 0.82, 0.55),
+	vec3(0.8, 0.9, 1.0),
+	vec3(0.3, 0.9, 1.0),
+	vec3(1.0, 0.6, 0.2),
+	vec3(1.0, 0.3, 0.8));
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void vertex() {
 	vec3 scale = vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
-	local_position = VERTEX * scale;
-	local_normal = NORMAL;
+	local_position = VERTEX * scale + vec3(0.0, 0.5 * scale.y, 0.0);
+	local_normal = normalize(NORMAL / scale);
+	half_width = 0.25 * (scale.x + scale.z);
+	height = scale.y;
+	look = INSTANCE_CUSTOM;
 }
 
 void fragment() {
-	vec3 facing = abs(local_normal);
-	vec2 uv = local_position.xy;
-	if (facing.x > facing.y && facing.x > facing.z) {
-		uv = local_position.zy;
-	} else if (facing.y > facing.z) {
-		uv = local_position.xz;
+	vec3 wall = COLOR.rgb;
+	int facade = int(look.x + 0.5);
+	vec3 accent = ACCENTS[clamp(int(look.y + 0.5), 0, 4)];
+	float lit_share = look.z;
+	float seed = look.w;
+	// Metres round the building and up from its base: the same window size
+	// on any shape, and no seams on the round ones.
+	float around = atan(local_position.z, local_position.x) * half_width;
+	float up = local_position.y;
+	vec3 albedo = wall;
+	float glow = 0.0;
+	float metal = 0.1;
+	float rough = 0.8;
+	if (abs(local_normal.y) >= 0.5) {
+		// Roofs, ledges and the tops of domes: plain, never windows.
+		albedo = wall * 0.7;
+	} else if (facade == 0) {
+		// Bands of glass every 1 to 3 floors, each 8 m stretch lit or not.
+		float period = 4.0 * (1.0 + floor(hash(vec2(seed, 1.0)) * 3.0));
+		float band = step(mod(up, period), 1.2) * step(2.0, up);
+		float lit = step(hash(vec2(floor(around / 8.0), floor(up / period)) + seed), 0.3 + lit_share);
+		albedo = mix(wall, vec3(0.08, 0.1, 0.12), band);
+		glow = band * lit;
+	} else if (facade == 1) {
+		// Sparse square windows, 1.5 m every 6 m across and 4 m up.
+		vec2 cell = vec2(floor(around / 6.0), floor(up / 4.0));
+		float pane = step(mod(around, 6.0), 1.5) * step(1.5, mod(up, 4.0)) * step(mod(up, 4.0), 3.0) * step(2.0, up);
+		float lit = step(hash(cell + seed), lit_share);
+		albedo = mix(wall, vec3(0.08, 0.1, 0.12), pane);
+		glow = pane * lit;
+	} else if (facade == 2) {
+		// Dark glass all over, a light here and there.
+		vec2 cell = vec2(floor(around / 3.0), floor(up / 4.0));
+		float spot = step(0.3, fract(around / 3.0)) * step(fract(around / 3.0), 0.7) * step(0.3, fract(up / 4.0)) * step(fract(up / 4.0), 0.7);
+		albedo = vec3(0.05, 0.07, 0.09) + wall * 0.05;
+		metal = 0.8;
+		rough = 0.15;
+		glow = spot * step(hash(cell + seed), 0.05);
+	} else {
+		// Blind panels with seams, and a thin glowing band under the roof.
+		float seam = max(step(mod(around, 4.0), 0.15), step(mod(up, 4.0), 0.15));
+		albedo = wall * (1.0 - 0.4 * seam);
+		metal = 0.5;
+		rough = 0.5;
+		glow = step(height - 2.0, up) * step(up, height - 1.4);
 	}
-	uv /= window_spacing;
-	ALBEDO = COLOR.rgb * texture(pane_albedo, uv).rgb;
-	EMISSION = glow_color * texture(pane_glow, uv).rgb * glow_energy;
-	ROUGHNESS = 0.8;
+	ALBEDO = albedo;
+	METALLIC = metal;
+	ROUGHNESS = rough;
+	EMISSION = accent * glow * glow_energy;
 }
 """
 const BUILDING_VISIBILITY_END := 12000.0
@@ -132,11 +183,7 @@ func _init() -> void:
 	shader.code = BUILDING_SHADER
 	building_material = ShaderMaterial.new()
 	building_material.shader = shader
-	building_material.set_shader_parameter("pane_albedo", _window_texture(false))
-	building_material.set_shader_parameter("pane_glow", _window_texture(true))
-	building_material.set_shader_parameter("glow_color", WINDOW_GLOW_COLOR)
-	building_material.set_shader_parameter("glow_energy", WINDOW_GLOW_ENERGY)
-	building_material.set_shader_parameter("window_spacing", WINDOW_SPACING)
+	building_material.set_shader_parameter("glow_energy", BUILDING_GLOW_ENERGY)
 
 func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array) -> void:
 	_build_ground(chunk, plan, chunk_around, chunk_along)
@@ -316,18 +363,3 @@ func _chunk_bounds(plan, tallest: float) -> AABB:
 				bounds = bounds.expand(Vector3(cos(angle) * r, sin(angle) * r, z))
 	return bounds.grow(1.0)
 
-# One window per repeat. Albedo: white walls (tinted per building) with a
-# darker pane. Glow mask: only the pane.
-static func _window_texture(glow: bool) -> ImageTexture:
-	var image := Image.create(16, 16, false, Image.FORMAT_RGB8)
-	for x in range(16):
-		for y in range(16):
-			var pane := x >= 4 and x < 12 and y >= 3 and y < 11
-			var shade: float
-			if glow:
-				shade = 1.0 if pane else 0.0
-			else:
-				shade = 0.35 if pane else 1.0
-			image.set_pixel(x, y, Color(shade, shade, shade))
-	image.generate_mipmaps()
-	return ImageTexture.create_from_image(image)
