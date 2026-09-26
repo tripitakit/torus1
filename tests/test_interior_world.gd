@@ -331,10 +331,15 @@ func _test_loading_elsewhere_unloads_far_sections() -> int:
 		if world.get_node_or_null(gone) != null:
 			print("FAIL _test_loading_elsewhere_unloads_far_sections: %s still there" % gone)
 			result = 1
-	# A section going clears the collider shape cache (it would otherwise
-	# grow by thousands of shapes per section for the whole flight).
-	if world._dressing._convex_shapes.size() != 0:
-		print("FAIL _test_loading_elsewhere_unloads_far_sections: %d collider shapes still cached after sections unloaded" % world._dressing._convex_shapes.size())
+	# Collider shapes of the unloaded sections are gone; the loaded ones'
+	# are all still cached (they would grow by thousands per section).
+	var in_use := {}
+	for slot in world.get_loaded_section_slots():
+		for chunk in world.get_node("Chain/Section_%d" % slot).find_children("Chunk_*", "StaticBody3D", false, false):
+			for key in chunk.get_meta("shape_keys", []):
+				in_use[key] = true
+	if world._dressing._convex_shapes.size() != in_use.size():
+		print("FAIL _test_loading_elsewhere_unloads_far_sections: %d collider shapes cached, the loaded sections use %d" % [world._dressing._convex_shapes.size(), in_use.size()])
 		result = 1
 	if not world.is_section_ready(1) or not world.is_section_ready(2):
 		print("FAIL _test_loading_elsewhere_unloads_far_sections: sections 1 and 2 not ready")

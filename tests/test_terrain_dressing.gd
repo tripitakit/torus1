@@ -24,7 +24,7 @@ func _init():
 	failures += _test_building_bounds_cover_the_tallest_building()
 	failures += _test_building_custom_data_carries_the_look()
 	failures += _test_building_shader_reads_each_building()
-	failures += _test_clearing_the_shape_cache_keeps_built_chunks_whole()
+	failures += _test_released_chunks_drop_only_the_shapes_nobody_uses()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -312,24 +312,34 @@ func _test_building_shader_reads_each_building() -> int:
 		result = 1
 	return result
 
-func _test_clearing_the_shape_cache_keeps_built_chunks_whole() -> int:
-	# Convex shapes are cached by (style, size): thousands per section, so
-	# the interior clears the cache as sections go. Chunks already built keep
-	# their own shapes.
+func _test_released_chunks_drop_only_the_shapes_nobody_uses() -> int:
+	# Convex shapes are cached by (style, size) and shared between chunks.
+	# Releasing a chunk drops the shapes no other chunk uses; built chunks
+	# keep theirs. (Clearing the whole cache made loading rebuild thousands
+	# of shapes and pushed frames past 50 ms.)
 	var dressing = TerrainDressing.new()
-	var chunk := StaticBody3D.new()
-	var key := _busiest_chunk()
-	dressing.dress_chunk(chunk, _plan, key.x, key.y, _groups[key])
-	var cached: int = dressing._convex_shapes.size()
-	dressing.clear_shape_cache()
+	var keys := _groups.keys()
+	var first := StaticBody3D.new()
+	var second := StaticBody3D.new()
+	dressing.dress_chunk(first, _plan, keys[0].x, keys[0].y, _groups[keys[0]])
+	dressing.dress_chunk(second, _plan, keys[1].x, keys[1].y, _groups[keys[1]])
+	var second_keys := {}
+	for key in second.get_meta("shape_keys"):
+		second_keys[key] = true
+	dressing.release_chunk(first)
 	var result := 0
-	if cached == 0 or dressing._convex_shapes.size() != 0:
-		print("FAIL _test_clearing_the_shape_cache_keeps_built_chunks_whole: %d cached, %d left after clearing" % [cached, dressing._convex_shapes.size()])
+	if dressing._convex_shapes.size() != second_keys.size():
+		print("FAIL _test_released_chunks_drop_only_the_shapes_nobody_uses: %d shapes cached after releasing the first chunk, the second uses %d" % [dressing._convex_shapes.size(), second_keys.size()])
 		result = 1
-	for owner_id in chunk.get_shape_owners():
-		if chunk.shape_owner_get_shape(owner_id, 0) == null:
-			print("FAIL _test_clearing_the_shape_cache_keeps_built_chunks_whole: a built building lost its collider")
+	for owner_id in first.get_shape_owners():
+		if first.shape_owner_get_shape(owner_id, 0) == null:
+			print("FAIL _test_released_chunks_drop_only_the_shapes_nobody_uses: a built building lost its collider")
 			result = 1
 			break
-	chunk.free()
+	dressing.release_chunk(second)
+	if dressing._convex_shapes.size() != 0:
+		print("FAIL _test_released_chunks_drop_only_the_shapes_nobody_uses: %d shapes left after releasing both chunks" % dressing._convex_shapes.size())
+		result = 1
+	first.free()
+	second.free()
 	return result

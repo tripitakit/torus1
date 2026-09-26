@@ -165,7 +165,10 @@ var paved_material: StandardMaterial3D
 var water_material: StandardMaterial3D
 var building_material: ShaderMaterial
 # Convex colliders by (style, whole-metre size): equal buildings share one.
+# Each key counts the chunks using it; release_chunk drops shapes no chunk
+# uses any more, so the cache holds only what is loaded.
 var _convex_shapes := {}
+var _shape_users := {}
 
 func _init() -> void:
 	field_material = StandardMaterial3D.new()
@@ -303,6 +306,7 @@ func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along:
 	# Colliders straight on the chunk body, in index order: thousands of
 	# nodes would slow docking down.
 	var by_style := {}
+	var used := {}
 	for k in range(indices.size()):
 		var b: int = indices[k]
 		var style: int = plan.building_style[b]
@@ -311,7 +315,11 @@ func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along:
 		by_style[style].append(k)
 		var owner_id := chunk.create_shape_owner(chunk)
 		chunk.shape_owner_add_shape(owner_id, _convex_shape(style, plan.building_size[b]))
+		used[_shape_key(style, plan.building_size[b])] = true
 		chunk.shape_owner_set_transform(owner_id, xforms[k].orthonormalized())
+	for key in used:
+		_shape_users[key] = _shape_users.get(key, 0) + 1
+	chunk.set_meta("shape_keys", used.keys())
 	var group := Node3D.new()
 	group.name = "Buildings"
 	chunk.add_child(group)
@@ -340,14 +348,23 @@ func _build_buildings(chunk: StaticBody3D, plan, chunk_around: int, chunk_along:
 		instance.custom_aabb = _chunk_bounds(plan, tallest)
 		group.add_child(instance)
 
-# Forgets the cached collider shapes; built chunks keep theirs. The interior
-# calls it as sections go: sizes rarely repeat across sections, and the
-# cache would otherwise grow by thousands of shapes (~50 MB) per section.
-func clear_shape_cache() -> void:
-	_convex_shapes.clear()
+# Called before a dressed chunk is freed: its collider shapes are dropped
+# from the cache unless another chunk still uses them. Built chunks keep
+# their own shapes either way.
+func release_chunk(chunk: Node) -> void:
+	for key in chunk.get_meta("shape_keys", []):
+		var users: int = _shape_users.get(key, 0) - 1
+		if users > 0:
+			_shape_users[key] = users
+		else:
+			_shape_users.erase(key)
+			_convex_shapes.erase(key)
+
+static func _shape_key(style: int, size: Vector3) -> Vector4i:
+	return Vector4i(style, roundi(size.x), roundi(size.y), roundi(size.z))
 
 func _convex_shape(style: int, size: Vector3) -> ConvexPolygonShape3D:
-	var key := Vector4i(style, roundi(size.x), roundi(size.y), roundi(size.z))
+	var key := _shape_key(style, size)
 	if not _convex_shapes.has(key):
 		var points := PackedVector3Array()
 		for p in BuildingShapesScript.hull_points(style):
