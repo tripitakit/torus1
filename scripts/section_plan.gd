@@ -12,6 +12,11 @@ extends RefCounted
 enum Zone { FIELD, TOWN, CITY, WATER }
 enum Crop { WHEAT, CORN, SUNFLOWER, LAVENDER, RICE, PASTURE }
 enum Road { NONE, STREET, MAIN }
+# How a building looks (see building_shapes.gd and the building shader).
+enum Style { DOME, VAULT, BLOCK, RING_HOUSE, STEPPED, TAPERED, RING_TOWER, FIN_SLAB, SPIRE }
+enum Facade { BANDS, SPARSE, GLASS, PANELS }
+# Window light colours: warm white, cool white, cyan, amber, magenta.
+const ACCENT_COUNT := 5
 
 const LOTS_AROUND := 48
 const LOTS_ALONG := 80
@@ -41,6 +46,11 @@ var building_z := PackedFloat64Array()
 var building_size := PackedVector3Array()
 var building_color := PackedColorArray()
 var building_lot := PackedInt32Array()
+var building_style := PackedByteArray()
+var building_facade := PackedByteArray()
+var building_accent := PackedByteArray()
+# Share of the building's windows that are lit, 0..1.
+var building_lit := PackedFloat64Array()
 
 static func road_width(road: int) -> float:
 	if road == Road.MAIN:

@@ -27,6 +27,10 @@ func _init():
 	failures += _test_towers_only_near_the_city_centre()
 	failures += _test_buildings_do_not_overlap()
 	failures += _test_group_buildings_by_chunk_covers_every_building_once()
+	failures += _test_every_building_has_a_look()
+	failures += _test_styles_fit_the_zone_and_the_shape()
+	failures += _test_looks_vary()
+	failures += _test_same_index_same_looks()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -287,5 +291,57 @@ func _test_crops_come_in_patches() -> int:
 	var share := float(same) / pairs
 	if share < 0.5:
 		print("FAIL _test_crops_come_in_patches: only %.0f%% of neighbouring field lots share a crop" % (share * 100.0))
+		return 1
+	return 0
+
+func _test_every_building_has_a_look() -> int:
+	var n: int = _plan.building_count()
+	if _plan.building_style.size() != n or _plan.building_facade.size() != n or _plan.building_accent.size() != n or _plan.building_lit.size() != n:
+		print("FAIL _test_every_building_has_a_look: %d buildings, looks %d/%d/%d/%d" % [n, _plan.building_style.size(), _plan.building_facade.size(), _plan.building_accent.size(), _plan.building_lit.size()])
+		return 1
+	for b in range(n):
+		if _plan.building_style[b] >= SectionPlan.Style.size() or _plan.building_facade[b] >= SectionPlan.Facade.size() or _plan.building_accent[b] >= SectionPlan.ACCENT_COUNT or not _in_range(_plan.building_lit[b], 0.2, 0.6):
+			print("FAIL _test_every_building_has_a_look: building %d look out of range" % b)
+			return 1
+	return 0
+
+func _test_styles_fit_the_zone_and_the_shape() -> int:
+	for b in range(_plan.building_count()):
+		var size: Vector3 = _plan.building_size[b]
+		var style: int = _plan.building_style[b]
+		var allowed: Array
+		if _plan.zones[_plan.building_lot[b]] == SectionPlan.Zone.TOWN:
+			var low_and_wide: bool = size.y <= 0.7 * minf(size.x, size.z)
+			allowed = SectionGenerator.TOWN_LOW_STYLES if low_and_wide else SectionGenerator.TOWN_TALL_STYLES
+		elif size.y >= 150.0:
+			allowed = SectionGenerator.TOWER_STYLES
+		else:
+			allowed = SectionGenerator.CITY_STYLES
+		if not allowed.has(style):
+			print("FAIL _test_styles_fit_the_zone_and_the_shape: building %d size %s has style %d, allowed %s" % [b, size, style, allowed])
+			return 1
+	return 0
+
+func _test_looks_vary() -> int:
+	var styles := {}
+	var facades := {}
+	var accents := {}
+	var magenta := 0
+	for b in range(_plan.building_count()):
+		styles[_plan.building_style[b]] = true
+		facades[_plan.building_facade[b]] = true
+		accents[_plan.building_accent[b]] = true
+		if _plan.building_accent[b] == 4:
+			magenta += 1
+	var share: float = float(magenta) / _plan.building_count()
+	if styles.size() < 8 or facades.size() != 4 or accents.size() != 5 or share >= 0.1 or share <= 0.0:
+		print("FAIL _test_looks_vary: %d styles, %d facades, %d accents, magenta share %.3f" % [styles.size(), facades.size(), accents.size(), share])
+		return 1
+	return 0
+
+func _test_same_index_same_looks() -> int:
+	var again = SectionGenerator.generate(42, RADIUS, LENGTH)
+	if again.building_x != _plan.building_x or again.building_style != _plan.building_style or again.building_facade != _plan.building_facade or again.building_accent != _plan.building_accent or again.building_lit != _plan.building_lit:
+		print("FAIL _test_same_index_same_looks: two plans for section 42 differ")
 		return 1
 	return 0

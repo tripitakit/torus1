@@ -27,8 +27,20 @@ const CITY_FOOTPRINT := Vector2(30.0, 60.0)
 const CITY_HEIGHT := Vector2(40.0, 120.0)
 const TOWER_FOOTPRINT := Vector2(25.0, 45.0)
 const TOWER_HEIGHT := Vector2(150.0, 300.0)
-const TOWN_COLORS := [Color(0.93, 0.9, 0.82), Color(0.9, 0.8, 0.65), Color(0.85, 0.7, 0.6), Color(0.8, 0.85, 0.88), Color(0.95, 0.93, 0.9)]
-const CITY_COLORS := [Color(0.7, 0.75, 0.8), Color(0.6, 0.62, 0.66), Color(0.78, 0.78, 0.74), Color(0.5, 0.58, 0.66)]
+# Sci-fi facade colours: towns light (white, light grey, sand, blue-grey,
+# pale teal), the city darker (graphite, grey, white, blue-grey, bronze).
+const TOWN_COLORS := [Color(0.92, 0.93, 0.95), Color(0.78, 0.8, 0.83), Color(0.85, 0.8, 0.7), Color(0.62, 0.68, 0.75), Color(0.72, 0.82, 0.8)]
+const CITY_COLORS := [Color(0.3, 0.32, 0.35), Color(0.55, 0.57, 0.6), Color(0.88, 0.9, 0.92), Color(0.5, 0.58, 0.68), Color(0.42, 0.38, 0.33)]
+# Shapes by zone. Domes and vaults only for low, wide town buildings: a dome
+# 40 m high on a 12 m base would read as a bullet. Towers are mostly spires.
+const TOWN_LOW_STYLES := [SectionPlanScript.Style.DOME, SectionPlanScript.Style.VAULT, SectionPlanScript.Style.BLOCK, SectionPlanScript.Style.RING_HOUSE]
+const TOWN_TALL_STYLES := [SectionPlanScript.Style.BLOCK, SectionPlanScript.Style.RING_HOUSE]
+const CITY_STYLES := [SectionPlanScript.Style.STEPPED, SectionPlanScript.Style.TAPERED, SectionPlanScript.Style.RING_TOWER, SectionPlanScript.Style.FIN_SLAB]
+const TOWER_STYLES := [SectionPlanScript.Style.SPIRE, SectionPlanScript.Style.SPIRE, SectionPlanScript.Style.STEPPED, SectionPlanScript.Style.RING_TOWER]
+const LOW_AND_WIDE := 0.7
+# Warm white, cool white, cyan, amber, magenta (rare).
+const ACCENT_WEIGHTS := [0.3, 0.25, 0.2, 0.18, 0.07]
+const LIT_SHARE := Vector2(0.2, 0.6)
 
 static func generate(section_index: int, radius: float, length: float):
 	var plan = SectionPlanScript.new()
@@ -181,6 +193,10 @@ static func _place_buildings(plan) -> void:
 	var sizes := PackedVector3Array()
 	var colors := PackedColorArray()
 	var lots := PackedInt32Array()
+	var styles := PackedByteArray()
+	var facades := PackedByteArray()
+	var accents := PackedByteArray()
+	var lits := PackedFloat64Array()
 	for along in range(SectionPlanScript.LOTS_ALONG):
 		for around in range(SectionPlanScript.LOTS_AROUND):
 			var zone: int = plan.zone_at(around, along)
@@ -189,6 +205,7 @@ static func _place_buildings(plan) -> void:
 			var footprint: Vector2
 			var heights: Vector2
 			var palette: Array
+			var tower := false
 			if zone == SectionPlanScript.Zone.TOWN:
 				plots = TOWN_PLOTS
 				chance = TOWN_BUILD_CHANCE
@@ -196,7 +213,7 @@ static func _place_buildings(plan) -> void:
 				heights = TOWN_HEIGHT
 				palette = TOWN_COLORS
 			elif zone == SectionPlanScript.Zone.CITY:
-				var tower: bool = plan.surface_distance(plan.lot_center(around, along), plan.city_center) <= TOWER_RADIUS
+				tower = plan.surface_distance(plan.lot_center(around, along), plan.city_center) <= TOWER_RADIUS
 				plots = CITY_PLOTS
 				chance = 1.0
 				footprint = TOWER_FOOTPRINT if tower else CITY_FOOTPRINT
@@ -223,8 +240,46 @@ static func _place_buildings(plan) -> void:
 					sizes.append(Vector3(width, height, depth))
 					colors.append(palette[rng.randi_range(0, palette.size() - 1)])
 					lots.append(plan.lot_index(around, along))
+					var look := _building_look(plan.section_index, around, along, plot_x, plot_z, zone == SectionPlanScript.Zone.TOWN, tower, Vector3(width, height, depth))
+					styles.append(look[0])
+					facades.append(look[1])
+					accents.append(look[2])
+					lits.append(look[3])
 	plan.building_x = xs
 	plan.building_z = zs
 	plan.building_size = sizes
 	plan.building_color = colors
 	plan.building_lot = lots
+	plan.building_style = styles
+	plan.building_facade = facades
+	plan.building_accent = accents
+	plan.building_lit = lits
+
+# Shape, facade, light colour and lit share of one building, from its own
+# RNG: the placement RNG's sequence (positions, sizes) stays as it was.
+static func _building_look(section_index: int, around: int, along: int, plot_x: int, plot_z: int, town: bool, tower: bool, size: Vector3) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([section_index, around, along, plot_x, plot_z, "look"])
+	var styles: Array
+	if town:
+		styles = TOWN_LOW_STYLES if size.y <= LOW_AND_WIDE * minf(size.x, size.z) else TOWN_TALL_STYLES
+	elif tower:
+		styles = TOWER_STYLES
+	else:
+		styles = CITY_STYLES
+	var style: int = styles[rng.randi_range(0, styles.size() - 1)]
+	var facade: int = rng.randi_range(0, SectionPlanScript.Facade.size() - 1)
+	var accent: int = _pick_weighted(rng.randf(), ACCENT_WEIGHTS)
+	var lit: float = rng.randf_range(LIT_SHARE.x, LIT_SHARE.y)
+	return [style, facade, accent, lit]
+
+static func _pick_weighted(u: float, weights: Array) -> int:
+	var total := 0.0
+	for w: float in weights:
+		total += w
+	var running := 0.0
+	for k in range(weights.size()):
+		running += weights[k] / total
+		if u < running:
+			return k
+	return weights.size() - 1
