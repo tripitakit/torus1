@@ -31,6 +31,8 @@ func _init():
 	failures += _test_dock_pads_share_mesh_and_textured_material()
 	failures += _test_port_turns_with_its_bridge()
 	failures += _test_bridge_radius_and_length_helpers()
+	failures += _test_every_pad_has_a_fixed_size_beacon()
+	failures += _test_beacon_blinks_half_a_second_in_one_and_a_half()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -466,4 +468,42 @@ func _test_port_turns_with_its_bridge() -> int:
 		print("FAIL _test_port_turns_with_its_bridge: the port did not move as the bridge turned")
 		result = 1
 	station.free()
+	return result
+
+func _test_every_pad_has_a_fixed_size_beacon() -> int:
+	# Small station: bridge radius 9, beacon 0.3 m above the pad centre.
+	var station := _make_station(4)
+	station.build_station()
+	var result := 0
+	var first: MeshInstance3D = null
+	for i in range(4):
+		var bridge: Node3D = station.get_node("Bridge%d" % i)
+		var beacon := bridge.get_node_or_null("Beacon") as MeshInstance3D
+		var pad: MeshInstance3D = bridge.get_node("DockPad")
+		if beacon == null:
+			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d has no Beacon" % i)
+			result = 1
+			continue
+		if first == null:
+			first = beacon
+		var material := beacon.material_override as StandardMaterial3D
+		var expected: Vector3 = pad.position + pad.transform.basis.y.normalized() * 9.0 * TorusStationScript.BEACON_LIFT_RATIO
+		if beacon.mesh != first.mesh or material == null or material != first.material_override:
+			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d beacon does not share the mesh and material" % i)
+			result = 1
+		elif not material.fixed_size or material.billboard_mode != BaseMaterial3D.BILLBOARD_ENABLED or material.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED:
+			print("FAIL _test_every_pad_has_a_fixed_size_beacon: beacon material is not a fixed-size unshaded billboard")
+			result = 1
+		if not beacon.position.is_equal_approx(expected) or not is_equal_approx(beacon.visibility_range_end, TorusStationScript.BEACON_RANGE):
+			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d beacon at %s (expected %s), drawn to %f m" % [i, beacon.position, expected, beacon.visibility_range_end])
+			result = 1
+	station.free()
+	return result
+
+func _test_beacon_blinks_half_a_second_in_one_and_a_half() -> int:
+	var result := 0
+	for c in [[0.0, true], [0.49, true], [0.5, false], [1.49, false], [1.5, true], [3.2, true], [3.6, false]]:
+		if TorusStationScript.beacon_lit(c[0]) != c[1]:
+			print("FAIL _test_beacon_blinks_half_a_second_in_one_and_a_half: at %.2f s lit %s, expected %s" % [c[0], TorusStationScript.beacon_lit(c[0]), c[1]])
+			result = 1
 	return result

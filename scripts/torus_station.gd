@@ -22,6 +22,9 @@ func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	_rotate_sections(delta)
+	_beacon_time += delta
+	if _beacon_material != null:
+		_beacon_material.albedo_color = Color(BEACON_COLOR, 1.0 if beacon_lit(_beacon_time) else 0.0)
 
 func _rotate_sections(delta: float) -> void:
 	# Bridges spin rigidly together with the sections they connect: the
@@ -85,6 +88,25 @@ const PAD_FACE := 15
 const PAD_FACE_FILL := 0.985
 const PAD_LIFT_RATIO := 0.0005
 const PAD_VISIBLE_RATIO := 5.0
+# A blinking green beacon above every pad, the same few pixels on screen at
+# any distance (fixed size), so docks can be picked out from far away; the
+# pad itself is only drawn up close. BEACON_SIZE in fixed-size units is
+# about 13 px on a 1280 px wide, 90 degree view.
+const BEACON_COLOR := Color(0.3, 1.0, 0.4)
+const BEACON_LIFT_RATIO := 1.0 / 30.0
+const BEACON_SIZE := 0.02
+const BEACON_RANGE := 50000.0
+const BEACON_PERIOD := 1.5
+const BEACON_ON_TIME := 0.5
+
+# One mesh and one material for every beacon: blinking them is one change
+# per frame, not one per bridge.
+var _beacon_mesh: QuadMesh
+var _beacon_material: StandardMaterial3D
+var _beacon_time := 0.0
+
+static func beacon_lit(time: float) -> bool:
+	return fmod(time, BEACON_PERIOD) < BEACON_ON_TIME
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -176,6 +198,14 @@ func build_station() -> void:
 	var pad_face := _pad_face()
 	var pad_mesh := PlaneMesh.new()
 	pad_mesh.size = Vector2.ONE * pad_face.width * PAD_FACE_FILL
+	_beacon_mesh = QuadMesh.new()
+	_beacon_mesh.size = Vector2.ONE * BEACON_SIZE
+	_beacon_material = StandardMaterial3D.new()
+	_beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_beacon_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_beacon_material.fixed_size = true
+	_beacon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_beacon_material.albedo_color = BEACON_COLOR
 
 	for i in range(bridge_transforms.size()):
 		var bridge := AnimatableBody3D.new()
@@ -234,3 +264,11 @@ func _add_dock(bridge: Node3D, pad_mesh: PlaneMesh, face: Dictionary) -> void:
 	port.name = "Port"
 	port.transform = Transform3D(Basis(normal, Vector3.UP, normal.cross(Vector3.UP)), centre)
 	bridge.add_child(port)
+	var beacon := MeshInstance3D.new()
+	beacon.name = "Beacon"
+	beacon.mesh = _beacon_mesh
+	beacon.material_override = _beacon_material
+	beacon.position = centre + normal * get_bridge_radius() * BEACON_LIFT_RATIO
+	beacon.visibility_range_end = BEACON_RANGE
+	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bridge.add_child(beacon)
