@@ -33,6 +33,7 @@ func _init():
 	failures += _test_bridge_radius_and_length_helpers()
 	failures += _test_every_pad_has_a_fixed_size_beacon()
 	failures += _test_beacon_blinks_half_a_second_in_one_and_a_half()
+	failures += _test_beacon_is_never_hidden_by_its_bridge()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -506,4 +507,19 @@ func _test_beacon_blinks_half_a_second_in_one_and_a_half() -> int:
 		if TorusStationScript.beacon_lit(c[0]) != c[1]:
 			print("FAIL _test_beacon_blinks_half_a_second_in_one_and_a_half: at %.2f s lit %s, expected %s" % [c[0], TorusStationScript.beacon_lit(c[0]), c[1]])
 			result = 1
+	return result
+
+func _test_beacon_is_never_hidden_by_its_bridge() -> int:
+	# A fixed-size quad is hundreds of metres wide in the world at tens of
+	# km, but sits 20 m above its pad: depth-tested, the bridge cuts it in
+	# half from the side and hides it while the pad faces away. It is a
+	# marker, drawn over everything.
+	var station := _make_station(4)
+	station.build_station()
+	var material := (station.get_node("Bridge0/Beacon") as MeshInstance3D).material_override as StandardMaterial3D
+	var result := 0
+	if not material.no_depth_test:
+		print("FAIL _test_beacon_is_never_hidden_by_its_bridge: the beacon is depth-tested")
+		result = 1
+	station.free()
 	return result

@@ -204,6 +204,10 @@ func build_station() -> void:
 	_beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_beacon_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	_beacon_material.fixed_size = true
+	# A marker, drawn over everything: at tens of km the fixed-size quad is
+	# hundreds of metres wide but only 20 m above its pad, so the bridge
+	# would cut it in half from the side and hide it while the pad faces away.
+	_beacon_material.no_depth_test = true
 	_beacon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_beacon_material.albedo_color = BEACON_COLOR
 
