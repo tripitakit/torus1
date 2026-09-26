@@ -13,9 +13,3 @@ static func format_distance(distance: float) -> String:
 	if metres < 1000:
 		return "%d m" % metres
 	return "%.1f km" % (distance / 1000.0)
-
-# Height above the planet's surface, in whole kilometres.
-static func format_altitude(metres: float) -> String:
-	if is_inf(metres) or is_nan(metres):
-		return NO_READING
-	return "%d km" % roundi(metres / 1000.0)

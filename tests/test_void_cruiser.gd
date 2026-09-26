@@ -18,24 +18,17 @@ func _init():
 	failures += _test_forward_hold_time_resets_on_release()
 	failures += _test_forward_hold_time_resets_on_direction_reversal()
 	failures += _test_forward_thrust_ramps_to_100x_over_ten_seconds()
-	failures += _test_top_speed_about_21_6_km_s_after_the_full_ramp()
 	failures += _test_cruise_key_toggles_the_lock()
-	failures += _test_cruise_flies_to_top_speed_with_no_keys_held()
-	failures += _test_cruise_carries_on_the_ramp_from_a_held_w()
 	failures += _test_pressing_w_a_s_or_d_turns_cruise_off()
 	failures += _test_roll_mouse_and_up_down_leave_cruise_on()
 	failures += _test_process_shows_cruise_on_hud()
-	failures += _test_tab_toggles_flight_assist_and_drops_cruise()
-	failures += _test_without_assist_speed_and_spin_do_not_fade()
-	failures += _test_without_assist_thrust_is_1x_and_unbounded()
-	failures += _test_cruise_without_assist_does_not_push_forward()
-	failures += _test_circular_orbit_holds_without_assist()
+	failures += _test_speed_does_not_fade_but_spin_does()
+	failures += _test_ramp_without_drag_reaches_about_45_km_s_in_10_s()
+	failures += _test_cruise_holds_instead_of_pushing()
+	failures += _test_one_flight_mode_and_no_orbit_line()
+	failures += _test_circular_orbit_holds()
 	failures += _test_diving_through_the_planet_does_not_fling_the_ship()
-	failures += _test_cruise_without_assist_holds_velocity_in_strong_gravity()
-	failures += _test_orbit_readout_on_the_ring()
-	failures += _test_process_shows_orbit_on_hud()
-	failures += _test_orbit_line_has_256_points_around_the_planet()
-	failures += _test_orbit_line_hidden_without_planet()
+	failures += _test_cruise_holds_velocity_in_strong_gravity()
 	failures += _test_build_collision_shape_adds_box_shape()
 	failures += _test_build_navigation_lights_adds_port_and_starboard_and_tail()
 	failures += _test_build_navigation_lights_port_is_red_on_the_left()
@@ -244,22 +237,6 @@ func _test_forward_thrust_ramps_to_100x_over_ten_seconds() -> int:
 		cruiser._update_forward_hold_time(1.0, 1.0)
 	if not is_equal_approx(cruiser.forward_thrust_multiplier(), 100.0):
 		print("FAIL _test_forward_thrust_ramps_to_100x_over_ten_seconds: after 10 s multiplier %f, expected 100" % cruiser.forward_thrust_multiplier())
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_top_speed_about_21_6_km_s_after_the_full_ramp() -> int:
-	# thrust 150 x 100, damping 0.5: v = 15000 / ln 2 ~ 21.6 km/s (21.8 with
-	# 60 Hz steps). 20 s: 10 s of ramp, then 10 s to settle.
-	var cruiser: Node3D = VoidCruiserScript.new()
-	Input.action_press("move_forward")
-	for i in range(1200):
-		cruiser._physics_process(1.0 / 60.0)
-	Input.action_release("move_forward")
-	var result := 0
-	var speed: float = cruiser.velocity.length()
-	if speed < 21000.0 or speed > 22500.0 or cruiser.velocity.z >= 0.0:
-		print("FAIL _test_top_speed_about_21_6_km_s_after_the_full_ramp: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
 		result = 1
 	cruiser.free()
 	return result
@@ -525,37 +502,6 @@ func _test_cruise_key_toggles_the_lock() -> int:
 	cruiser.free()
 	return result
 
-func _test_cruise_flies_to_top_speed_with_no_keys_held() -> int:
-	# Same as holding W for 20 s: 100x after 10 s, then ~21.6 km/s.
-	var cruiser: Node3D = VoidCruiserScript.new()
-	_press(cruiser, "cruise")
-	for i in range(1200):
-		cruiser._physics_process(1.0 / 60.0)
-	var result := 0
-	var speed: float = cruiser.velocity.length()
-	if speed < 21000.0 or speed > 22500.0 or cruiser.velocity.z >= 0.0:
-		print("FAIL _test_cruise_flies_to_top_speed_with_no_keys_held: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_cruise_carries_on_the_ramp_from_a_held_w() -> int:
-	# W held 5 s (10x), C pressed, W let go: the ramp goes on, no restart.
-	var cruiser := _make_cruiser()
-	Input.action_press("move_forward")
-	for i in range(300):
-		cruiser._physics_process(1.0 / 60.0)
-	_press(cruiser, "cruise")
-	Input.action_release("move_forward")
-	for i in range(60):
-		cruiser._physics_process(1.0 / 60.0)
-	var result := 0
-	if not cruiser.cruise_locked or cruiser.forward_thrust_multiplier() < 20.0:
-		print("FAIL _test_cruise_carries_on_the_ramp_from_a_held_w: cruise %s, multiplier %f after 6 s (expected about 28)" % [cruiser.cruise_locked, cruiser.forward_thrust_multiplier()])
-		result = 1
-	cruiser.free()
-	return result
-
 func _test_pressing_w_a_s_or_d_turns_cruise_off() -> int:
 	var cruiser := _make_cruiser()
 	var result := 0
@@ -603,68 +549,6 @@ func _test_process_shows_cruise_on_hud() -> int:
 	cruiser.free()
 	return result
 
-func _test_tab_toggles_flight_assist_and_drops_cruise() -> int:
-	var cruiser := _make_cruiser()
-	var result := 0
-	if not cruiser.flight_assist:
-		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: assist off at start")
-		result = 1
-	_press(cruiser, "cruise")
-	_press(cruiser, "flight_assist")
-	if cruiser.flight_assist or cruiser.cruise_locked:
-		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: after Tab assist %s cruise %s, expected both off" % [cruiser.flight_assist, cruiser.cruise_locked])
-		result = 1
-	_press(cruiser, "flight_assist")
-	if not cruiser.flight_assist:
-		print("FAIL _test_tab_toggles_flight_assist_and_drops_cruise: a second Tab did not turn assist back on")
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_without_assist_speed_and_spin_do_not_fade() -> int:
-	# Default damping 0.5 would halve both every second; without assist, none.
-	var cruiser: Node3D = VoidCruiserScript.new()
-	cruiser.flight_assist = false
-	cruiser.velocity = Vector3(0.0, 0.0, -100.0)
-	cruiser.angular_velocity = Vector3(0.2, 0.0, 0.0)
-	for i in range(120):
-		cruiser._physics_process(1.0 / 60.0)
-	var result := 0
-	if absf(cruiser.velocity.length() - 100.0) > 1e-6 or absf(cruiser.angular_velocity.length() - 0.2) > 1e-9:
-		print("FAIL _test_without_assist_speed_and_spin_do_not_fade: speed %f spin %f after 2 s" % [cruiser.velocity.length(), cruiser.angular_velocity.length()])
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_without_assist_thrust_is_1x_and_unbounded() -> int:
-	# 150 m/s^2 for 10 s: 1500 m/s, no ramp and no drag to cap it.
-	var cruiser: Node3D = VoidCruiserScript.new()
-	cruiser.flight_assist = false
-	Input.action_press("move_forward")
-	for i in range(600):
-		cruiser._physics_process(1.0 / 60.0)
-	Input.action_release("move_forward")
-	var result := 0
-	if absf(cruiser.velocity.length() - 1500.0) > 5.0 or not is_equal_approx(cruiser.forward_thrust_multiplier(), 1.0):
-		print("FAIL _test_without_assist_thrust_is_1x_and_unbounded: speed %.1f (expected 1500), multiplier %f" % [cruiser.velocity.length(), cruiser.forward_thrust_multiplier()])
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_cruise_without_assist_does_not_push_forward() -> int:
-	# Without assist C holds the current velocity instead of pushing.
-	var cruiser := _make_cruiser()
-	cruiser.flight_assist = false
-	_press(cruiser, "cruise")
-	for i in range(60):
-		cruiser._physics_process(1.0 / 60.0)
-	var result := 0
-	if not cruiser.cruise_locked or not cruiser.velocity.is_zero_approx():
-		print("FAIL _test_cruise_without_assist_does_not_push_forward: cruise %s velocity %s" % [cruiser.cruise_locked, cruiser.velocity])
-		result = 1
-	cruiser.free()
-	return result
-
 func _orbiting_cruiser() -> Node3D:
 	# A ship in the ring's frame around a planet at the origin (off-tree, so
 	# the planet is set by hand instead of read from the scene).
@@ -674,12 +558,11 @@ func _orbiting_cruiser() -> Node3D:
 	cruiser.planet_axis = Vector3.UP
 	return cruiser
 
-func _test_circular_orbit_holds_without_assist() -> int:
+func _test_circular_orbit_holds() -> int:
 	# A true circular orbit at 2500 km from the centre, seen from the ring's
 	# frame. Without the forces the ship would fly straight and end ~87 km
 	# higher after 600 s.
 	var cruiser := _orbiting_cruiser()
-	cruiser.flight_assist = false
 	var r0 := 2.5e6
 	var circular: float = sqrt(cruiser.planet_gm / r0)
 	cruiser.position = Vector3(r0, 0.0, 0.0)
@@ -689,15 +572,14 @@ func _test_circular_orbit_holds_without_assist() -> int:
 	var result := 0
 	var drift: float = cruiser.position.length() - r0
 	if absf(drift) > 50.0:
-		print("FAIL _test_circular_orbit_holds_without_assist: radius off by %.1f m after 600 s" % drift)
+		print("FAIL _test_circular_orbit_holds: radius off by %.1f m after 600 s" % drift)
 		result = 1
 	cruiser.free()
 	return result
 
-func _test_cruise_without_assist_holds_velocity_in_strong_gravity() -> int:
+func _test_cruise_holds_velocity_in_strong_gravity() -> int:
 	# 2000 km from the centre gravity is ~1.2 m/s^2: the lock cancels it.
 	var cruiser := _orbiting_cruiser()
-	cruiser.flight_assist = false
 	cruiser.position = Vector3(2.0e6, 0.0, 0.0)
 	cruiser.velocity = Vector3(0.0, 0.0, -300.0)
 	_press(cruiser, "cruise")
@@ -705,7 +587,7 @@ func _test_cruise_without_assist_holds_velocity_in_strong_gravity() -> int:
 		cruiser._physics_process(1.0 / 60.0)
 	var result := 0
 	if not cruiser.velocity.is_equal_approx(Vector3(0.0, 0.0, -300.0)):
-		print("FAIL _test_cruise_without_assist_holds_velocity_in_strong_gravity: velocity drifted to %s" % cruiser.velocity)
+		print("FAIL _test_cruise_holds_velocity_in_strong_gravity: velocity drifted to %s" % cruiser.velocity)
 		result = 1
 	# Z (dorsal thrust) changes it; the lock then holds the new velocity.
 	Input.action_press("move_up")
@@ -715,81 +597,7 @@ func _test_cruise_without_assist_holds_velocity_in_strong_gravity() -> int:
 	for i in range(60):
 		cruiser._physics_process(1.0 / 60.0)
 	if not cruiser.cruise_locked or absf(cruiser.velocity.y - 150.0) > 0.5 or absf(cruiser.velocity.z + 300.0) > 0.5:
-		print("FAIL _test_cruise_without_assist_holds_velocity_in_strong_gravity: after Z velocity %s, cruise %s (expected y ~150, z -300, still locked)" % [cruiser.velocity, cruiser.cruise_locked])
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_orbit_readout_on_the_ring() -> int:
-	var cruiser := _orbiting_cruiser()
-	cruiser.position = Vector3(cruiser.ring_radius, 0.0, 0.0)
-	var readout: Dictionary = cruiser.orbit_readout()
-	var expected: float = cruiser.ring_radius - cruiser.planet_radius
-	var result := 0
-	if absf(readout.altitude - expected) > 1.0 or absf(readout.periapsis - expected) > 1.0 or absf(readout.apoapsis - expected) > 1.0:
-		print("FAIL _test_orbit_readout_on_the_ring: %s, expected all about %.1f" % [readout, expected])
-		result = 1
-	var loose: Node3D = VoidCruiserScript.new()
-	if not loose.orbit_readout().is_empty():
-		print("FAIL _test_orbit_readout_on_the_ring: a ship without a planet reports an orbit")
-		result = 1
-	loose.free()
-	cruiser.free()
-	return result
-
-func _test_process_shows_orbit_on_hud() -> int:
-	var cruiser := _orbiting_cruiser()
-	cruiser.build_proximity_sensors()
-	cruiser.build_cockpit()
-	cruiser.position = Vector3(cruiser.ring_radius + 10000.0, 0.0, 0.0)
-	cruiser._process(0.016)
-	var altitude: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/AltitudeLabel")
-	var assist: Label = cruiser.get_node("Cockpit/Hud/Panel/Lines/AssistLabel")
-	var result := 0
-	if altitude.text != "ALTITUDE  5222 km" or assist.text != "ASSIST  ON":
-		print("FAIL _test_process_shows_orbit_on_hud: '%s' / '%s'" % [altitude.text, assist.text])
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_orbit_line_has_256_points_around_the_planet() -> int:
-	var cruiser := _orbiting_cruiser()
-	cruiser.planet_center = Vector3(10.0, -20.0, 30.0)
-	cruiser.position = cruiser.planet_center + Vector3(cruiser.ring_radius, 0.0, 0.0)
-	cruiser.build_orbit_line()
-	cruiser._process(0.016)
-	var line := cruiser.get_node_or_null("OrbitLine") as MeshInstance3D
-	var result := 0
-	if line == null or not line.visible or not line.top_level or not line.position.is_equal_approx(cruiser.planet_center):
-		print("FAIL _test_orbit_line_has_256_points_around_the_planet: line missing, hidden, not top-level or not on the planet")
-		cruiser.free()
-		return 1
-	var mesh := line.mesh as ArrayMesh
-	var arrays: Array = mesh.surface_get_arrays(0)
-	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	if mesh.surface_get_primitive_type(0) != Mesh.PRIMITIVE_LINE_STRIP or points.size() != 256:
-		print("FAIL _test_orbit_line_has_256_points_around_the_planet: %d points, primitive %d" % [points.size(), mesh.surface_get_primitive_type(0)])
-		result = 1
-	for p in points:
-		# At rest on the ring the orbit is the ring's circle.
-		if absf(p.length() - cruiser.ring_radius) > 2.0:
-			print("FAIL _test_orbit_line_has_256_points_around_the_planet: point at %.1f m from the centre" % p.length())
-			result = 1
-			break
-	cruiser._process(0.016)
-	if (line.mesh as ArrayMesh).get_surface_count() != 1:
-		print("FAIL _test_orbit_line_has_256_points_around_the_planet: surfaces pile up (%d)" % (line.mesh as ArrayMesh).get_surface_count())
-		result = 1
-	cruiser.free()
-	return result
-
-func _test_orbit_line_hidden_without_planet() -> int:
-	var cruiser: Node3D = VoidCruiserScript.new()
-	cruiser.build_orbit_line()
-	cruiser._process(0.016)
-	var result := 0
-	if (cruiser.get_node("OrbitLine") as MeshInstance3D).visible:
-		print("FAIL _test_orbit_line_hidden_without_planet: line shown with no planet")
+		print("FAIL _test_cruise_holds_velocity_in_strong_gravity: after Z velocity %s, cruise %s (expected y ~150, z -300, still locked)" % [cruiser.velocity, cruiser.cruise_locked])
 		result = 1
 	cruiser.free()
 	return result
@@ -800,7 +608,6 @@ func _test_diving_through_the_planet_does_not_fling_the_ship() -> int:
 	# the ship out at hundreds of km/s. A uniform-sphere pull tops out near
 	# 2.1 km/s at the centre.
 	var cruiser := _orbiting_cruiser()
-	cruiser.flight_assist = false
 	cruiser.planet_axis = Vector3.RIGHT  # no centrifugal push along the dive
 	cruiser.position = Vector3(200.0, 0.0, 1.0e6)
 	cruiser.velocity = Vector3(0.0, 0.0, -2000.0)
@@ -811,6 +618,61 @@ func _test_diving_through_the_planet_does_not_fling_the_ship() -> int:
 	var result := 0
 	if fastest > 3000.0:
 		print("FAIL _test_diving_through_the_planet_does_not_fling_the_ship: reached %.0f m/s" % fastest)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_speed_does_not_fade_but_spin_does() -> int:
+	# Pure inertia on motion; the drag stays on rotation so the mouse does
+	# not leave the ship spinning.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	cruiser.velocity = Vector3(0.0, 0.0, -100.0)
+	cruiser.angular_velocity = Vector3(0.2, 0.0, 0.0)
+	for i in range(120):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if absf(cruiser.velocity.length() - 100.0) > 1e-6:
+		print("FAIL _test_speed_does_not_fade_but_spin_does: speed %f after 2 s, expected 100" % cruiser.velocity.length())
+		result = 1
+	if absf(cruiser.angular_velocity.length() - 0.05) > 0.001:
+		print("FAIL _test_speed_does_not_fade_but_spin_does: spin %f after 2 s, expected 0.05 (halved every second)" % cruiser.angular_velocity.length())
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_ramp_without_drag_reaches_about_45_km_s_in_10_s() -> int:
+	# 150 m/s^2 ramped 1x -> 10x -> 100x over 10 s, nothing to slow it:
+	# 150 * (5 * 5.5 + 5 * 55) = 45 375 m/s.
+	var cruiser: Node3D = VoidCruiserScript.new()
+	Input.action_press("move_forward")
+	for i in range(600):
+		cruiser._physics_process(1.0 / 60.0)
+	Input.action_release("move_forward")
+	var result := 0
+	var speed: float = cruiser.velocity.length()
+	if speed < 44500.0 or speed > 46000.0 or cruiser.velocity.z >= 0.0:
+		print("FAIL _test_ramp_without_drag_reaches_about_45_km_s_in_10_s: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_cruise_holds_instead_of_pushing() -> int:
+	var cruiser := _make_cruiser()
+	_press(cruiser, "cruise")
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if not cruiser.cruise_locked or not cruiser.velocity.is_zero_approx():
+		print("FAIL _test_cruise_holds_instead_of_pushing: cruise %s velocity %s" % [cruiser.cruise_locked, cruiser.velocity])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_one_flight_mode_and_no_orbit_line() -> int:
+	var cruiser: Node3D = VoidCruiserScript.new()
+	var result := 0
+	if "flight_assist" in cruiser or cruiser.has_method("build_orbit_line"):
+		print("FAIL _test_one_flight_mode_and_no_orbit_line: flight assist or the orbit line are still there")
 		result = 1
 	cruiser.free()
 	return result

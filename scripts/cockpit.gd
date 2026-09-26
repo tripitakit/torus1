@@ -25,13 +25,6 @@ const DOCK_PROMPT_TEXT := "DOCK  [F]"
 const DOCK_PROMPT_COLOR := Color(0.3, 1.0, 0.4)
 const CRUISE_TEXT := "CRUISE"
 const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
-const WARNING_COLOR := Color(1.0, 0.3, 0.25)
-# Orbit lines: [label node name, HUD prefix, readout key], in display order.
-const ORBIT_LABELS := [
-	["AltitudeLabel", "ALTITUDE", "altitude"],
-	["PeriapsisLabel", "PERIAPSIS", "periapsis"],
-	["ApoapsisLabel", "APOAPSIS", "apoapsis"],
-]
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
@@ -42,9 +35,6 @@ const DISTANCE_LABELS := {
 	"dorsal": ["DorsalLabel", "DORSAL"],
 	"ventral": ["VentralLabel", "VENTRAL"],
 }
-
-var _text_settings: LabelSettings
-var _cruise_settings: LabelSettings
 
 func build() -> void:
 	_build_pilot_camera()
@@ -63,19 +53,6 @@ func set_dock_prompt(available: bool) -> void:
 
 func set_cruise(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/CruiseLabel") as Label).visible = active
-
-# `readout`: heights above the surface (see void_cruiser.gd orbit_readout);
-# empty when there is no planet.
-func update_orbit(assist_on: bool, readout: Dictionary) -> void:
-	var lines := get_node("Hud/Panel/Lines")
-	var assist: Label = lines.get_node("AssistLabel")
-	assist.text = "ASSIST  ON" if assist_on else "ASSIST  OFF"
-	assist.label_settings = _text_settings if assist_on else _cruise_settings
-	for entry in ORBIT_LABELS:
-		var value: float = readout.get(entry[2], INF)
-		(lines.get_node(entry[0]) as Label).text = "%s  %s" % [entry[1], CockpitHudFormat.format_altitude(value)]
-	(lines.get_node("ImpactLabel") as Label).visible = readout.has("periapsis") and readout.periapsis < 0.0
-	(lines.get_node("EscapeLabel") as Label).visible = readout.has("apoapsis") and is_inf(readout.apoapsis)
 
 func _build_pilot_camera() -> void:
 	var camera := Camera3D.new()
@@ -110,27 +87,14 @@ func _build_hud() -> void:
 	var label_settings := LabelSettings.new()
 	label_settings.font_size = HUD_FONT_SIZE
 	label_settings.font_color = HUD_TEXT_COLOR
-	_text_settings = label_settings
 	_add_hud_label(lines, "SpeedLabel", label_settings)
 	var cruise_settings := LabelSettings.new()
 	cruise_settings.font_size = HUD_FONT_SIZE
 	cruise_settings.font_color = CRUISE_COLOR
-	_cruise_settings = cruise_settings
 	_add_hud_label(lines, "CruiseLabel", cruise_settings)
 	var cruise_label: Label = lines.get_node("CruiseLabel")
 	cruise_label.text = CRUISE_TEXT
 	cruise_label.visible = false
-	_add_hud_label(lines, "AssistLabel", label_settings)
-	for entry in ORBIT_LABELS:
-		_add_hud_label(lines, entry[0], label_settings)
-	var warning_settings := LabelSettings.new()
-	warning_settings.font_size = HUD_FONT_SIZE
-	warning_settings.font_color = WARNING_COLOR
-	for warning in [["ImpactLabel", "IMPACT"], ["EscapeLabel", "ESCAPE"]]:
-		_add_hud_label(lines, warning[0], warning_settings)
-		var warning_label: Label = lines.get_node(warning[0])
-		warning_label.text = warning[1]
-		warning_label.visible = false
 	for key in DISTANCE_LABELS:
 		_add_hud_label(lines, DISTANCE_LABELS[key][0], label_settings)
 
@@ -143,7 +107,6 @@ func _build_hud() -> void:
 	dock_label.visible = false
 
 	update_hud(0.0, {})
-	update_orbit(true, {})
 
 func _add_hud_label(parent: Node, label_name: String, label_settings: LabelSettings) -> void:
 	var label := Label.new()

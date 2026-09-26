@@ -177,3 +177,20 @@ dell'orbita, da guardare prima di passarlo all'utente.
   scena lo verifica.
 - **Precisione della linea:** i punti sono a milioni di metri dal centro del
   pianeta; in float a 32 bit l'errore è sotto il metro, invisibile.
+
+## Revisione (2026-09-26)
+
+Dopo la prova in gioco l'utente ha giudicato ridondanti le due modalità.
+Resta una modalità sola:
+- **Moto:** inerzia pura, senza attrito; nessun limite di velocità.
+- **Rotazione:** l'attrito resta, così il mouse non lascia la navetta a
+  girare.
+- **Rampa:** 10x a 5 s, 100x a 10 s tenendo W/S (circa 45 km/s dopo 10 s).
+- **Blocco C:** tiene la velocità attuale; i propulsori annullano le forze
+  orbitali. W/A/S/D o C lo spengono; Z/X cambiano la velocità tenuta.
+- **Forze orbitali:** restano.
+
+Tolti: Tab e l'azione `flight_assist`, la linea dell'orbita, le righe HUD
+`ASSIST`, `ALTITUDE`, `PERIAPSIS`, `APOAPSIS`, `IMPACT`, `ESCAPE` e le
+funzioni che servivano solo a quelle (`orbit_of`, `orbit_points`,
+`inertial_velocity`, `format_altitude`).

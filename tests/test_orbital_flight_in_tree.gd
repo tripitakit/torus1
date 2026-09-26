@@ -16,9 +16,8 @@ func _initialize():
 	_cruiser = _scene.get_node("VoidCruiser")
 	_planet = _scene.get_node("PlanetSystem/Planet")
 
-	_failures += _test_ship_finds_the_planet_and_shows_its_altitude()
-	_failures += await _test_orbit_line_stays_on_the_planet_after_an_origin_shift()
-	_failures += await _test_tab_key_reaches_the_ship()
+	_failures += _test_ship_finds_the_planet_without_orbit_hud_or_line()
+	_failures += await _test_gravity_follows_the_planet_after_an_origin_shift()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -26,49 +25,28 @@ func _initialize():
 		print("%d TEST(S) FAILED" % _failures)
 	quit()
 
-func _test_ship_finds_the_planet_and_shows_its_altitude() -> int:
-	# The ship starts 10 km outside the ring and 4 km above its plane:
-	# 6 959 601 m from the centre, 5222 km above the surface.
-	var altitude: Label = _cruiser.get_node("Cockpit/Hud/Panel/Lines/AltitudeLabel")
-	if not _cruiser.has_planet or altitude.text != "ALTITUDE  5222 km":
-		print("FAIL _test_ship_finds_the_planet_and_shows_its_altitude: has_planet %s, '%s'" % [_cruiser.has_planet, altitude.text])
-		return 1
-	return 0
+func _test_ship_finds_the_planet_without_orbit_hud_or_line() -> int:
+	var result := 0
+	if not _cruiser.has_planet or not _cruiser.planet_center.is_equal_approx(_planet.global_position):
+		print("FAIL _test_ship_finds_the_planet_without_orbit_hud_or_line: has_planet %s, centre %s vs planet %s" % [_cruiser.has_planet, _cruiser.planet_center, _planet.global_position])
+		result = 1
+	if _cruiser.get_node_or_null("OrbitLine") != null or _cruiser.get_node_or_null("Cockpit/Hud/Panel/Lines/AltitudeLabel") != null:
+		print("FAIL _test_ship_finds_the_planet_without_orbit_hud_or_line: the orbit line or the orbit HUD lines are still there")
+		result = 1
+	return result
 
-func _test_orbit_line_stays_on_the_planet_after_an_origin_shift() -> int:
+func _test_gravity_follows_the_planet_after_an_origin_shift() -> int:
 	# Past 5000 m the world shifts back under the ship, planet included.
 	var before: Vector3 = _planet.global_position
 	_cruiser.global_position += Vector3(0.0, 0.0, -6000.0)
 	for i in range(3):
 		await physics_frame
 		await process_frame
-	var line: MeshInstance3D = _cruiser.get_node("OrbitLine")
 	var result := 0
 	if _planet.global_position.is_equal_approx(before):
-		print("FAIL _test_orbit_line_stays_on_the_planet_after_an_origin_shift: no origin shift happened")
+		print("FAIL _test_gravity_follows_the_planet_after_an_origin_shift: no origin shift happened")
 		result = 1
-	if line.global_position.distance_to(_planet.global_position) > 1.0:
-		print("FAIL _test_orbit_line_stays_on_the_planet_after_an_origin_shift: line %.1f m off the planet centre" % line.global_position.distance_to(_planet.global_position))
+	if _cruiser.planet_center.distance_to(_planet.global_position) > 1.0:
+		print("FAIL _test_gravity_follows_the_planet_after_an_origin_shift: ship pulls toward %s, planet at %s" % [_cruiser.planet_center, _planet.global_position])
 		result = 1
 	return result
-
-func _key(pressed: bool) -> InputEventKey:
-	var event := InputEventKey.new()
-	event.keycode = KEY_TAB
-	event.physical_keycode = KEY_TAB
-	event.pressed = pressed
-	return event
-
-func _test_tab_key_reaches_the_ship() -> int:
-	# Through the viewport, as a real key press: GUI focus must not eat it.
-	var was: bool = _cruiser.flight_assist
-	root.push_input(_key(true))
-	root.push_input(_key(false))
-	await process_frame
-	if _cruiser.flight_assist == was:
-		print("FAIL _test_tab_key_reaches_the_ship: Tab did not toggle flight assist")
-		return 1
-	root.push_input(_key(true))
-	root.push_input(_key(false))
-	await process_frame
-	return 0
