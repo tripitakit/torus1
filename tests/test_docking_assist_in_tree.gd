@@ -24,12 +24,11 @@ func _initialize():
 	_station.set_process(false)
 
 	_failures += await _test_brake_stops_the_ship_in_space_far_out()
-	_failures += await _test_brake_holds_the_ship_over_the_pad()
-	_failures += await _test_plan_follows_the_ship_round_the_bridge()
+	_failures += await _test_brake_stops_the_ship_in_space_near_the_pad()
+	_failures += await _test_path_ends_on_the_pad()
 	_failures += await _test_thrust_eases_off_near_the_dock()
 	_failures += await _test_panel_shows_within_range()
 	_failures += await _test_panel_says_when_docking_is_possible()
-	_failures += await _test_path_ends_where_the_pad_will_be()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -72,50 +71,6 @@ func _test_brake_stops_the_ship_in_space_far_out() -> int:
 	_fly(30)
 	if _cruiser.velocity.length() > 0.01 or not _cruiser.brake_engaged:
 		print("FAIL _test_brake_stops_the_ship_in_space_far_out: %.2f m/s after 0.5 s, brake %s" % [_cruiser.velocity.length(), _cruiser.brake_engaged])
-		return 1
-	return 0
-
-func _test_brake_holds_the_ship_over_the_pad() -> int:
-	# 120 m over the pad with the bridge turning: holding B keeps the ship
-	# over the pad for half a minute, instead of meeting the hull (matching
-	# the pad's velocity sent it into the bridge in about 30 s).
-	await _park(120.0)
-	_press("brake")
-	var step := 0.05
-	for i in range(600):
-		_station._rotate_sections(step)
-		_cruiser._physics_process(step)
-	var port: Node3D = _station.get_docking_port(0)
-	var bridge: Node3D = _station.get_node("Bridge0")
-	var local: Vector3 = bridge.global_transform.affine_inverse() * _cruiser.global_position
-	var distance: float = _cruiser.global_position.distance_to(port.global_position)
-	var relative: float = (_cruiser.velocity - _station.get_docking_port_velocity(0)).length()
-	if absf(distance - 120.0) > 10.0 or Vector2(local.x, local.z).length() < 700.0 or relative > DockingAssist.DockingRules.DOCK_MAX_SPEED:
-		print("FAIL _test_brake_holds_the_ship_over_the_pad: after 30 s %.0f m from the pad, %.0f m from the axis, %.1f m/s against the pad" % [distance, Vector2(local.x, local.z).length(), relative])
-		return 1
-	return 0
-
-func _test_plan_follows_the_ship_round_the_bridge() -> int:
-	# Planned 1.6 km from the axis in front of the pad; the ship then goes
-	# three radians round the bridge. The old meeting point would take a
-	# path of about 3.8 km: the plan is made again for the pad passing below.
-	var bridge: Node3D = _station.get_node("Bridge0")
-	var pad: Vector3 = _station.get_docking_port(0).transform.origin
-	var angle := atan2(pad.x, pad.z)
-	for turn in [0.0, 3.0]:
-		var ship := Vector3(sin(angle + turn), 0.0, cos(angle + turn)) * 1600.0
-		var down: Vector3 = (bridge.global_transform.basis * -ship).normalized()
-		_cruiser.global_transform = Transform3D(Basis.looking_at(down, bridge.global_transform.basis.y), bridge.global_transform * ship)
-		_cruiser.velocity = Vector3.ZERO
-		if turn == 0.0:
-			# Plan here first, not from where the last test left the ship.
-			_cruiser._arrival_at = -1.0
-			_cruiser._guide_length = 0.0
-		for i in range(3):
-			await physics_frame
-			await process_frame
-	if _cruiser._guide_length > 1500.0:
-		print("FAIL _test_plan_follows_the_ship_round_the_bridge: path %.0f m after going round, expected about 1000 m" % _cruiser._guide_length)
 		return 1
 	return 0
 
@@ -180,32 +135,28 @@ func _test_panel_says_when_docking_is_possible() -> int:
 		result = 1
 	return result
 
-func _test_path_ends_where_the_pad_will_be() -> int:
-	# 2 km from the bridge's axis, a quarter turn round from the pad: the
-	# plan waits for the pad to come round below the ship, and the gates
-	# lead down to that meeting point, not across to where the pad is now.
-	var bridge: Node3D = _station.get_node("Bridge0")
+func _test_brake_stops_the_ship_in_space_near_the_pad() -> int:
+	# 500 m out, drifting: B stops the ship in space, not with the bridge.
+	# Precision 0.25 there: 375 m/s^2 of braking, so 40 m/s goes in 0.11 s.
+	await _park(500.0)
+	_cruiser.velocity = Vector3(40.0, 0.0, 0.0)
+	_press("brake")
+	_fly(30)
+	if _cruiser.velocity.length() > 0.01:
+		print("FAIL _test_brake_stops_the_ship_in_space_near_the_pad: %.2f m/s after 0.5 s" % _cruiser.velocity.length())
+		return 1
+	return 0
+
+func _test_path_ends_on_the_pad() -> int:
+	# 2 km out, nose on the pad: the last gate sits by the pad itself.
+	await _park(2000.0)
 	var port: Node3D = _station.get_docking_port(0)
-	var pad: Vector3 = port.transform.origin
-	var angle := atan2(pad.x, pad.z) + PI * 0.5
-	var ship := Vector3(sin(angle), 0.0, cos(angle)) * 2000.0
-	var down: Vector3 = (bridge.global_transform.basis * -ship).normalized()
-	_cruiser.global_transform = Transform3D(Basis.looking_at(down, bridge.global_transform.basis.y), bridge.global_transform * ship)
-	_cruiser.velocity = Vector3.ZERO
-	# A jump like this never happens in flight: drop the last test's plan.
-	_cruiser._arrival_at = -1.0
-	_cruiser._guide_length = 0.0
-	for i in range(3):
-		await physics_frame
-		await process_frame
-	var time_left: float = _cruiser._arrival_at - _cruiser._guide_clock
-	var later: Vector3 = bridge.global_transform * DockingAssist.future_pad(pad, _station.get_spin_rate(), time_left)
 	var points: PackedVector3Array = ((_cruiser.get_node("ApproachGuide") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	var last := Vector3.ZERO
 	for k in range(8):
 		last += points[points.size() - 8 + k]
 	last = _cruiser.global_position + last / 8.0
-	if later.distance_to(port.global_position) < 500.0 or last.distance_to(later) > 200.0:
-		print("FAIL _test_path_ends_where_the_pad_will_be: last gate %.0f m from the meeting point, %.0f m from the pad now (%.0f s ahead)" % [last.distance_to(later), last.distance_to(port.global_position), time_left])
+	if last.distance_to(port.global_position) > 100.0:
+		print("FAIL _test_path_ends_on_the_pad: last gate %.0f m from the pad" % last.distance_to(port.global_position))
 		return 1
 	return 0

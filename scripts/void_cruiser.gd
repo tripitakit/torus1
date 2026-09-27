@@ -26,8 +26,8 @@ const VOID_THRUST_STEPS := [10.0, 100.0]
 # new press of W/A/S/D, or C again, lets go; roll, mouse and up/down do not
 # (up/down change the held velocity).
 const CRUISE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right"]
-# B brakes and holds (see DockingAssist.brake_target): near a dock turning
-# with its bridge, farther out at rest; it cancels the orbital pulls too.
+# B brakes the ship to rest (relative to the station) and holds it there,
+# cancelling the orbital pulls too.
 # B again, or any thrust key, lets go. C and B turn each other off.
 const BRAKE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right", "move_up", "move_down"]
 
@@ -57,12 +57,6 @@ var _strobe_time: float = 0.0
 # the bridge it led to (see ApproachGuide.over_rim).
 var _guide_over_rim := false
 var _guide_bridge := -1
-# The last path's length, the guide's clock and the planned arrival on it
-# (see DockingAssist.keeps_plan); -1: no plan.
-var _guide_length := 0.0
-var _guide_clock := 0.0
-var _arrival_at := -1.0
-var _planned_length := 0.0
 var cruise_locked := false
 var brake_engaged := false
 # The precision factor this tick (1 away from docks; see DockingAssist).
@@ -100,7 +94,6 @@ func _process(delta: float) -> void:
 		cockpit.set_thrust_scale(thrust_scale)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
 		cockpit.update_attitude(attitude_matrix())
-	_guide_clock += delta
 	var readout := _update_approach_guide()
 	if cockpit:
 		cockpit.update_approach(readout)
@@ -134,9 +127,8 @@ func _external_acceleration() -> Vector3:
 	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
 
 # Near a dock the precision factor scales every thruster and stops the
-# ramp. The brake steers the velocity to DockingAssist.brake_target (rest
-# away from docks) at up to BRAKE_MULTIPLIER times the base thrust, scaled
-# too.
+# ramp. The brake stops the ship at up to BRAKE_MULTIPLIER times the base
+# thrust, scaled too.
 func _fly(delta: float) -> void:
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
@@ -144,10 +136,7 @@ func _fly(delta: float) -> void:
 	thrust_scale = 1.0 if dock.is_empty() else DockingAssist.precision_factor(dock.distance)
 	thrust_input = DockingAssist.scaled_thrust(thrust_input, forward_thrust_multiplier(), thrust_scale)
 	if brake_engaged:
-		var target := Vector3.ZERO
-		if not dock.is_empty():
-			target = DockingAssist.brake_target(dock.distance, dock.station.get_bridge_point_velocity(dock.index, global_position))
-		velocity = DockingAssist.brake_velocity(velocity, target, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
+		velocity = DockingAssist.brake_velocity(velocity, Vector3.ZERO, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
 
 # The nearest dock within the guide's MAX_RANGE: station, bridge index,
@@ -247,7 +236,7 @@ func _line_mesh(node_name: String, color: Color) -> MeshInstance3D:
 # dock. The marker sits on the motion relative to the dock, as far out as
 # the first gate: cyan when wholly inside it, red otherwise; hidden under
 # MARKER_MIN_SPEED. Returns the approach panel's readout (empty past
-# MAX_RANGE), keeping the planned arrival as it goes.
+# MAX_RANGE).
 func _update_approach_guide() -> Dictionary:
 	var guide := get_node_or_null("ApproachGuide") as MeshInstance3D
 	var marker := get_node_or_null("HeadingMarker") as MeshInstance3D
@@ -260,33 +249,21 @@ func _update_approach_guide() -> Dictionary:
 	var dock := _nearest_dock()
 	if dock.is_empty():
 		_guide_bridge = -1
-		_guide_length = 0.0
-		_arrival_at = -1.0
 	else:
 		if dock.index != _guide_bridge:
 			_guide_over_rim = false
 			_guide_bridge = dock.index
-			_guide_length = 0.0
-			_arrival_at = -1.0
 		var port: Node3D = dock.port
 		var distance: float = dock.distance
-		var length: float = _guide_length if _guide_length > 0.0 else distance
-		var spin: float = dock.station.get_spin_rate()
-		if _arrival_at < 0.0 or not DockingAssist.keeps_plan(_arrival_at - _guide_clock, length, spin, _planned_length):
-			var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
-			_arrival_at = _guide_clock + DockingAssist.plan_arrival(bridge_frame.affine_inverse() * global_position, port.transform.origin, spin, length)
-			_planned_length = length
 		var motion: Vector3 = velocity - dock.velocity
 		var closing := motion.dot((port.global_position - global_position).normalized())
-		length = distance
-		_guide_length = 0.0
+		var length := distance
 		if distance >= ApproachGuide.MIN_RANGE:
 			var up := global_transform.basis.y
-			var path := _approach_path(dock.station, port, _arrival_at - _guide_clock)
+			var path := _approach_path(dock.station, port)
 			length = 0.0
 			for i in range(1, path.size()):
 				length += path[i - 1].distance_to(path[i])
-			_guide_length = length
 			gate_lines = ApproachGuide.gates_along(path, up)
 			var gates := ApproachGuide.gate_centres(path)
 			if not gates.is_empty():
@@ -296,7 +273,7 @@ func _update_approach_guide() -> Dictionary:
 					var centre := motion.normalized() * first.length()
 					marker_lines = ApproachGuide.marker_segments(centre, motion.normalized(), up)
 					on_path = ApproachGuide.marker_on_path(first, gates[0][1], up, centre)
-		readout = DockingAssist.readout(length, _arrival_at - _guide_clock, motion.length(), closing, distance)
+		readout = DockingAssist.readout(length, motion.length(), closing, distance)
 	if gate_lines.is_empty():
 		_guide_over_rim = false
 	_show_lines(guide, gate_lines)
@@ -319,16 +296,15 @@ func _show_lines(lines: MeshInstance3D, segments: PackedVector3Array) -> void:
 
 # The approach path to `port`, relative to the ship: worked out in the frame
 # of the port's bridge (see approach_guide.gd), where the station near the
-# dock is round about the axis. It leaves along the nose (-Z) and ends where
-# the pad will be `time_left` seconds from now, a place that stays put while
-# the bridge turns. Updates the shape carried to the next frame.
-func _approach_path(station: Node3D, port: Node3D, time_left: float) -> PackedVector3Array:
+# dock is round about the axis. It leaves along the nose (-Z) and ends on the
+# pad. Updates the shape carried to the next frame.
+func _approach_path(station: Node3D, port: Node3D) -> PackedVector3Array:
 	var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
 	var to_bridge := bridge_frame.affine_inverse()
 	var ship: Vector3 = to_bridge * global_position
 	var nose: Vector3 = (to_bridge.basis * -global_transform.basis.z).normalized()
 	var half_gap: float = station.get_bridge_length() * 0.5
-	var pad := DockingAssist.future_pad(port.transform.origin, station.get_spin_rate(), time_left)
+	var pad: Vector3 = port.transform.origin
 	_guide_over_rim = ApproachGuide.over_rim(ship, nose, pad, station.section_radius, half_gap, _guide_over_rim)
 	var local_path := ApproachGuide.approach_path(ship, nose, pad, station.section_radius, half_gap, station.get_bridge_radius(), _guide_over_rim)
 	var path := PackedVector3Array()
