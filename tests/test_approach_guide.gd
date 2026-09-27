@@ -33,9 +33,9 @@ func _init():
 
 func _test_gate_distances_by_length() -> int:
 	var result := 0
-	# [path length, gate count, first gate, spacing]. The 10 km range is the
-	# ship's business: a path longer than that still gets its first gates.
-	for c in [[10000.0, 20, 100.0, 500.0], [1000.0, 18, 100.0, 50.0], [150.0, 1, 100.0, 0.0], [5000.0, 20, 100.0, 250.0], [15000.0, 20, 100.0, 500.0]]:
+	# [path length, gate count, first gate, spacing]. The range is the
+	# ship's business: a path longer than it still gets its first gates.
+	for c in [[20000.0, 40, 100.0, 500.0], [10000.0, 40, 100.0, 250.0], [1000.0, 18, 100.0, 50.0], [150.0, 1, 100.0, 0.0], [30000.0, 40, 100.0, 500.0]]:
 		var gates: PackedFloat64Array = ApproachGuide.gate_distances(c[0])
 		var ok: bool = gates.size() == c[1] and is_equal_approx(gates[0], c[2])
 		if ok and gates.size() > 1:

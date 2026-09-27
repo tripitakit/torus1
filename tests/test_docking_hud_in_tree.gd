@@ -20,7 +20,9 @@ func _initialize():
 	_station.set_process(false)
 
 	_failures += await _test_guide_leaves_along_the_nose()
+	_failures += await _test_guide_shows_15_km_out()
 	_failures += await _test_guide_hides_far_from_every_dock()
+	_failures += await _test_guide_hides_on_the_last_100_m()
 	_failures += await _test_guide_curves_around_a_section()
 
 	if _failures == 0:
@@ -69,10 +71,30 @@ func _test_guide_leaves_along_the_nose() -> int:
 		return 1
 	return 0
 
-func _test_guide_hides_far_from_every_dock() -> int:
+func _test_guide_shows_15_km_out() -> int:
 	await _park(15000.0)
+	if not (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible:
+		print("FAIL _test_guide_shows_15_km_out: hidden 15 km from a dock")
+		return 1
+	return 0
+
+func _test_guide_hides_far_from_every_dock() -> int:
+	await _park(25000.0)
 	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible:
-		print("FAIL _test_guide_hides_far_from_every_dock: shown 15 km from the nearest dock")
+		print("FAIL _test_guide_hides_far_from_every_dock: shown 25 km from the nearest dock")
+		return 1
+	return 0
+
+func _test_guide_hides_on_the_last_100_m() -> int:
+	# 95 m out with the nose turned away: the path out and back is over
+	# 100 m long, enough for a gate, but the dock itself is too close.
+	await _park(95.0)
+	var port: Node3D = _station.get_docking_port(0)
+	_cruiser.global_transform = Transform3D(Basis.looking_at(port.global_transform.basis.x, port.global_transform.basis.y), _cruiser.global_position)
+	_cruiser.velocity = _station.get_docking_port_velocity(0) - _cruiser.global_transform.basis.z * 5.0
+	await process_frame
+	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible:
+		print("FAIL _test_guide_hides_on_the_last_100_m: shown 95 m from the dock")
 		return 1
 	return 0
 

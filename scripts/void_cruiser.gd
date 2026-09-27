@@ -184,7 +184,8 @@ func _update_approach_guide() -> void:
 		station = get_node_or_null(station_path) as Node3D
 	if station != null and station.is_inside_tree():
 		var port: Node3D = station.get_docking_port(station.nearest_bridge_index(global_position))
-		if global_position.distance_to(port.global_position) <= ApproachGuide.MAX_RANGE:
+		var distance := global_position.distance_to(port.global_position)
+		if distance >= ApproachGuide.MIN_RANGE and distance <= ApproachGuide.MAX_RANGE:
 			segments = ApproachGuide.gates_along(_approach_path(station, port), global_transform.basis.y)
 	guide.visible = not segments.is_empty()
 	if segments.is_empty():

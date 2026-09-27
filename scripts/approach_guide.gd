@@ -11,8 +11,10 @@ extends RefCounted
 # bridge between them. It keeps SECTION_MARGIN off the sections and
 # BRIDGE_MARGIN off the bridge.
 
-const MAX_RANGE := 10000.0
-const MAX_GATES := 20
+# The guide shows between these distances (straight line, ship to pad).
+const MIN_RANGE := 100.0
+const MAX_RANGE := 20000.0
+const MAX_GATES := 40
 # Metres between gates: length / MAX_GATES, kept within these.
 const SPACING := Vector2(50.0, 500.0)
 const FIRST_GATE := 100.0
