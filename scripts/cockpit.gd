@@ -128,17 +128,17 @@ func _build_hud() -> void:
 	cross.offset_top = -HUD_MARGIN - VelocityCrossScript.PANEL_SIZE.y
 	cross.offset_bottom = -HUD_MARGIN
 	hud.add_child(cross)
-	# Bottom centre.
+	# Top centre.
 	var navball: Control = NavballScript.new()
 	navball.name = "Navball"
 	navball.anchor_left = 0.5
 	navball.anchor_right = 0.5
-	navball.anchor_top = 1.0
-	navball.anchor_bottom = 1.0
+	navball.anchor_top = 0.0
+	navball.anchor_bottom = 0.0
 	navball.offset_left = -NavballScript.PANEL_SIZE.x * 0.5
 	navball.offset_right = NavballScript.PANEL_SIZE.x * 0.5
-	navball.offset_top = -HUD_MARGIN - NavballScript.PANEL_SIZE.y
-	navball.offset_bottom = -HUD_MARGIN
+	navball.offset_top = HUD_MARGIN
+	navball.offset_bottom = HUD_MARGIN + NavballScript.PANEL_SIZE.y
 	hud.add_child(navball)
 
 	update_hud(0.0, {})

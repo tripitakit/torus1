@@ -14,7 +14,7 @@ func _init():
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
-	failures += _test_hud_hosts_the_navball_bottom_centre()
+	failures += _test_hud_hosts_the_navball_top_centre()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -201,21 +201,24 @@ func _test_hud_hosts_the_velocity_cross_bottom_left() -> int:
 	cockpit.free()
 	return result
 
-func _test_hud_hosts_the_navball_bottom_centre() -> int:
+func _test_hud_hosts_the_navball_top_centre() -> int:
 	var cockpit := _make_cockpit()
 	var result := 0
 	var navball := cockpit.get_node_or_null("Hud/Navball") as Control
 	if navball == null:
-		print("FAIL _test_hud_hosts_the_navball_bottom_centre: no Hud/Navball")
+		print("FAIL _test_hud_hosts_the_navball_top_centre: no Hud/Navball")
 		cockpit.free()
 		return 1
-	if not is_equal_approx(navball.anchor_left, 0.5) or not is_equal_approx(navball.anchor_top, 1.0) or navball.offset_bottom > 0.0:
-		print("FAIL _test_hud_hosts_the_navball_bottom_centre: anchors %f/%f bottom %f" % [navball.anchor_left, navball.anchor_top, navball.offset_bottom])
+	# Top centre, HUD_MARGIN below the top edge, as wide on both sides.
+	var anchored: bool = is_equal_approx(navball.anchor_left, 0.5) and is_equal_approx(navball.anchor_right, 0.5) and is_equal_approx(navball.anchor_top, 0.0) and is_equal_approx(navball.anchor_bottom, 0.0)
+	var placed: bool = is_equal_approx(navball.offset_left, -navball.offset_right) and is_equal_approx(navball.offset_top, cockpit.HUD_MARGIN) and is_equal_approx(navball.offset_bottom - navball.offset_top, navball.PANEL_SIZE.y)
+	if not anchored or not placed:
+		print("FAIL _test_hud_hosts_the_navball_top_centre: anchors %f/%f/%f/%f offsets %f/%f/%f/%f" % [navball.anchor_left, navball.anchor_right, navball.anchor_top, navball.anchor_bottom, navball.offset_left, navball.offset_right, navball.offset_top, navball.offset_bottom])
 		result = 1
 	var matrix := Basis(Vector3.UP, 0.7)
 	cockpit.update_attitude(matrix)
 	if not navball.attitude().is_equal_approx(matrix):
-		print("FAIL _test_hud_hosts_the_navball_bottom_centre: update_attitude did not reach the navball")
+		print("FAIL _test_hud_hosts_the_navball_top_centre: update_attitude did not reach the navball")
 		result = 1
 	cockpit.free()
 	return result
