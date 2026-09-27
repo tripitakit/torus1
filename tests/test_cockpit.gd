@@ -14,6 +14,7 @@ func _init():
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
+	failures += _test_hud_hosts_the_navball_bottom_centre()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -59,11 +60,15 @@ func _test_pilot_camera_sees_world_but_not_ship_exterior() -> int:
 	return result
 
 func _test_cockpit_has_no_screens_or_3d_geometry() -> int:
-	# Single full-screen view: no camera screens, no cockpit meshes.
+	# Single full-screen view: no camera screens, no cockpit meshes. The
+	# navball's little world (its own SubViewport and sphere) is a HUD
+	# instrument, not cockpit geometry.
 	var cockpit := _make_cockpit()
 	var result := 0
-	var viewports := cockpit.find_children("*", "SubViewport", true, false)
-	var meshes := cockpit.find_children("*", "MeshInstance3D", true, false)
+	var navball := cockpit.get_node_or_null("Hud/Navball")
+	var outside_navball := func(node: Node) -> bool: return navball == null or not navball.is_ancestor_of(node)
+	var viewports := cockpit.find_children("*", "SubViewport", true, false).filter(outside_navball)
+	var meshes := cockpit.find_children("*", "MeshInstance3D", true, false).filter(outside_navball)
 	if viewports.size() > 0 or meshes.size() > 0:
 		print("FAIL _test_cockpit_has_no_screens_or_3d_geometry: %d SubViewports, %d meshes, expected none" % [viewports.size(), meshes.size()])
 		result = 1
@@ -192,6 +197,25 @@ func _test_hud_hosts_the_velocity_cross_bottom_left() -> int:
 	cockpit.update_velocity(Vector3(-5.0, 0.0, 120.0), true)
 	if not cross.components.is_equal_approx(Vector3(-5.0, 0.0, 120.0)) or not cross.cruise:
 		print("FAIL _test_hud_hosts_the_velocity_cross_bottom_left: update_velocity did not reach the cross")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_hud_hosts_the_navball_bottom_centre() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var navball := cockpit.get_node_or_null("Hud/Navball") as Control
+	if navball == null:
+		print("FAIL _test_hud_hosts_the_navball_bottom_centre: no Hud/Navball")
+		cockpit.free()
+		return 1
+	if not is_equal_approx(navball.anchor_left, 0.5) or not is_equal_approx(navball.anchor_top, 1.0) or navball.offset_bottom > 0.0:
+		print("FAIL _test_hud_hosts_the_navball_bottom_centre: anchors %f/%f bottom %f" % [navball.anchor_left, navball.anchor_top, navball.offset_bottom])
+		result = 1
+	var matrix := Basis(Vector3.UP, 0.7)
+	cockpit.update_attitude(matrix)
+	if not navball.attitude().is_equal_approx(matrix):
+		print("FAIL _test_hud_hosts_the_navball_bottom_centre: update_attitude did not reach the navball")
 		result = 1
 	cockpit.free()
 	return result

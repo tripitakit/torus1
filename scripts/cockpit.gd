@@ -2,6 +2,7 @@ extends Node3D
 
 const CockpitHudFormat = preload("res://scripts/cockpit_hud_format.gd")
 const VelocityCrossScript = preload("res://scripts/velocity_cross.gd")
+const NavballScript = preload("res://scripts/navball.gd")
 
 # The ship's own exterior markers (nav-light spheres) sit on this visual
 # layer; the pilot camera, inside the hull, skips them.
@@ -58,6 +59,10 @@ func set_cruise(active: bool) -> void:
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
 	(get_node("Hud/VelocityCross") as Control).set_velocity(components, cruise)
+
+# The ship's attitude in the ring's frame (see Attitude.navball_matrix).
+func update_attitude(matrix: Basis) -> void:
+	(get_node("Hud/Navball") as Control).set_attitude(matrix)
 
 func _build_pilot_camera() -> void:
 	var camera := Camera3D.new()
@@ -123,6 +128,18 @@ func _build_hud() -> void:
 	cross.offset_top = -HUD_MARGIN - VelocityCrossScript.PANEL_SIZE.y
 	cross.offset_bottom = -HUD_MARGIN
 	hud.add_child(cross)
+	# Bottom centre.
+	var navball: Control = NavballScript.new()
+	navball.name = "Navball"
+	navball.anchor_left = 0.5
+	navball.anchor_right = 0.5
+	navball.anchor_top = 1.0
+	navball.anchor_bottom = 1.0
+	navball.offset_left = -NavballScript.PANEL_SIZE.x * 0.5
+	navball.offset_right = NavballScript.PANEL_SIZE.x * 0.5
+	navball.offset_top = -HUD_MARGIN - NavballScript.PANEL_SIZE.y
+	navball.offset_bottom = -HUD_MARGIN
+	hud.add_child(navball)
 
 	update_hud(0.0, {})
 
