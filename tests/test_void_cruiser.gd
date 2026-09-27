@@ -44,6 +44,7 @@ func _init():
 	failures += _test_void_cruiser_flies_with_the_shared_flying_craft()
 	failures += _test_approach_guide_hidden_without_a_station()
 	failures += _test_process_feeds_the_velocity_cross()
+	failures += _test_process_feeds_the_navball()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -702,5 +703,31 @@ func _test_process_feeds_the_velocity_cross() -> int:
 	if not cross.components.is_equal_approx(Vector3(2.0, 0.0, 50.0)):
 		print("FAIL _test_process_feeds_the_velocity_cross: cross got %s, expected (2, 0, 50)" % cross.components)
 		result = 1
+	cruiser.free()
+	return result
+
+func _test_process_feeds_the_navball() -> int:
+	# Planet at the origin, axis +Y, ship on +X: the reference is the
+	# identity. Rolled upside down, the top of the ball shows down.
+	var cruiser := _make_cruiser()
+	cruiser.has_planet = true
+	cruiser.planet_center = Vector3.ZERO
+	cruiser.planet_axis = Vector3.UP
+	cruiser.position = Vector3(1000.0, 0.0, 0.0)
+	cruiser.transform.basis = Basis(Vector3.BACK, PI)
+	cruiser.build_proximity_sensors()
+	cruiser.build_cockpit()
+	cruiser._process(0.016)
+	var navball = cruiser.get_node("Cockpit/Hud/Navball")
+	var result := 0
+	var top: Vector3 = navball.attitude() * Vector3(0.0, 1.0, 0.0)
+	if not top.is_equal_approx(Vector3(0.0, -1.0, 0.0)) or not navball.attitude().is_equal_approx(cruiser.attitude_matrix()):
+		print("FAIL _test_process_feeds_the_navball: the top of the ball shows %s, expected down" % top)
+		result = 1
+	var loose := _make_cruiser()
+	if not loose.attitude_matrix().is_equal_approx(Basis(Vector3.RIGHT, Vector3.UP, Vector3(0.0, 0.0, -1.0))):
+		print("FAIL _test_process_feeds_the_navball: without a planet the reference is not the identity")
+		result = 1
+	loose.free()
 	cruiser.free()
 	return result

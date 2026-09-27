@@ -4,6 +4,7 @@ const CockpitScript = preload("res://scripts/cockpit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const ApproachGuide = preload("res://scripts/approach_guide.gd")
 const VelocityCross = preload("res://scripts/velocity_cross.gd")
+const Attitude = preload("res://scripts/attitude.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -75,6 +76,7 @@ func _process(delta: float) -> void:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
+		cockpit.update_attitude(attitude_matrix())
 	_update_approach_guide()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -196,6 +198,14 @@ func _update_approach_guide() -> void:
 
 func _world_basis() -> Basis:
 	return global_transform.basis if is_inside_tree() else transform.basis
+
+# The navball's matrix: the ship's attitude in the ring's frame (identity
+# frame without a planet).
+func attitude_matrix() -> Basis:
+	var reference := Basis()
+	if has_planet:
+		reference = Attitude.ring_reference(_world_position(), planet_center, planet_axis)
+	return Attitude.navball_matrix(_world_basis(), reference)
 
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),
