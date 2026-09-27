@@ -9,6 +9,8 @@ func _init():
 	failures += _test_set_velocity_keeps_values()
 	failures += _test_readout_names_each_axis_by_its_direction()
 	failures += _test_readout_columns_never_overlap()
+	failures += _test_bars_share_the_total_speed()
+	failures += _test_forward_bar_turns_smoothly()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -89,3 +91,34 @@ func _test_readout_columns_never_overlap() -> int:
 		print("FAIL _test_readout_columns_never_overlap: the last column runs past the panel")
 		result = 1
 	return result
+
+func _test_bars_share_the_total_speed() -> int:
+	var result := 0
+	# One axis only: the bar is as long as the speed's log bar.
+	var straight: Vector3 = VelocityCross.bar_reaches(Vector3(0.0, 0.0, -2000.0))
+	if not straight.is_equal_approx(Vector3(0.0, 0.0, -VelocityCross.bar_fraction(2000.0))):
+		print("FAIL _test_bars_share_the_total_speed: pure aft 2000 m/s gave %s" % straight)
+		result = 1
+	# Each bar takes its axis's share of that length, sign kept.
+	var mixed: Vector3 = VelocityCross.bar_reaches(Vector3(300.0, -400.0, 0.0))
+	var total: float = VelocityCross.bar_fraction(500.0)
+	if not mixed.is_equal_approx(Vector3(0.6, -0.8, 0.0) * total):
+		print("FAIL _test_bars_share_the_total_speed: (300, -400, 0) gave %s, expected %s" % [mixed, Vector3(0.6, -0.8, 0.0) * total])
+		result = 1
+	if VelocityCross.bar_reaches(Vector3.ZERO) != Vector3.ZERO or VelocityCross.bar_reaches(Vector3(0.3, 0.0, 0.0)) != Vector3.ZERO:
+		print("FAIL _test_bars_share_the_total_speed: bars drawn under MIN_SPEED")
+		result = 1
+	return result
+
+func _test_forward_bar_turns_smoothly() -> int:
+	# Yawing through broadside at 2000 m/s: 35 m/s forward and aft used to
+	# fill a third of the bar each way, so it seemed to flip in one frame.
+	var previous := 0.0
+	for step in range(0, 181):
+		var yaw := deg_to_rad(float(step))
+		var reach: float = VelocityCross.bar_reaches(Vector3(sin(yaw), 0.0, cos(yaw)) * 2000.0).z
+		if step > 0 and absf(reach - previous) > 0.02:
+			print("FAIL _test_forward_bar_turns_smoothly: forward bar jumps %.3f between %d and %d degrees" % [reach - previous, step - 1, step])
+			return 1
+		previous = reach
+	return 0

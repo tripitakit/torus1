@@ -2,8 +2,9 @@ extends Control
 
 # The ship's velocity (relative to the ring, like SPEED) split along its own
 # axes: a cross for port / starboard across and dorsal / ventral up and
-# down, and a separate bar for forward / aft. Bar lengths are logarithmic
-# from 1 m/s to 100 km/s, so docking speeds and full-ramp speeds both read.
+# down, and a separate bar for forward / aft. The speed sets a logarithmic
+# length, from 1 m/s to 100 km/s, so docking speeds and full-ramp speeds both
+# read; each bar shows its axis's share of it (see bar_reaches).
 # The values sit in a fixed row under the bars: written at the bar tips they
 # ran over each other at tens of km/s.
 
@@ -47,6 +48,16 @@ static func bar_fraction(speed: float) -> float:
 		return 0.0
 	return clampf(log(1.0 + magnitude) / log(1.0 + TOP_SPEED), 0.0, 1.0)
 
+# Signed bar lengths, 0..1 each way: the total speed's log length, shared
+# out by each axis's part of the velocity. Bars scaled one by one made a few
+# m/s look like a third of a bar, so turning the nose through broadside
+# flipped the forward bar in one frame.
+static func bar_reaches(values: Vector3) -> Vector3:
+	var speed := values.length()
+	if bar_fraction(speed) <= 0.0:
+		return Vector3.ZERO
+	return values / speed * bar_fraction(speed)
+
 # The value row: each axis named by the way the ship moves along it.
 static func readout(values: Vector3) -> Array:
 	return [
@@ -71,18 +82,18 @@ func _draw() -> void:
 	_label(FORWARD_CENTRE + Vector2(-14.0, -ARM - 6.0), "FWD", AXIS_COLOR)
 	_label(FORWARD_CENTRE + Vector2(-14.0, ARM + 16.0), "AFT", AXIS_COLOR)
 	var forward_color := CRUISE_COLOR if cruise else BAR_COLOR
-	_bar(CROSS_CENTRE, Vector2(signf(components.x), 0.0), components.x, BAR_COLOR)
-	_bar(CROSS_CENTRE, Vector2(0.0, -signf(components.y)), components.y, BAR_COLOR)
-	_bar(FORWARD_CENTRE, Vector2(0.0, -signf(components.z)), components.z, forward_color)
+	var reaches := bar_reaches(components)
+	_bar(CROSS_CENTRE, Vector2(reaches.x, 0.0), BAR_COLOR)
+	_bar(CROSS_CENTRE, Vector2(0.0, -reaches.y), BAR_COLOR)
+	_bar(FORWARD_CENTRE, Vector2(0.0, -reaches.z), forward_color)
 	var values := readout(components)
 	for k in range(3):
 		_label(Vector2(READOUT_COLUMNS[k], READOUT_BASELINE), values[k], forward_color if k == 2 else BAR_COLOR)
 
-func _bar(origin: Vector2, direction: Vector2, speed: float, color: Color) -> void:
-	var reach := bar_fraction(speed)
-	if reach <= 0.0:
+func _bar(origin: Vector2, reach: Vector2, color: Color) -> void:
+	if reach.is_zero_approx():
 		return
-	draw_line(origin, origin + direction * ARM * reach, color, BAR_WIDTH)
+	draw_line(origin, origin + reach * ARM, color, BAR_WIDTH)
 
 func _label(at: Vector2, text: String, color: Color) -> void:
 	draw_string(ThemeDB.fallback_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
