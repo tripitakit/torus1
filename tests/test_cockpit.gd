@@ -13,6 +13,7 @@ func _init():
 	failures += _test_update_hud_missing_distances_show_no_reading()
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
+	failures += _test_brake_line_shown_only_while_braking()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_top_centre()
 
@@ -100,7 +101,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "CruiseLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
+	var expected := ["SpeedLabel", "CruiseLabel", "BrakeLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
@@ -219,6 +220,25 @@ func _test_hud_hosts_the_navball_top_centre() -> int:
 	cockpit.update_attitude(matrix)
 	if not navball.attitude().is_equal_approx(matrix):
 		print("FAIL _test_hud_hosts_the_navball_top_centre: update_attitude did not reach the navball")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_brake_line_shown_only_while_braking() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var label := cockpit.get_node_or_null("Hud/Panel/Lines/BrakeLabel") as Label
+	if label == null or label.visible or label.text != "BRAKE":
+		print("FAIL _test_brake_line_shown_only_while_braking: missing, shown from the start, or not 'BRAKE'")
+		cockpit.free()
+		return 1
+	cockpit.set_brake(true)
+	if not label.visible:
+		print("FAIL _test_brake_line_shown_only_while_braking: set_brake(true) did not show it")
+		result = 1
+	cockpit.set_brake(false)
+	if label.visible:
+		print("FAIL _test_brake_line_shown_only_while_braking: set_brake(false) did not hide it")
 		result = 1
 	cockpit.free()
 	return result

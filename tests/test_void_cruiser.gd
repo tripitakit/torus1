@@ -45,6 +45,9 @@ func _init():
 	failures += _test_approach_guide_hidden_without_a_station()
 	failures += _test_process_feeds_the_velocity_cross()
 	failures += _test_process_feeds_the_navball()
+	failures += _test_brake_key_toggles_and_turns_cruise_off()
+	failures += _test_thrust_keys_release_the_brake()
+	failures += _test_brake_stops_the_ship_at_ten_times_thrust()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -730,5 +733,65 @@ func _test_process_feeds_the_navball() -> int:
 		print("FAIL _test_process_feeds_the_navball: without a planet the reference is not the identity")
 		result = 1
 	loose.free()
+	cruiser.free()
+	return result
+
+func _test_brake_key_toggles_and_turns_cruise_off() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	_press(cruiser, "cruise")
+	_press(cruiser, "brake")
+	if not cruiser.brake_engaged or cruiser.cruise_locked:
+		print("FAIL _test_brake_key_toggles_and_turns_cruise_off: B gave brake %s, cruise %s" % [cruiser.brake_engaged, cruiser.cruise_locked])
+		result = 1
+	_press(cruiser, "cruise")
+	if cruiser.brake_engaged or not cruiser.cruise_locked:
+		print("FAIL _test_brake_key_toggles_and_turns_cruise_off: C after B gave brake %s, cruise %s" % [cruiser.brake_engaged, cruiser.cruise_locked])
+		result = 1
+	cruiser.cruise_locked = false
+	_press(cruiser, "brake")
+	_press(cruiser, "brake")
+	if cruiser.brake_engaged:
+		print("FAIL _test_brake_key_toggles_and_turns_cruise_off: a second B left the brake on")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_thrust_keys_release_the_brake() -> int:
+	var cruiser := _make_cruiser()
+	var result := 0
+	for action in ["move_forward", "move_backward", "move_left", "move_right", "move_up", "move_down"]:
+		_press(cruiser, "brake")
+		_press(cruiser, action)
+		if cruiser.brake_engaged:
+			print("FAIL _test_thrust_keys_release_the_brake: %s left the brake on" % action)
+			result = 1
+			cruiser.brake_engaged = false
+	# Rolling does not.
+	_press(cruiser, "brake")
+	_press(cruiser, "roll_left")
+	if not cruiser.brake_engaged:
+		print("FAIL _test_thrust_keys_release_the_brake: rolling let go of the brake")
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_brake_stops_the_ship_at_ten_times_thrust() -> int:
+	# Away from any dock the brake stops the ship: 50 m/s^2 base thrust,
+	# 500 m/s^2 braking, so 300 m/s takes 0.6 s.
+	var cruiser := _make_cruiser()
+	var result := 0
+	cruiser.velocity = Vector3(300.0, 0.0, 0.0)
+	_press(cruiser, "brake")
+	for i in range(20):
+		cruiser._physics_process(1.0 / 60.0)
+	if absf(cruiser.velocity.x - (300.0 - 500.0 / 3.0)) > 0.5:
+		print("FAIL _test_brake_stops_the_ship_at_ten_times_thrust: %s after 1/3 s, expected %.1f m/s" % [cruiser.velocity, 300.0 - 500.0 / 3.0])
+		result = 1
+	for i in range(40):
+		cruiser._physics_process(1.0 / 60.0)
+	if not cruiser.velocity.is_zero_approx() or not cruiser.brake_engaged:
+		print("FAIL _test_brake_stops_the_ship_at_ten_times_thrust: %s after 1 s, brake %s" % [cruiser.velocity, cruiser.brake_engaged])
+		result = 1
 	cruiser.free()
 	return result

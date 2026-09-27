@@ -5,6 +5,7 @@ const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const ApproachGuide = preload("res://scripts/approach_guide.gd")
 const VelocityCross = preload("res://scripts/velocity_cross.gd")
 const Attitude = preload("res://scripts/attitude.gd")
+const DockingAssist = preload("res://scripts/docking_assist.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -25,6 +26,10 @@ const VOID_THRUST_STEPS := [10.0, 100.0]
 # new press of W/A/S/D, or C again, lets go; roll, mouse and up/down do not
 # (up/down change the held velocity).
 const CRUISE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right"]
+# B brakes to the nearest dock's velocity (to rest past MAX_RANGE of the
+# guide) and holds it, cancelling the orbital pulls too. B again, or any
+# thrust key, lets go. C and B turn each other off.
+const BRAKE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right", "move_up", "move_down"]
 
 const STROBE_PERIOD := 1.2
 const STROBE_ON_DURATION := 0.1
@@ -53,6 +58,7 @@ var _strobe_time: float = 0.0
 var _guide_over_rim := false
 var _guide_bridge := -1
 var cruise_locked := false
+var brake_engaged := false
 # The planet as last read from the scene (see _sync_planet); without one,
 # no orbital forces.
 var has_planet := false
@@ -82,6 +88,7 @@ func _process(delta: float) -> void:
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
+		cockpit.set_brake(brake_engaged)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
 		cockpit.update_attitude(attitude_matrix())
 	_update_approach_guide()
@@ -92,10 +99,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("cruise"):
 		cruise_locked = not cruise_locked
-	elif cruise_locked:
-		for action in CRUISE_RELEASE_ACTIONS:
+		brake_engaged = false
+	elif event.is_action_pressed("brake"):
+		brake_engaged = not brake_engaged
+		cruise_locked = false
+	else:
+		for action in BRAKE_RELEASE_ACTIONS:
 			if event.is_action_pressed(action):
-				cruise_locked = false
+				brake_engaged = false
+				if action in CRUISE_RELEASE_ACTIONS:
+					cruise_locked = false
 
 # Pure inertia on motion (no drag); rotation keeps its drag so the mouse
 # does not leave the ship spinning.
@@ -103,10 +116,38 @@ func _linear_damping_now() -> float:
 	return 0.0
 
 func _external_acceleration() -> Vector3:
-	# Holding velocity: the thrusters cancel the orbital pulls.
-	if not has_planet or cruise_locked:
+	# Holding velocity or braking: the thrusters cancel the orbital pulls.
+	if not has_planet or cruise_locked or brake_engaged:
 		return Vector3.ZERO
 	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
+
+# The brake steers the velocity to the nearest dock's (to rest away from
+# docks) at up to BRAKE_MULTIPLIER times the base thrust.
+func _fly(delta: float) -> void:
+	var thrust_input := _read_thrust_input()
+	_update_forward_hold_time(thrust_input.z, delta)
+	thrust_input.z *= forward_thrust_multiplier()
+	if brake_engaged:
+		var dock := _nearest_dock()
+		var target: Vector3 = Vector3.ZERO if dock.is_empty() else dock.velocity
+		velocity = DockingAssist.brake_velocity(velocity, target, thrust_power * DockingAssist.BRAKE_MULTIPLIER, delta)
+	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
+
+# The nearest dock within the guide's MAX_RANGE: station, bridge index,
+# port, straight distance to the pad and the pad's velocity. Empty off the
+# tree, with no station, or past that range.
+func _nearest_dock() -> Dictionary:
+	if not is_inside_tree():
+		return {}
+	var station := get_node_or_null(station_path) as Node3D
+	if station == null or not station.is_inside_tree():
+		return {}
+	var index: int = station.nearest_bridge_index(global_position)
+	var port: Node3D = station.get_docking_port(index)
+	var distance := global_position.distance_to(port.global_position)
+	if distance > ApproachGuide.MAX_RANGE:
+		return {}
+	return {"station": station, "index": index, "port": port, "distance": distance, "velocity": station.get_docking_port_velocity(index)}
 
 func ring_omega() -> Vector3:
 	return planet_axis * OrbitalFrame.orbit_angular_velocity(planet_gm, ring_radius)

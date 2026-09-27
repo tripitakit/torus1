@@ -7,6 +7,7 @@ func _init():
 	failures += _test_dock_action_is_bound_to_f()
 	failures += _test_up_and_down_thrust_on_z_and_x()
 	failures += _test_no_flight_assist_key()
+	failures += _test_brake_action_is_bound_to_b()
 	failures += _test_void_cruiser_orbits_with_the_station()
 
 	if failures == 0:
@@ -161,3 +162,9 @@ func _test_void_cruiser_orbits_with_the_station() -> int:
 		result = 1
 	scene.free()
 	return result
+
+func _test_brake_action_is_bound_to_b() -> int:
+	if not InputMap.has_action("brake") or _key_codes("brake") != [KEY_B]:
+		print("FAIL _test_brake_action_is_bound_to_b: no 'brake' action on the B key")
+		return 1
+	return 0

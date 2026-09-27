@@ -27,6 +27,8 @@ const DOCK_PROMPT_TEXT := "DOCK  [F]"
 const DOCK_PROMPT_COLOR := Color(0.3, 1.0, 0.4)
 const CRUISE_TEXT := "CRUISE"
 const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
+const BRAKE_TEXT := "BRAKE"
+const BRAKE_COLOR := Color(1.0, 0.45, 0.3)
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
@@ -55,6 +57,9 @@ func set_dock_prompt(available: bool) -> void:
 
 func set_cruise(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/CruiseLabel") as Label).visible = active
+
+func set_brake(active: bool) -> void:
+	(get_node("Hud/Panel/Lines/BrakeLabel") as Label).visible = active
 
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
@@ -105,6 +110,13 @@ func _build_hud() -> void:
 	var cruise_label: Label = lines.get_node("CruiseLabel")
 	cruise_label.text = CRUISE_TEXT
 	cruise_label.visible = false
+	var brake_settings := LabelSettings.new()
+	brake_settings.font_size = HUD_FONT_SIZE
+	brake_settings.font_color = BRAKE_COLOR
+	_add_hud_label(lines, "BrakeLabel", brake_settings)
+	var brake_label: Label = lines.get_node("BrakeLabel")
+	brake_label.text = BRAKE_TEXT
+	brake_label.visible = false
 	for key in DISTANCE_LABELS:
 		_add_hud_label(lines, DISTANCE_LABELS[key][0], label_settings)
 
