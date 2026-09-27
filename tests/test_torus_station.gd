@@ -31,9 +31,8 @@ func _init():
 	failures += _test_dock_pads_share_mesh_and_textured_material()
 	failures += _test_port_turns_with_its_bridge()
 	failures += _test_bridge_radius_and_length_helpers()
-	failures += _test_every_pad_has_a_fixed_size_beacon()
-	failures += _test_beacon_blinks_half_a_second_in_one_and_a_half()
-	failures += _test_beacon_is_never_hidden_by_its_bridge()
+	failures += _test_every_pad_has_four_corner_lamps()
+	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -471,55 +470,59 @@ func _test_port_turns_with_its_bridge() -> int:
 	station.free()
 	return result
 
-func _test_every_pad_has_a_fixed_size_beacon() -> int:
-	# Small station: bridge radius 9, beacon 0.3 m above the pad centre.
+func _test_every_pad_has_four_corner_lamps() -> int:
+	# Small station: bridge radius 9, lamps 9/600 m above the pad, on the
+	# texture's green corner spots.
 	var station := _make_station(4)
 	station.build_station()
 	var result := 0
 	var first: MeshInstance3D = null
 	for i in range(4):
 		var bridge: Node3D = station.get_node("Bridge%d" % i)
-		var beacon := bridge.get_node_or_null("Beacon") as MeshInstance3D
 		var pad: MeshInstance3D = bridge.get_node("DockPad")
-		if beacon == null:
-			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d has no Beacon" % i)
+		if bridge.get_node_or_null("Beacon") != null:
+			print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d still has the old beacon" % i)
 			result = 1
-			continue
-		if first == null:
-			first = beacon
-		var material := beacon.material_override as StandardMaterial3D
-		var expected: Vector3 = pad.position + pad.transform.basis.y.normalized() * 9.0 * TorusStationScript.BEACON_LIFT_RATIO
-		if beacon.mesh != first.mesh or material == null or material != first.material_override:
-			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d beacon does not share the mesh and material" % i)
-			result = 1
-		elif not material.fixed_size or material.billboard_mode != BaseMaterial3D.BILLBOARD_ENABLED or material.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED:
-			print("FAIL _test_every_pad_has_a_fixed_size_beacon: beacon material is not a fixed-size unshaded billboard")
-			result = 1
-		if not beacon.position.is_equal_approx(expected) or not is_equal_approx(beacon.visibility_range_end, TorusStationScript.BEACON_RANGE):
-			print("FAIL _test_every_pad_has_a_fixed_size_beacon: Bridge%d beacon at %s (expected %s), drawn to %f m" % [i, beacon.position, expected, beacon.visibility_range_end])
-			result = 1
+		var half: float = (pad.mesh as PlaneMesh).size.x * (0.5 - DockPadTexture.LAMP_INSET)
+		var normal: Vector3 = pad.transform.basis.y.normalized()
+		for k in range(4):
+			var lamp := bridge.get_node_or_null("DockLamp_%d" % k) as MeshInstance3D
+			if lamp == null:
+				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d has no DockLamp_%d" % [i, k])
+				result = 1
+				continue
+			if first == null:
+				first = lamp
+			var offset: Vector3 = lamp.position - pad.position
+			var height: float = offset.dot(normal)
+			var flat: Vector3 = offset - normal * height
+			var across: float = absf(flat.dot(pad.transform.basis.x.normalized()))
+			var along: float = absf(flat.dot(pad.transform.basis.z.normalized()))
+			if not is_equal_approx(height, 9.0 * TorusStationScript.LAMP_LIFT_RATIO) or not is_equal_approx(across, half) or not is_equal_approx(along, half):
+				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d at %.3f up, %.3f / %.3f across (expected %.3f, %.3f)" % [i, k, height, across, along, 9.0 * TorusStationScript.LAMP_LIFT_RATIO, half])
+				result = 1
+			if lamp.mesh != first.mesh or lamp.material_override != first.material_override or not (lamp.material_override is ShaderMaterial):
+				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d does not share the lamp mesh and shader material" % [i, k])
+				result = 1
+			if not is_equal_approx(lamp.visibility_range_end, TorusStationScript.LAMP_RANGE) or lamp.extra_cull_margin < TorusStationScript.LAMP_CULL_MARGIN:
+				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d drawn to %f m, cull margin %f" % [i, k, lamp.visibility_range_end, lamp.extra_cull_margin])
+				result = 1
 	station.free()
 	return result
 
-func _test_beacon_blinks_half_a_second_in_one_and_a_half() -> int:
-	var result := 0
-	for c in [[0.0, true], [0.49, true], [0.5, false], [1.49, false], [1.5, true], [3.2, true], [3.6, false]]:
-		if TorusStationScript.beacon_lit(c[0]) != c[1]:
-			print("FAIL _test_beacon_blinks_half_a_second_in_one_and_a_half: at %.2f s lit %s, expected %s" % [c[0], TorusStationScript.beacon_lit(c[0]), c[1]])
-			result = 1
-	return result
-
-func _test_beacon_is_never_hidden_by_its_bridge() -> int:
-	# A fixed-size quad is hundreds of metres wide in the world at tens of
-	# km, but sits 20 m above its pad: depth-tested, the bridge cuts it in
-	# half from the side and hides it while the pad faces away. It is a
-	# marker, drawn over everything.
+func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
+	# Headless has no renderer: check the code and parameters (Task 5 renders).
 	var station := _make_station(4)
 	station.build_station()
-	var material := (station.get_node("Bridge0/Beacon") as MeshInstance3D).material_override as StandardMaterial3D
+	var material := (station.get_node("Bridge0/DockLamp_0") as MeshInstance3D).material_override as ShaderMaterial
+	var code: String = material.shader.code
 	var result := 0
-	if not material.no_depth_test:
-		print("FAIL _test_beacon_is_never_hidden_by_its_bridge: the beacon is depth-tested")
+	for needle in ["skip_vertex_transform", "PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x", "max(lamp_size, min_pixels * pixel * depth)", "pull", "mod(TIME, period)", "discard"]:
+		if not code.contains(needle):
+			print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: shader lacks '%s'" % needle)
+			result = 1
+	if not is_equal_approx(material.get_shader_parameter("lamp_size"), 8.0) or not is_equal_approx(material.get_shader_parameter("min_pixels"), 2.0):
+		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamp_size %s min_pixels %s" % [material.get_shader_parameter("lamp_size"), material.get_shader_parameter("min_pixels")])
 		result = 1
 	station.free()
 	return result

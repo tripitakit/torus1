@@ -22,9 +22,6 @@ func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	_rotate_sections(delta)
-	_beacon_time += delta
-	if _beacon_material != null:
-		_beacon_material.albedo_color = Color(BEACON_COLOR, 1.0 if beacon_lit(_beacon_time) else 0.0)
 
 func _rotate_sections(delta: float) -> void:
 	# Bridges spin rigidly together with the sections they connect: the
@@ -88,25 +85,55 @@ const PAD_FACE := 15
 const PAD_FACE_FILL := 0.985
 const PAD_LIFT_RATIO := 0.0005
 const PAD_VISIBLE_RATIO := 5.0
-# A blinking green beacon above every pad, the same few pixels on screen at
-# any distance (fixed size), so docks can be picked out from far away; the
-# pad itself is only drawn up close. BEACON_SIZE in fixed-size units is
-# about 13 px on a 1280 px wide, 90 degree view.
-const BEACON_COLOR := Color(0.3, 1.0, 0.4)
-const BEACON_LIFT_RATIO := 1.0 / 30.0
-const BEACON_SIZE := 0.02
-const BEACON_RANGE := 50000.0
-const BEACON_PERIOD := 1.5
-const BEACON_ON_TIME := 0.5
+# Four green lamps on each pad's corners (the texture's green spots), 8 m
+# across: they shrink with distance like real objects but never below
+# LAMP_MIN_PIXELS, so a dock still shows up to LAMP_RANGE. See LAMP_SHADER.
+const LAMP_COLOR := Color(0.3, 1.0, 0.4)
+const LAMP_SIZE := 8.0
+const LAMP_MIN_PIXELS := 2.0
+const LAMP_RANGE := 50000.0
+const LAMP_LIFT_RATIO := 1.0 / 600.0
+# The quad is 1 m; drawn, it reaches ~160 m across at 50 km.
+const LAMP_CULL_MARGIN := 500.0
+const LAMP_PERIOD := 1.5
+const LAMP_ON_TIME := 0.5
+# Billboard sized in camera space (writing MODELVIEW_MATRIX has no effect in
+# this double-precision build; skip_vertex_transform does).
+const LAMP_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, skip_vertex_transform;
 
-# One mesh and one material for every beacon: blinking them is one change
-# per frame, not one per bridge.
-var _beacon_mesh: QuadMesh
-var _beacon_material: StandardMaterial3D
-var _beacon_time := 0.0
+uniform float lamp_size = 8.0;
+uniform float min_pixels = 2.0;
+uniform vec3 lamp_color : source_color = vec3(0.3, 1.0, 0.4);
+uniform float period = 1.5;
+uniform float on_time = 0.5;
 
-static func beacon_lit(time: float) -> bool:
-	return fmod(time, BEACON_PERIOD) < BEACON_ON_TIME
+void vertex() {
+	// The lamp's centre in the camera's frame, and how far away it is.
+	vec3 centre = (MODELVIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	float depth = max(-centre.z, 0.001);
+	// Width of one screen pixel per metre of depth.
+	float pixel = 2.0 / (PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x);
+	float world_size = max(lamp_size, min_pixels * pixel * depth);
+	// Pulled toward the camera by its own size, keeping its size on screen:
+	// the bridge face it sits on does not cut it, the bridge body still
+	// hides it from the far side.
+	float pull = clamp((depth - world_size) / depth, 0.1, 1.0);
+	VERTEX = centre * pull + VERTEX * world_size * pull;
+}
+
+void fragment() {
+	if (length(UV - vec2(0.5)) > 0.5 || mod(TIME, period) >= on_time) {
+		discard;
+	}
+	ALBEDO = lamp_color;
+}
+"""
+
+# One mesh and one material for every lamp.
+var _lamp_mesh: QuadMesh
+var _lamp_material: ShaderMaterial
 
 func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -198,18 +225,17 @@ func build_station() -> void:
 	var pad_face := _pad_face()
 	var pad_mesh := PlaneMesh.new()
 	pad_mesh.size = Vector2.ONE * pad_face.width * PAD_FACE_FILL
-	_beacon_mesh = QuadMesh.new()
-	_beacon_mesh.size = Vector2.ONE * BEACON_SIZE
-	_beacon_material = StandardMaterial3D.new()
-	_beacon_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_beacon_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	_beacon_material.fixed_size = true
-	# A marker, drawn over everything: at tens of km the fixed-size quad is
-	# hundreds of metres wide but only 20 m above its pad, so the bridge
-	# would cut it in half from the side and hide it while the pad faces away.
-	_beacon_material.no_depth_test = true
-	_beacon_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_beacon_material.albedo_color = BEACON_COLOR
+	_lamp_mesh = QuadMesh.new()
+	_lamp_mesh.size = Vector2.ONE
+	var lamp_shader := Shader.new()
+	lamp_shader.code = LAMP_SHADER
+	_lamp_material = ShaderMaterial.new()
+	_lamp_material.shader = lamp_shader
+	_lamp_material.set_shader_parameter("lamp_size", LAMP_SIZE)
+	_lamp_material.set_shader_parameter("min_pixels", LAMP_MIN_PIXELS)
+	_lamp_material.set_shader_parameter("lamp_color", LAMP_COLOR)
+	_lamp_material.set_shader_parameter("period", LAMP_PERIOD)
+	_lamp_material.set_shader_parameter("on_time", LAMP_ON_TIME)
 
 	for i in range(bridge_transforms.size()):
 		var bridge := AnimatableBody3D.new()
@@ -268,11 +294,20 @@ func _add_dock(bridge: Node3D, pad_mesh: PlaneMesh, face: Dictionary) -> void:
 	port.name = "Port"
 	port.transform = Transform3D(Basis(normal, Vector3.UP, normal.cross(Vector3.UP)), centre)
 	bridge.add_child(port)
-	var beacon := MeshInstance3D.new()
-	beacon.name = "Beacon"
-	beacon.mesh = _beacon_mesh
-	beacon.material_override = _beacon_material
-	beacon.position = centre + normal * get_bridge_radius() * BEACON_LIFT_RATIO
-	beacon.visibility_range_end = BEACON_RANGE
-	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bridge.add_child(beacon)
+	# Lamps on the pad's corners, just above it.
+	var half: float = pad_mesh.size.x * (0.5 - DockPadTexture.LAMP_INSET)
+	var along := across.cross(normal)
+	var lift: Vector3 = normal * get_bridge_radius() * LAMP_LIFT_RATIO
+	var k := 0
+	for a in [-1.0, 1.0]:
+		for b in [-1.0, 1.0]:
+			var lamp := MeshInstance3D.new()
+			lamp.name = "DockLamp_%d" % k
+			lamp.mesh = _lamp_mesh
+			lamp.material_override = _lamp_material
+			lamp.position = centre + across * a * half + along * b * half + lift
+			lamp.visibility_range_end = LAMP_RANGE
+			lamp.extra_cull_margin = LAMP_CULL_MARGIN
+			lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			bridge.add_child(lamp)
+			k += 1
