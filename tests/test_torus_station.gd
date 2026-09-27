@@ -501,6 +501,9 @@ func _test_every_pad_has_four_corner_lamps() -> int:
 			if not is_equal_approx(height, 9.0 * TorusStationScript.LAMP_LIFT_RATIO) or not is_equal_approx(across, half) or not is_equal_approx(along, half):
 				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d at %.3f up, %.3f / %.3f across (expected %.3f, %.3f)" % [i, k, height, across, along, 9.0 * TorusStationScript.LAMP_LIFT_RATIO, half])
 				result = 1
+			if not lamp.transform.basis.y.normalized().is_equal_approx(normal):
+				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d does not carry its pad's normal as its up" % [i, k])
+				result = 1
 			if lamp.mesh != first.mesh or lamp.material_override != first.material_override or not (lamp.material_override is ShaderMaterial):
 				print("FAIL _test_every_pad_has_four_corner_lamps: Bridge%d DockLamp_%d does not share the lamp mesh and shader material" % [i, k])
 				result = 1
@@ -517,7 +520,13 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 	var material := (station.get_node("Bridge0/DockLamp_0") as MeshInstance3D).material_override as ShaderMaterial
 	var code: String = material.shader.code
 	var result := 0
-	for needle in ["skip_vertex_transform", "PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x", "max(lamp_size, min_pixels * pixel * depth)", "pull", "mod(TIME, period)", "discard"]:
+	# At the pixel floor the lamp is a full square: a 2 px quad cut to a
+	# circle covers almost no pixel centres and vanishes (seen in renders at
+	# 3 and 30 km). It rounds off only from 3 px up.
+	# The depth buffer cannot tell a lamp 1 m above its pad from the pad
+	# past ~2 km (renders lost every lamp there): lamps skip the depth test
+	# and hide themselves when their pad faces away from the camera.
+	for needle in ["skip_vertex_transform", "depth_test_disabled", "PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x", "max(lamp_size, min_pixels * pixel * depth)", "facing", "mod(TIME, period)", "discard", "round_shape", "3.0 * pixel * depth"]:
 		if not code.contains(needle):
 			print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: shader lacks '%s'" % needle)
 			result = 1

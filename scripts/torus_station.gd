@@ -98,16 +98,26 @@ const LAMP_CULL_MARGIN := 500.0
 const LAMP_PERIOD := 1.5
 const LAMP_ON_TIME := 0.5
 # Billboard sized in camera space (writing MODELVIEW_MATRIX has no effect in
-# this double-precision build; skip_vertex_transform does).
+# this double-precision build; skip_vertex_transform does). No depth test:
+# past ~2 km the depth buffer cannot tell a lamp 1 m above its pad from the
+# pad, and every lamp vanished. Instead a lamp hides itself when its pad
+# (its node's +Y) faces away from the camera, i.e. from the far side of its
+# bridge; other geometry in between does not hide it.
 const LAMP_SHADER := """
 shader_type spatial;
-render_mode unshaded, cull_disabled, skip_vertex_transform;
+render_mode unshaded, cull_disabled, skip_vertex_transform, depth_test_disabled;
 
 uniform float lamp_size = 8.0;
 uniform float min_pixels = 2.0;
 uniform vec3 lamp_color : source_color = vec3(0.3, 1.0, 0.4);
 uniform float period = 1.5;
 uniform float on_time = 0.5;
+
+// 1 while the lamp is at least 3 px across: rounded then, a full square
+// below (a 2 px quad cut to a circle covers almost no pixel centres).
+varying float round_shape;
+// 1 while the lamp's pad faces the camera.
+varying float facing;
 
 void vertex() {
 	// The lamp's centre in the camera's frame, and how far away it is.
@@ -116,15 +126,14 @@ void vertex() {
 	// Width of one screen pixel per metre of depth.
 	float pixel = 2.0 / (PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x);
 	float world_size = max(lamp_size, min_pixels * pixel * depth);
-	// Pulled toward the camera by its own size, keeping its size on screen:
-	// the bridge face it sits on does not cut it, the bridge body still
-	// hides it from the far side.
-	float pull = clamp((depth - world_size) / depth, 0.1, 1.0);
-	VERTEX = centre * pull + VERTEX * world_size * pull;
+	VERTEX = centre + VERTEX * world_size;
+	round_shape = step(3.0 * pixel * depth, world_size);
+	vec3 pad_normal = (MODELVIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+	facing = step(0.0, dot(pad_normal, -centre));
 }
 
 void fragment() {
-	if (length(UV - vec2(0.5)) > 0.5 || mod(TIME, period) >= on_time) {
+	if (facing < 0.5 || (round_shape > 0.5 && length(UV - vec2(0.5)) > 0.5) || mod(TIME, period) >= on_time) {
 		discard;
 	}
 	ALBEDO = lamp_color;
@@ -305,7 +314,8 @@ func _add_dock(bridge: Node3D, pad_mesh: PlaneMesh, face: Dictionary) -> void:
 			lamp.name = "DockLamp_%d" % k
 			lamp.mesh = _lamp_mesh
 			lamp.material_override = _lamp_material
-			lamp.position = centre + across * a * half + along * b * half + lift
+			# Up = the pad normal: the shader hides the lamp when it faces away.
+			lamp.transform = Transform3D(Basis(across, normal, along), centre + across * a * half + along * b * half + lift)
 			lamp.visibility_range_end = LAMP_RANGE
 			lamp.extra_cull_margin = LAMP_CULL_MARGIN
 			lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

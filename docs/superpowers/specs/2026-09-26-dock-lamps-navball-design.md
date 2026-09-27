@@ -112,3 +112,21 @@ navball, suoni.
 - **Render offscreen (xvfb):**
   - luci a 500 m, 3 km e 30 km;
   - navball livellata e dopo un rollio di 180°.
+
+## Revisione durante l'esecuzione (2026-09-27)
+
+I render hanno mostrato due problemi, corretti:
+- **Ritaglio rotondo al minimo di 2 pixel:** un quadrato di 2 pixel
+  ritagliato a cerchio non copre quasi nessun centro di pixel, quindi
+  spariva. Ora la luce è rotonda da 3 pixel in su e sotto è un quadratino
+  pieno.
+- **Precisione del depth buffer:** oltre circa 2 km il depth buffer non
+  distingue una luce 1 m sopra il pad dal pad stesso, e tutte le luci
+  sparivano (anche avvicinandole alla camera della loro dimensione). Ora le
+  luci si disegnano senza test di profondità e si nascondono quando il loro
+  pad non guarda la camera (il nodo della luce ha come "su" la normale del
+  pad). Così restano nascoste dal lato opposto del bridge, ma un altro
+  oggetto che sta in mezzo (un'altra sezione) non le copre.
+
+Misurato: 4 luci da circa 10 pixel a 500 m, da 2 × 2 pixel da 8 km in su;
+nessuna luce dal lato opposto del bridge a 500 m, 3 km e 30 km.
