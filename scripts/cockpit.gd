@@ -30,6 +30,17 @@ const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
 const BRAKE_TEXT := "BRAKE"
 const BRAKE_COLOR := Color(1.0, 0.45, 0.3)
 const THRUST_TEXT := "THRUST  %.1fx"
+# The approach panel, top right: readout key -> label, in display order.
+const APPROACH_LINES := {
+	"dist": "DistLabel",
+	"speed": "RelSpeedLabel",
+	"advised": "AdvisedLabel",
+	"eta": "EtaLabel",
+	"status": "StatusLabel",
+}
+const APPROACH_PANEL_WIDTH := 300.0
+# By DockingAssist.Rating: OK, CAUTION, OVER.
+const APPROACH_COLORS := [Color(0.3, 1.0, 0.4), Color(1.0, 0.8, 0.3), Color(1.0, 0.3, 0.25)]
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
@@ -61,6 +72,21 @@ func set_cruise(active: bool) -> void:
 
 func set_brake(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/BrakeLabel") as Label).visible = active
+
+# The approach panel from a DockingAssist.readout; hidden when empty. The
+# relative speed is coloured by its rating, the status green when ready.
+func update_approach(readout: Dictionary) -> void:
+	var panel := get_node("Hud/ApproachPanel") as Control
+	panel.visible = not readout.is_empty()
+	if readout.is_empty():
+		return
+	var lines := panel.get_node("Lines")
+	for key in APPROACH_LINES:
+		(lines.get_node(APPROACH_LINES[key]) as Label).text = readout[key]
+	(lines.get_node("RelSpeedLabel") as Label).label_settings.font_color = APPROACH_COLORS[readout.rating]
+	var status := lines.get_node("StatusLabel") as Label
+	status.visible = readout.status != ""
+	status.label_settings.font_color = APPROACH_COLORS[0] if readout.ready else APPROACH_COLORS[2]
 
 # Shown only while the thrust is scaled down near a dock.
 func set_thrust_scale(scale: float) -> void:
@@ -149,6 +175,27 @@ func _build_hud() -> void:
 	cross.offset_top = -HUD_MARGIN - VelocityCrossScript.PANEL_SIZE.y
 	cross.offset_bottom = -HUD_MARGIN
 	hud.add_child(cross)
+	# Top right, growing leftward: the approach to the nearest dock.
+	var approach := PanelContainer.new()
+	approach.name = "ApproachPanel"
+	approach.anchor_left = 1.0
+	approach.anchor_right = 1.0
+	approach.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
+	approach.offset_right = -HUD_MARGIN
+	approach.offset_top = HUD_MARGIN
+	approach.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	approach.add_theme_stylebox_override("panel", background)
+	approach.visible = false
+	hud.add_child(approach)
+	var approach_lines := VBoxContainer.new()
+	approach_lines.name = "Lines"
+	approach.add_child(approach_lines)
+	for key in APPROACH_LINES:
+		# Each its own settings: the speed and status lines change colour.
+		var settings := LabelSettings.new()
+		settings.font_size = HUD_FONT_SIZE
+		settings.font_color = HUD_TEXT_COLOR
+		_add_hud_label(approach_lines, APPROACH_LINES[key], settings)
 	# Top centre.
 	var navball: Control = NavballScript.new()
 	navball.name = "Navball"

@@ -31,6 +31,7 @@ func _init():
 	failures += _test_dock_pads_share_mesh_and_textured_material()
 	failures += _test_port_turns_with_its_bridge()
 	failures += _test_bridge_radius_and_length_helpers()
+	failures += _test_spin_rate_is_public()
 	failures += _test_every_pad_has_four_corner_lamps()
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
 
@@ -537,6 +538,16 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 		result = 1
 	if not is_equal_approx(material.get_shader_parameter("lamp_size"), 8.0) or not is_equal_approx(material.get_shader_parameter("min_pixels"), 2.0):
 		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamp_size %s min_pixels %s" % [material.get_shader_parameter("lamp_size"), material.get_shader_parameter("min_pixels")])
+		result = 1
+	station.free()
+	return result
+
+func _test_spin_rate_is_public() -> int:
+	# 1 g on a 30 m radius: sqrt(9.81 / 30) rad/s.
+	var station := _make_station(4)
+	var result := 0
+	if not is_equal_approx(station.get_spin_rate(), sqrt(9.81 / 30.0)):
+		print("FAIL _test_spin_rate_is_public: %f rad/s" % station.get_spin_rate())
 		result = 1
 	station.free()
 	return result

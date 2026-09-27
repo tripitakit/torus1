@@ -25,6 +25,8 @@ func _initialize():
 
 	_failures += await _test_brake_stops_the_ship_against_the_pad()
 	_failures += await _test_thrust_eases_off_near_the_dock()
+	_failures += await _test_panel_shows_within_range()
+	_failures += await _test_panel_says_when_docking_is_possible()
 	# (more tests)
 
 	if _failures == 0:
@@ -95,5 +97,40 @@ func _test_thrust_eases_off_near_the_dock() -> int:
 	await process_frame
 	if _cruiser.thrust_scale != 1.0 or (_cruiser.get_node("Cockpit/Hud/Panel/Lines/ThrustLabel") as Label).visible:
 		print("FAIL _test_thrust_eases_off_near_the_dock: scale %.2f at 5 km" % _cruiser.thrust_scale)
+		result = 1
+	return result
+
+func _panel() -> Control:
+	return _cruiser.get_node("Cockpit/Hud/ApproachPanel")
+
+func _panel_text(label: String) -> String:
+	return (_cruiser.get_node("Cockpit/Hud/ApproachPanel/Lines/" + label) as Label).text
+
+func _test_panel_shows_within_range() -> int:
+	var result := 0
+	await _park(5000.0)
+	# At rest with the pad: no time of arrival, an advised speed to start at.
+	if not _panel().visible or not _panel_text("DistLabel").begins_with("DIST  ") or _panel_text("EtaLabel") != "ETA  —" or _panel_text("RelSpeedLabel") != "REL SPEED  0 m/s":
+		print("FAIL _test_panel_shows_within_range: at 5 km visible %s, '%s' '%s' '%s'" % [_panel().visible, _panel_text("DistLabel"), _panel_text("EtaLabel"), _panel_text("RelSpeedLabel")])
+		result = 1
+	await _park(25000.0)
+	if _panel().visible:
+		print("FAIL _test_panel_shows_within_range: shown 25 km from the nearest dock")
+		result = 1
+	return result
+
+func _test_panel_says_when_docking_is_possible() -> int:
+	var result := 0
+	# 120 m out, inside the 150 m docking range: the panel says whether
+	# docking works now.
+	await _park(120.0)
+	var status := _cruiser.get_node("Cockpit/Hud/ApproachPanel/Lines/StatusLabel") as Label
+	if not _panel().visible or not status.visible or status.text != DockingAssist.READY_TEXT:
+		print("FAIL _test_panel_says_when_docking_is_possible: at rest 120 m out, visible %s, status '%s'" % [_panel().visible, status.text])
+		result = 1
+	_cruiser.velocity = _station.get_docking_port_velocity(0) + Vector3(25.0, 0.0, 0.0)
+	await process_frame
+	if status.text != DockingAssist.TOO_FAST_TEXT:
+		print("FAIL _test_panel_says_when_docking_is_possible: 25 m/s against the pad gave '%s'" % status.text)
 		result = 1
 	return result

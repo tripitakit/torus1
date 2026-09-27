@@ -15,6 +15,8 @@ func _init():
 	failures += _test_cruise_line_shown_only_while_cruising()
 	failures += _test_brake_line_shown_only_while_braking()
 	failures += _test_thrust_line_shows_the_scale_near_a_dock()
+	failures += _test_approach_panel_top_right_hidden_until_fed()
+	failures += _test_approach_panel_writes_and_colours_the_readout()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_top_centre()
 
@@ -259,6 +261,48 @@ func _test_thrust_line_shows_the_scale_near_a_dock() -> int:
 	cockpit.set_thrust_scale(1.0)
 	if label.visible:
 		print("FAIL _test_thrust_line_shows_the_scale_near_a_dock: full thrust still shown")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_approach_panel_top_right_hidden_until_fed() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var panel := cockpit.get_node_or_null("Hud/ApproachPanel") as Control
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or not is_equal_approx(panel.anchor_right, 1.0) or not is_equal_approx(panel.offset_right, -cockpit.HUD_MARGIN) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
+		print("FAIL _test_approach_panel_top_right_hidden_until_fed: missing, shown from the start, or not top right")
+		cockpit.free()
+		return 1
+	var names: Array = []
+	for child in panel.get_node("Lines").get_children():
+		names.append(String(child.name))
+	if names != ["DistLabel", "RelSpeedLabel", "AdvisedLabel", "EtaLabel", "StatusLabel"]:
+		print("FAIL _test_approach_panel_top_right_hidden_until_fed: lines %s" % [names])
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_approach_panel_writes_and_colours_the_readout() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var lines := cockpit.get_node("Hud/ApproachPanel/Lines")
+	var readout := {"dist": "DIST  1.2 km", "speed": "REL SPEED  70 m/s", "advised": "ADVISED  60 m/s", "eta": "ETA  20 s", "status": "", "rating": 1, "ready": false}
+	cockpit.update_approach(readout)
+	var speed := lines.get_node("RelSpeedLabel") as Label
+	if not (cockpit.get_node("Hud/ApproachPanel") as Control).visible or (lines.get_node("DistLabel") as Label).text != "DIST  1.2 km" or speed.text != "REL SPEED  70 m/s" or (lines.get_node("EtaLabel") as Label).text != "ETA  20 s" or not speed.label_settings.font_color.is_equal_approx(cockpit.APPROACH_COLORS[1]) or (lines.get_node("StatusLabel") as Label).visible:
+		print("FAIL _test_approach_panel_writes_and_colours_the_readout: far readout not shown as expected")
+		result = 1
+	readout.status = "DOCK READY"
+	readout.ready = true
+	readout.rating = 0
+	cockpit.update_approach(readout)
+	var status := lines.get_node("StatusLabel") as Label
+	if not status.visible or status.text != "DOCK READY" or not status.label_settings.font_color.is_equal_approx(cockpit.APPROACH_COLORS[0]):
+		print("FAIL _test_approach_panel_writes_and_colours_the_readout: ready status not shown green")
+		result = 1
+	cockpit.update_approach({})
+	if (cockpit.get_node("Hud/ApproachPanel") as Control).visible:
+		print("FAIL _test_approach_panel_writes_and_colours_the_readout: an empty readout left it shown")
 		result = 1
 	cockpit.free()
 	return result

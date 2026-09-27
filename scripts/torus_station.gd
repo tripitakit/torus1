@@ -43,6 +43,10 @@ func _effective_planet_radius() -> float:
 		return planet_radius
 	return planet.planet_radius
 
+# How fast sections and bridges spin about their own axes (rad/s).
+func get_spin_rate() -> float:
+	return _spin_rate()
+
 func get_bridge_radius() -> float:
 	return section_radius * BRIDGE_RADIUS_RATIO
 
