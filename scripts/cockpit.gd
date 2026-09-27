@@ -29,6 +29,7 @@ const CRUISE_TEXT := "CRUISE"
 const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
 const BRAKE_TEXT := "BRAKE"
 const BRAKE_COLOR := Color(1.0, 0.45, 0.3)
+const THRUST_TEXT := "THRUST  %.1fx"
 
 # distance key -> [label node name, HUD prefix], in display order.
 const DISTANCE_LABELS := {
@@ -60,6 +61,12 @@ func set_cruise(active: bool) -> void:
 
 func set_brake(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/BrakeLabel") as Label).visible = active
+
+# Shown only while the thrust is scaled down near a dock.
+func set_thrust_scale(scale: float) -> void:
+	var label := get_node("Hud/Panel/Lines/ThrustLabel") as Label
+	label.visible = scale < 1.0
+	label.text = THRUST_TEXT % scale
 
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
@@ -117,6 +124,8 @@ func _build_hud() -> void:
 	var brake_label: Label = lines.get_node("BrakeLabel")
 	brake_label.text = BRAKE_TEXT
 	brake_label.visible = false
+	_add_hud_label(lines, "ThrustLabel", label_settings)
+	(lines.get_node("ThrustLabel") as Label).visible = false
 	for key in DISTANCE_LABELS:
 		_add_hud_label(lines, DISTANCE_LABELS[key][0], label_settings)
 

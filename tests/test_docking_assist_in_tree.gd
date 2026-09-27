@@ -24,6 +24,7 @@ func _initialize():
 	_station.set_process(false)
 
 	_failures += await _test_brake_stops_the_ship_against_the_pad()
+	_failures += await _test_thrust_eases_off_near_the_dock()
 	# (more tests)
 
 	if _failures == 0:
@@ -70,3 +71,29 @@ func _test_brake_stops_the_ship_against_the_pad() -> int:
 		print("FAIL _test_brake_stops_the_ship_against_the_pad: %.2f m/s off the pad after 0.5 s, brake %s" % [off.length(), _cruiser.brake_engaged])
 		return 1
 	return 0
+
+func _test_thrust_eases_off_near_the_dock() -> int:
+	var result := 0
+	# 1100 m out, nose across the bridge (the distance barely changes): half
+	# of 150 m/s^2 and no ramp, so about 82 m/s after a second of W.
+	await _park(1100.0, Vector3(0.0, 0.0, 1.0))
+	var start: Vector3 = _cruiser.velocity
+	Input.action_press("move_forward")
+	_fly(60)
+	Input.action_release("move_forward")
+	var gained: float = (_cruiser.velocity - start).length()
+	if absf(gained - 150.0 * 0.55) > 3.0 or absf(_cruiser.thrust_scale - 0.55) > 0.02:
+		print("FAIL _test_thrust_eases_off_near_the_dock: gained %.1f m/s in 1 s at scale %.2f, expected about 82.5 at 0.55" % [gained, _cruiser.thrust_scale])
+		result = 1
+	await process_frame
+	if not (_cruiser.get_node("Cockpit/Hud/Panel/Lines/ThrustLabel") as Label).visible:
+		print("FAIL _test_thrust_eases_off_near_the_dock: the THRUST line is hidden at 1.1 km")
+		result = 1
+	# 5 km out: full thrust with the ramp, and no THRUST line.
+	await _park(5000.0)
+	_fly(1)
+	await process_frame
+	if _cruiser.thrust_scale != 1.0 or (_cruiser.get_node("Cockpit/Hud/Panel/Lines/ThrustLabel") as Label).visible:
+		print("FAIL _test_thrust_eases_off_near_the_dock: scale %.2f at 5 km" % _cruiser.thrust_scale)
+		result = 1
+	return result

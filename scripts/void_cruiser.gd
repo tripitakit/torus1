@@ -59,6 +59,8 @@ var _guide_over_rim := false
 var _guide_bridge := -1
 var cruise_locked := false
 var brake_engaged := false
+# The precision factor this tick (1 away from docks; see DockingAssist).
+var thrust_scale := 1.0
 # The planet as last read from the scene (see _sync_planet); without one,
 # no orbital forces.
 var has_planet := false
@@ -89,6 +91,7 @@ func _process(delta: float) -> void:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
 		cockpit.set_brake(brake_engaged)
+		cockpit.set_thrust_scale(thrust_scale)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
 		cockpit.update_attitude(attitude_matrix())
 	_update_approach_guide()
@@ -121,16 +124,18 @@ func _external_acceleration() -> Vector3:
 		return Vector3.ZERO
 	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
 
-# The brake steers the velocity to the nearest dock's (to rest away from
-# docks) at up to BRAKE_MULTIPLIER times the base thrust.
+# Near a dock the precision factor scales every thruster and stops the
+# ramp. The brake steers the velocity to the nearest dock's (to rest away
+# from docks) at up to BRAKE_MULTIPLIER times the base thrust, scaled too.
 func _fly(delta: float) -> void:
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
-	thrust_input.z *= forward_thrust_multiplier()
+	var dock := _nearest_dock()
+	thrust_scale = 1.0 if dock.is_empty() else DockingAssist.precision_factor(dock.distance)
+	thrust_input = DockingAssist.scaled_thrust(thrust_input, forward_thrust_multiplier(), thrust_scale)
 	if brake_engaged:
-		var dock := _nearest_dock()
 		var target: Vector3 = Vector3.ZERO if dock.is_empty() else dock.velocity
-		velocity = DockingAssist.brake_velocity(velocity, target, thrust_power * DockingAssist.BRAKE_MULTIPLIER, delta)
+		velocity = DockingAssist.brake_velocity(velocity, target, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
 
 # The nearest dock within the guide's MAX_RANGE: station, bridge index,
