@@ -277,7 +277,7 @@ func _update_approach_guide() -> Dictionary:
 		_guide_length = 0.0
 		if distance >= ApproachGuide.MIN_RANGE:
 			var up := global_transform.basis.y
-			var path := _approach_path(dock.station, port)
+			var path := _approach_path(dock.station, port, _arrival_at - _guide_clock)
 			length = 0.0
 			for i in range(1, path.size()):
 				length += path[i - 1].distance_to(path[i])
@@ -314,16 +314,18 @@ func _show_lines(lines: MeshInstance3D, segments: PackedVector3Array) -> void:
 
 # The approach path to `port`, relative to the ship: worked out in the frame
 # of the port's bridge (see approach_guide.gd), where the station near the
-# dock is round about the axis. It leaves along the nose (-Z). Updates the
-# shape carried to the next frame.
-func _approach_path(station: Node3D, port: Node3D) -> PackedVector3Array:
+# dock is round about the axis. It leaves along the nose (-Z) and ends where
+# the pad will be `time_left` seconds from now, a place that stays put while
+# the bridge turns. Updates the shape carried to the next frame.
+func _approach_path(station: Node3D, port: Node3D, time_left: float) -> PackedVector3Array:
 	var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
 	var to_bridge := bridge_frame.affine_inverse()
 	var ship: Vector3 = to_bridge * global_position
 	var nose: Vector3 = (to_bridge.basis * -global_transform.basis.z).normalized()
 	var half_gap: float = station.get_bridge_length() * 0.5
-	_guide_over_rim = ApproachGuide.over_rim(ship, nose, port.transform.origin, station.section_radius, half_gap, _guide_over_rim)
-	var local_path := ApproachGuide.approach_path(ship, nose, port.transform.origin, station.section_radius, half_gap, station.get_bridge_radius(), _guide_over_rim)
+	var pad := DockingAssist.future_pad(port.transform.origin, station.get_spin_rate(), time_left)
+	_guide_over_rim = ApproachGuide.over_rim(ship, nose, pad, station.section_radius, half_gap, _guide_over_rim)
+	var local_path := ApproachGuide.approach_path(ship, nose, pad, station.section_radius, half_gap, station.get_bridge_radius(), _guide_over_rim)
 	var path := PackedVector3Array()
 	for point in local_path:
 		path.append(bridge_frame * point - global_position)

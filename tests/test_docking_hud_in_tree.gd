@@ -152,8 +152,11 @@ func _test_marker_hides_when_still() -> int:
 
 func _test_guide_keeps_its_shape_near_the_switch() -> int:
 	# Where the single curve only just clears the rim, the guide keeps the
-	# shape it had last frame: the ship carries the choice.
+	# shape it had last frame: the ship carries the choice. The bridge is
+	# held still, so the path ends on the pad itself (no meeting point ahead).
 	var result := 0
+	var gravity: float = _station.target_gravity_g
+	_station.target_gravity_g = 0.0
 	var bridge: Node3D = _station.get_node("Bridge0")
 	var port: Node3D = _station.get_docking_port(0)
 	var pad: Vector3 = port.transform.origin
@@ -181,4 +184,5 @@ func _test_guide_keeps_its_shape_near_the_switch() -> int:
 		if _cruiser._guide_over_rim != held or points.size() != gates.size() * 8 or _centre(points, gates.size() - 1).distance_to(gates[gates.size() - 1][0]) > 1.0:
 			print("FAIL _test_guide_keeps_its_shape_near_the_switch: held %s, now %s, %d points for %d gates" % [held, _cruiser._guide_over_rim, points.size(), gates.size()])
 			result = 1
+	_station.target_gravity_g = gravity
 	return result

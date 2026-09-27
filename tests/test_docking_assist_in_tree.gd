@@ -27,7 +27,7 @@ func _initialize():
 	_failures += await _test_thrust_eases_off_near_the_dock()
 	_failures += await _test_panel_shows_within_range()
 	_failures += await _test_panel_says_when_docking_is_possible()
-	# (more tests)
+	_failures += await _test_path_ends_where_the_pad_will_be()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -134,3 +134,33 @@ func _test_panel_says_when_docking_is_possible() -> int:
 		print("FAIL _test_panel_says_when_docking_is_possible: 25 m/s against the pad gave '%s'" % status.text)
 		result = 1
 	return result
+
+func _test_path_ends_where_the_pad_will_be() -> int:
+	# 2 km from the bridge's axis, a quarter turn round from the pad: the
+	# plan waits for the pad to come round below the ship, and the gates
+	# lead down to that meeting point, not across to where the pad is now.
+	var bridge: Node3D = _station.get_node("Bridge0")
+	var port: Node3D = _station.get_docking_port(0)
+	var pad: Vector3 = port.transform.origin
+	var angle := atan2(pad.x, pad.z) + PI * 0.5
+	var ship := Vector3(sin(angle), 0.0, cos(angle)) * 2000.0
+	var down: Vector3 = (bridge.global_transform.basis * -ship).normalized()
+	_cruiser.global_transform = Transform3D(Basis.looking_at(down, bridge.global_transform.basis.y), bridge.global_transform * ship)
+	_cruiser.velocity = Vector3.ZERO
+	# A jump like this never happens in flight: drop the last test's plan.
+	_cruiser._arrival_at = -1.0
+	_cruiser._guide_length = 0.0
+	for i in range(3):
+		await physics_frame
+		await process_frame
+	var time_left: float = _cruiser._arrival_at - _cruiser._guide_clock
+	var later: Vector3 = bridge.global_transform * DockingAssist.future_pad(pad, _station.get_spin_rate(), time_left)
+	var points: PackedVector3Array = ((_cruiser.get_node("ApproachGuide") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var last := Vector3.ZERO
+	for k in range(8):
+		last += points[points.size() - 8 + k]
+	last = _cruiser.global_position + last / 8.0
+	if later.distance_to(port.global_position) < 500.0 or last.distance_to(later) > 200.0:
+		print("FAIL _test_path_ends_where_the_pad_will_be: last gate %.0f m from the meeting point, %.0f m from the pad now (%.0f s ahead)" % [last.distance_to(later), last.distance_to(port.global_position), time_left])
+		return 1
+	return 0
