@@ -12,6 +12,7 @@ func _init():
 	failures += _test_time_format()
 	failures += _test_readout_lines_and_status()
 	failures += _test_too_fast_to_dock_reads_red()
+	failures += _test_ready_to_dock_reads_green()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -103,10 +104,23 @@ func _test_readout_lines_and_status() -> int:
 
 func _test_too_fast_to_dock_reads_red() -> int:
 	# 120 m out: advised 15 m/s; 21 m/s is over the 20 m/s docking limit, so
-	# it reads as too fast even though it is within the caution ratio.
+	# it reads as too fast even though it is within the caution ratio, while
+	# 18.5 m/s can dock and reads green.
 	var near: Dictionary = DockingAssist.readout(120.0, 18.5, 18.5, 120.0)
 	var over: Dictionary = DockingAssist.readout(120.0, 21.0, 21.0, 120.0)
-	if near.rating != DockingAssist.Rating.CAUTION or over.rating != DockingAssist.Rating.OVER or over.status != DockingAssist.TOO_FAST_TEXT:
+	if near.rating != DockingAssist.Rating.OK or over.rating != DockingAssist.Rating.OVER or over.status != DockingAssist.TOO_FAST_TEXT:
 		print("FAIL _test_too_fast_to_dock_reads_red: 18.5 m/s rated %d, 21 m/s rated %d (%s)" % [near.rating, over.rating, over.status])
 		return 1
 	return 0
+
+func _test_ready_to_dock_reads_green() -> int:
+	# Docking is a key press: slow enough and close enough is all that counts.
+	# 30 m out at 10 m/s the advised speed is 8 m/s, but the panel says DOCK
+	# READY, so the speed must not read red beside it.
+	var result := 0
+	for c in [[30.0, 10.0], [150.0, 18.0], [10.0, 5.0]]:
+		var readout: Dictionary = DockingAssist.readout(c[0], c[1], c[1], c[0])
+		if not readout.ready or readout.rating != DockingAssist.Rating.OK:
+			print("FAIL _test_ready_to_dock_reads_green: %.0f m at %.0f m/s rated %d, ready %s" % [c[0], c[1], readout.rating, readout.ready])
+			result = 1
+	return result

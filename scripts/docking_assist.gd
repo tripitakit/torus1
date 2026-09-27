@@ -77,6 +77,9 @@ static func readout(length: float, speed: float, closing: float, distance: float
 	var status := ""
 	if ready:
 		status = READY_TEXT
+		# Docking is a key press: ready reads green whatever the advised
+		# speed (it tends to a few m/s at the hull).
+		rating = Rating.OK
 	elif distance <= DockingRules.DOCK_RANGE:
 		status = TOO_FAST_TEXT
 	return {
