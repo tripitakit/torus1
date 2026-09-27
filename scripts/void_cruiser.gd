@@ -26,9 +26,9 @@ const VOID_THRUST_STEPS := [10.0, 100.0]
 # new press of W/A/S/D, or C again, lets go; roll, mouse and up/down do not
 # (up/down change the held velocity).
 const CRUISE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right"]
-# B brakes to the nearest dock's velocity (to rest past MAX_RANGE of the
-# guide) and holds it, cancelling the orbital pulls too. B again, or any
-# thrust key, lets go. C and B turn each other off.
+# B brakes and holds (see DockingAssist.brake_target): near a dock turning
+# with its bridge, farther out at rest; it cancels the orbital pulls too.
+# B again, or any thrust key, lets go. C and B turn each other off.
 const BRAKE_RELEASE_ACTIONS := ["move_forward", "move_backward", "move_left", "move_right", "move_up", "move_down"]
 
 const STROBE_PERIOD := 1.2
@@ -62,6 +62,7 @@ var _guide_bridge := -1
 var _guide_length := 0.0
 var _guide_clock := 0.0
 var _arrival_at := -1.0
+var _planned_length := 0.0
 var cruise_locked := false
 var brake_engaged := false
 # The precision factor this tick (1 away from docks; see DockingAssist).
@@ -133,8 +134,9 @@ func _external_acceleration() -> Vector3:
 	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
 
 # Near a dock the precision factor scales every thruster and stops the
-# ramp. The brake steers the velocity to the nearest dock's (to rest away
-# from docks) at up to BRAKE_MULTIPLIER times the base thrust, scaled too.
+# ramp. The brake steers the velocity to DockingAssist.brake_target (rest
+# away from docks) at up to BRAKE_MULTIPLIER times the base thrust, scaled
+# too.
 func _fly(delta: float) -> void:
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
@@ -142,7 +144,9 @@ func _fly(delta: float) -> void:
 	thrust_scale = 1.0 if dock.is_empty() else DockingAssist.precision_factor(dock.distance)
 	thrust_input = DockingAssist.scaled_thrust(thrust_input, forward_thrust_multiplier(), thrust_scale)
 	if brake_engaged:
-		var target: Vector3 = Vector3.ZERO if dock.is_empty() else dock.velocity
+		var target := Vector3.ZERO
+		if not dock.is_empty():
+			target = DockingAssist.brake_target(dock.distance, dock.station.get_bridge_point_velocity(dock.index, global_position))
 		velocity = DockingAssist.brake_velocity(velocity, target, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
 
@@ -268,9 +272,10 @@ func _update_approach_guide() -> Dictionary:
 		var distance: float = dock.distance
 		var length: float = _guide_length if _guide_length > 0.0 else distance
 		var spin: float = dock.station.get_spin_rate()
-		if _arrival_at < 0.0 or not DockingAssist.keeps_plan(_arrival_at - _guide_clock, length, spin):
+		if _arrival_at < 0.0 or not DockingAssist.keeps_plan(_arrival_at - _guide_clock, length, spin, _planned_length):
 			var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
 			_arrival_at = _guide_clock + DockingAssist.plan_arrival(bridge_frame.affine_inverse() * global_position, port.transform.origin, spin, length)
+			_planned_length = length
 		var motion: Vector3 = velocity - dock.velocity
 		var closing := motion.dot((port.global_position - global_position).normalized())
 		length = distance

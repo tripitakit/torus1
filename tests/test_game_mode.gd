@@ -141,6 +141,8 @@ func _test_undock_sign_and_key_return_outside() -> int:
 	if not undock_sign.modulate.is_equal_approx(InteriorWorldScript.SIGN_READY_COLOR):
 		print("FAIL _test_undock_sign_and_key_return_outside: sign not lit at the spawn point")
 		result = 1
+	# Docked with the brake on: it must not come back on outside.
+	_void_cruiser.brake_engaged = true
 	_press_dock()
 	await _wait_for_transition()
 	if _game_mode.is_inside() or not _void_cruiser.is_inside_tree() or _scene.get_node_or_null("InteriorWorld") != null:
@@ -155,6 +157,9 @@ func _test_undock_sign_and_key_return_outside() -> int:
 		result = 1
 	if (-_void_cruiser.global_transform.basis.z).dot(outward) < 0.99:
 		print("FAIL _test_undock_sign_and_key_return_outside: the bow does not point outward")
+		result = 1
+	if _void_cruiser.brake_engaged:
+		print("FAIL _test_undock_sign_and_key_return_outside: the brake is still on after undocking")
 		result = 1
 	if root.get_camera_3d() != _void_cruiser.get_node("Cockpit/PilotCamera"):
 		print("FAIL _test_undock_sign_and_key_return_outside: the window renders %s, expected PilotCamera" % root.get_camera_3d())

@@ -17,6 +17,7 @@ func _init():
 	failures += _test_precision_eases_off_near_a_dock()
 	failures += _test_thrust_ramps_far_and_scales_near()
 	failures += _test_brake_is_limited_per_tick()
+	failures += _test_brake_turns_with_the_bridge_only_near_a_dock()
 	failures += _test_arrival_time_brakes_steadily()
 	failures += _test_plan_holds_between_early_and_late()
 	failures += _test_plan_waits_for_the_pad_to_come_round()
@@ -25,6 +26,8 @@ func _init():
 	failures += _test_speed_rating()
 	failures += _test_time_format()
 	failures += _test_readout_lines_and_status()
+	failures += _test_advised_speed_capped_in_docking_range()
+	failures += _test_plan_dropped_when_the_way_grows()
 	failures += _test_planned_arrival_keeps_the_path_still()
 
 	if failures == 0:
@@ -82,7 +85,7 @@ func _test_plan_holds_between_early_and_late() -> int:
 	# 20 km takes 200 s braking steadily: with the bridge still, plans from
 	# 60 s to 600 s hold; turning, a turn's wait (107 s) more is fine too.
 	for c in [[200.0, 0.0, true], [61.0, 0.0, true], [59.0, 0.0, false], [599.0, 0.0, true], [601.0, 0.0, false], [-5.0, 0.0, false], [650.0, SPIN, true], [710.0, SPIN, false]]:
-		if DockingAssist.keeps_plan(c[0], 20000.0, c[1]) != c[2]:
+		if DockingAssist.keeps_plan(c[0], 20000.0, c[1], 20000.0) != c[2]:
 			print("FAIL _test_plan_holds_between_early_and_late: %.0f s left for 20 km at spin %.4f, expected %s" % [c[0], c[1], c[2]])
 			result = 1
 	return result
@@ -181,6 +184,7 @@ func _path_drift(plan: bool) -> float:
 	var nose := (pad - ship).normalized()
 	var length := ship.distance_to(pad)
 	var arrive := -1.0
+	var planned := 0.0
 	var over := false
 	var before := PackedVector3Array()
 	var total := 0.0
@@ -191,8 +195,9 @@ func _path_drift(plan: bool) -> float:
 		var turn := -SPIN * t
 		var ship_here := ship.rotated(Vector3.UP, turn)
 		var nose_here := nose.rotated(Vector3.UP, turn)
-		if arrive < 0.0 or not DockingAssist.keeps_plan(arrive - t, length, SPIN):
+		if arrive < 0.0 or not DockingAssist.keeps_plan(arrive - t, length, SPIN, planned):
 			arrive = t + DockingAssist.plan_arrival(ship_here, pad, SPIN, length)
+			planned = length
 		var target := DockingAssist.future_pad(pad, SPIN, arrive - t) if plan else pad
 		over = ApproachGuide.over_rim(ship_here, nose_here, target, SECTION_RADIUS, HALF_GAP, over)
 		var path := PackedVector3Array()
@@ -223,5 +228,34 @@ func _test_planned_arrival_keeps_the_path_still() -> int:
 	var swinging := _path_drift(false)
 	if still > 15.0 or still * 5.0 > swinging:
 		print("FAIL _test_planned_arrival_keeps_the_path_still: path moves %.0f m/s planned, %.0f m/s unplanned" % [still, swinging])
+		return 1
+	return 0
+
+func _test_brake_turns_with_the_bridge_only_near_a_dock() -> int:
+	# Within 2 km the brake holds the ship turning with the bridge, so it
+	# stays over the same spot of it; farther out it stops in space and the
+	# pad comes round to the planned meeting point.
+	var carried := Vector3(10.0, 0.0, -40.0)
+	var result := 0
+	for c in [[150.0, carried], [1999.0, carried], [2000.0, Vector3.ZERO], [15000.0, Vector3.ZERO]]:
+		if DockingAssist.brake_target(c[0], carried) != c[1]:
+			print("FAIL _test_brake_turns_with_the_bridge_only_near_a_dock: at %.0f m got %s" % [c[0], DockingAssist.brake_target(c[0], carried)])
+			result = 1
+	return result
+
+func _test_advised_speed_capped_in_docking_range() -> int:
+	# 120 m out with 8 s left would advise 30 m/s: above the 20 m/s docking
+	# limit, so 25 m/s would read green while the status says too fast.
+	var near: Dictionary = DockingAssist.readout(120.0, 8.0, 25.0, 25.0, 120.0)
+	if near.advised != "ADVISED  20 m/s" or near.rating != DockingAssist.Rating.OVER or near.status != DockingAssist.TOO_FAST_TEXT:
+		print("FAIL _test_advised_speed_capped_in_docking_range: %s, rating %d, status %s" % [near.advised, near.rating, near.status])
+		return 1
+	return 0
+
+func _test_plan_dropped_when_the_way_grows() -> int:
+	# Planned for 10 km; the ship has since gone round the bridge and the way
+	# is 20 km: the old meeting point is stale.
+	if DockingAssist.keeps_plan(200.0, 20000.0, 0.0, 10000.0) or not DockingAssist.keeps_plan(200.0, 14000.0, 0.0, 10000.0):
+		print("FAIL _test_plan_dropped_when_the_way_grows: 2x the planned way kept, or 1.4x dropped")
 		return 1
 	return 0

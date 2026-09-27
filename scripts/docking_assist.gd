@@ -16,6 +16,9 @@ const PRECISION_MIN := 0.1
 # The brake pushes at up to this many times the base thrust (times the
 # precision factor near a dock).
 const BRAKE_MULTIPLIER := 10.0
+# The plan is also made again when the way to go grows past this many times
+# the way it was planned for (the ship went round the bridge, say).
+const REPLAN_GROWTH := 1.5
 # The arrival is planned once: no sooner than braking steadily at
 # ADVISED_DECELERATION allows, then on to when the pad, turning with its
 # bridge, comes round below the ship. The path aims at that meeting point,
@@ -47,6 +50,14 @@ static func scaled_thrust(input: Vector3, ramp: float, precision: float) -> Vect
 		return input * precision
 	return Vector3(input.x, input.y, input.z * ramp)
 
+# What the brake holds the ship to, `distance` from the nearest dock: within
+# PRECISION_RANGE the velocity of the bridge where the ship is
+# (`carried`), so it turns with the bridge and stays over the same spot of
+# it; farther out, rest, so the pad comes round to the meeting point.
+# Matching the pad's own velocity instead sent the ship into the hull.
+static func brake_target(distance: float, carried: Vector3) -> Vector3:
+	return carried if distance < PRECISION_RANGE else Vector3.ZERO
+
 # One tick of braking toward the `target` velocity, changing it by at most
 # `max_acceleration` * delta.
 static func brake_velocity(velocity: Vector3, target: Vector3, max_acceleration: float, delta: float) -> Vector3:
@@ -67,11 +78,12 @@ static func plan_arrival(ship: Vector3, pad: Vector3, spin: float, length: float
 	var behind := atan2(ship.x, ship.z) - atan2(pad.x, pad.z) - spin * steady
 	return steady + fposmod(behind, TAU) / spin
 
-# Whether an arrival `time_left` seconds away still fits `length` to go.
-static func keeps_plan(time_left: float, length: float, spin: float) -> bool:
+# Whether an arrival `time_left` seconds away still fits `length` to go,
+# the plan having been made for `planned_length`.
+static func keeps_plan(time_left: float, length: float, spin: float, planned_length: float) -> bool:
 	var steady := arrival_time(length)
 	var turn := TAU / spin if spin > 0.0 else 0.0
-	return time_left > steady * REPLAN_EARLY and time_left < steady * REPLAN_LATE + turn
+	return time_left > steady * REPLAN_EARLY and time_left < steady * REPLAN_LATE + turn and length <= planned_length * REPLAN_GROWTH
 
 # The speed that arrives on time braking steadily: the average speed is
 # half of it.
@@ -107,6 +119,14 @@ static func format_time(seconds: float) -> String:
 # docking rule).
 static func readout(length: float, time_left: float, speed: float, closing: float, distance: float) -> Dictionary:
 	var advised := advised_speed(length, time_left)
+	var rating := speed_rating(speed, advised)
+	# In docking range never above the docking limit, and too fast to dock
+	# reads as too fast.
+	if distance <= DockingRules.DOCK_RANGE:
+		advised = minf(advised, DockingRules.DOCK_MAX_SPEED)
+		rating = speed_rating(speed, advised)
+		if speed > DockingRules.DOCK_MAX_SPEED:
+			rating = Rating.OVER
 	var eta := length / closing if closing >= MIN_CLOSING else -1.0
 	var ready := DockingRules.can_dock(distance, speed)
 	var status := ""
@@ -120,6 +140,6 @@ static func readout(length: float, time_left: float, speed: float, closing: floa
 		"advised": "ADVISED  " + CockpitHudFormat.format_speed(advised),
 		"eta": "ETA  " + format_time(eta),
 		"status": status,
-		"rating": speed_rating(speed, advised),
+		"rating": rating,
 		"ready": ready,
 	}

@@ -129,6 +129,9 @@ func exit_interior() -> void:
 	# Moving with the bridge under the ship, so the pad does not run away.
 	_void_cruiser.velocity = _station.get_bridge_point_velocity(docked_bridge, _void_cruiser.global_position)
 	_void_cruiser.angular_velocity = Vector3.ZERO
+	# Out under the pilot's own hand, whatever was on when docking.
+	_void_cruiser.brake_engaged = false
+	_void_cruiser.cruise_locked = false
 	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
 	if pilot_camera:
 		pilot_camera.make_current()

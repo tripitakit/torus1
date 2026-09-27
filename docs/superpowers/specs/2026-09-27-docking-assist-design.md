@@ -169,3 +169,22 @@ stazione.
 - **Tasti:** "brake" è sul tasto B.
 - **Render (xvfb):** a 1,5 km, pannello, THRUST e percorso che scende sotto la
   navetta.
+
+## Revisione dopo la review finale (2026-09-27)
+
+Tre correzioni, la prima decisa con l'utente:
+- **La frenata B è mista.**
+  - **Entro 2 km dal dock** la navetta gira insieme al bridge: la velocità
+    voluta è quella del bridge nel punto dove si trova la navetta. Resta ferma
+    sopra lo stesso punto del bridge. A 120 m dal pad si muove di circa 7 m/s
+    rispetto al pad, sotto il limite di attracco.
+  - **Oltre 2 km** si ferma nello spazio e aspetta che il pad arrivi al punto
+    d'incontro.
+  - **Perché:** copiare la velocità del pad portava la navetta contro lo scafo
+    in circa 30 s, perché il pad gira attorno al bridge e la navetta va dritta.
+  - **All'uscita dall'interno** B e C sono spenti.
+- **Il piano si rifà anche quando il percorso cresce** oltre 1,5 volte la
+  lunghezza per cui era stato fatto. Senza questa regola, girando attorno al
+  bridge il percorso arrivava a 3,8 km mentre il pad passava sotto la navetta.
+- **Entro 150 m** la velocità consigliata non supera 20 m/s. Sopra quel limite
+  la velocità relativa è rossa, coerente con "TOO FAST".
