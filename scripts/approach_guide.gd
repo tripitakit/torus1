@@ -1,9 +1,8 @@
 extends RefCounted
 
 # The docking approach guide: square gates along a curved path from the
-# ship to the nearest dock's pad, recomputed every frame, plus a smaller
-# square on the ship's line of motion. Far gates look small in perspective,
-# so the row reads as a path into the dock.
+# ship to the nearest dock's pad, recomputed every frame. Far gates look
+# small in perspective, so the row reads as a path into the dock.
 #
 # The path leaves along the ship's nose (the centre of the pilot's view)
 # and meets the pad square on. It is worked out in the frame of the pad's
@@ -20,9 +19,6 @@ const MAX_GATES := 40
 const SPACING := Vector2(50.0, 500.0)
 const FIRST_GATE := 100.0
 const GATE_SIZE := 30.0
-# The motion marker: smaller than a gate, so it can sit inside one.
-const MARKER_SIZE := 20.0
-const MARKER_MIN_SPEED := 1.0
 const SECTION_MARGIN := 300.0
 const BRIDGE_MARGIN := 100.0
 # Within this angle of the pad (about half its face) the path may come down
@@ -218,21 +214,6 @@ static func gates_along(path: PackedVector3Array, up_hint: Vector3) -> PackedVec
 	for gate in gate_centres(path):
 		_append_square(segments, gate[0], gate[1], up_hint, GATE_SIZE)
 	return segments
-
-# The motion marker's outline: a MARKER_SIZE square at `centre`, facing
-# along `along` (the direction of motion).
-static func marker_segments(centre: Vector3, along: Vector3, up_hint: Vector3) -> PackedVector3Array:
-	var segments := PackedVector3Array()
-	_append_square(segments, centre, along, up_hint, MARKER_SIZE)
-	return segments
-
-# Whether the marker at `marker_centre` sits wholly inside the gate at
-# `gate_centre` facing `gate_along`, measured across the gate.
-static func marker_on_path(gate_centre: Vector3, gate_along: Vector3, up_hint: Vector3, marker_centre: Vector3) -> bool:
-	var axes := _square_axes(gate_along, up_hint)
-	var offset := marker_centre - gate_centre
-	var room := (GATE_SIZE - MARKER_SIZE) * 0.5
-	return absf(offset.dot(axes[0])) <= room and absf(offset.dot(axes[1])) <= room
 
 # Unit right and up of a square facing along `along`, up from up_hint.
 static func _square_axes(along: Vector3, up_hint: Vector3) -> Array:

@@ -16,9 +16,6 @@ const DockingAssist = preload("res://scripts/docking_assist.gd")
 # The station whose nearest dock the approach guide points at.
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
 const APPROACH_COLOR := Color(0.3, 1.0, 0.4, 0.7)
-# The motion marker: cyan inside the first gate, red outside it.
-const MARKER_ON_PATH_COLOR := Color(0.3, 0.85, 1.0, 0.9)
-const MARKER_OFF_PATH_COLOR := Color(1.0, 0.25, 0.2, 0.9)
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
 const VOID_THRUST_STEPS := [10.0, 100.0]
@@ -211,12 +208,11 @@ func build_cockpit() -> void:
 	add_child(cockpit)
 	cockpit.build()
 
-# Square gates on the path to the nearest dock, and a smaller square on the
-# line of motion (see approach_guide.gd). Neither moves with the ship
-# (top_level): _update_approach_guide places and redraws them every frame.
+# Square gates on the path to the nearest dock (see approach_guide.gd). Not
+# moved by the ship (top_level): _update_approach_guide places and redraws
+# them every frame.
 func build_approach_guide() -> void:
 	add_child(_line_mesh("ApproachGuide", APPROACH_COLOR))
-	add_child(_line_mesh("HeadingMarker", MARKER_OFF_PATH_COLOR))
 
 func _line_mesh(node_name: String, color: Color) -> MeshInstance3D:
 	var lines := MeshInstance3D.new()
@@ -233,18 +229,12 @@ func _line_mesh(node_name: String, color: Color) -> MeshInstance3D:
 	return lines
 
 # Shown between MIN_RANGE and MAX_RANGE (straight line) from the nearest
-# dock. The marker sits on the motion relative to the dock, as far out as
-# the first gate: cyan when wholly inside it, red otherwise; hidden under
-# MARKER_MIN_SPEED. Returns the approach panel's readout (empty past
-# MAX_RANGE).
+# dock. Returns the approach panel's readout (empty past MAX_RANGE).
 func _update_approach_guide() -> Dictionary:
 	var guide := get_node_or_null("ApproachGuide") as MeshInstance3D
-	var marker := get_node_or_null("HeadingMarker") as MeshInstance3D
-	if guide == null or marker == null:
+	if guide == null:
 		return {}
 	var gate_lines := PackedVector3Array()
-	var marker_lines := PackedVector3Array()
-	var on_path := false
 	var readout := {}
 	var dock := _nearest_dock()
 	if dock.is_empty():
@@ -270,16 +260,10 @@ func _update_approach_guide() -> Dictionary:
 			if not gates.is_empty():
 				var first: Vector3 = gates[0][0]
 				closing = motion.dot(first.normalized())
-				if motion.length() >= ApproachGuide.MARKER_MIN_SPEED:
-					var centre := motion.normalized() * first.length()
-					marker_lines = ApproachGuide.marker_segments(centre, motion.normalized(), up)
-					on_path = ApproachGuide.marker_on_path(first, gates[0][1], up, centre)
 		readout = DockingAssist.readout(length, motion.length(), closing, distance)
 	if gate_lines.is_empty():
 		_guide_over_rim = false
 	_show_lines(guide, gate_lines)
-	(marker.material_override as StandardMaterial3D).albedo_color = MARKER_ON_PATH_COLOR if on_path else MARKER_OFF_PATH_COLOR
-	_show_lines(marker, marker_lines)
 	return readout
 
 # Draws `segments` (relative to the ship) on `lines`, or hides it.
