@@ -27,6 +27,7 @@ func _initialize():
 	_failures += await _test_guide_curves_around_a_section()
 	_failures += await _test_marker_turns_cyan_inside_the_first_gate()
 	_failures += await _test_marker_hides_when_still()
+	_failures += await _test_guide_keeps_its_shape_near_the_switch()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -148,3 +149,36 @@ func _test_marker_hides_when_still() -> int:
 		print("FAIL _test_marker_hides_when_still: shown at rest with the dock")
 		return 1
 	return 0
+
+func _test_guide_keeps_its_shape_near_the_switch() -> int:
+	# Where the single curve only just clears the rim, the guide keeps the
+	# shape it had last frame: the ship carries the choice.
+	var result := 0
+	var bridge: Node3D = _station.get_node("Bridge0")
+	var port: Node3D = _station.get_docking_port(0)
+	var pad: Vector3 = port.transform.origin
+	var pad_angle := atan2(pad.x, pad.z) + 1.5
+	var ship := Vector3.ZERO
+	var nose := Vector3.ZERO
+	for step in range(4001):
+		var candidate := Vector3(sin(pad_angle) * 4000.0, 4000.0 - step, cos(pad_angle) * 4000.0)
+		var toward: Vector3 = (pad - candidate).normalized()
+		if not ApproachGuide.over_rim(candidate, toward, pad, _station.section_radius, _station.get_bridge_length() * 0.5, false) and ApproachGuide.over_rim(candidate, toward, pad, _station.section_radius, _station.get_bridge_length() * 0.5, true):
+			ship = candidate
+			nose = toward
+			break
+	for held in [true, false]:
+		_cruiser.global_transform = bridge.global_transform * Transform3D(Basis.looking_at(nose, Vector3.UP), ship)
+		_cruiser.velocity = Vector3.ZERO
+		_cruiser._guide_over_rim = held
+		await physics_frame
+		await process_frame
+		var expected := PackedVector3Array()
+		for point in ApproachGuide.approach_path(ship, nose, pad, _station.section_radius, _station.get_bridge_length() * 0.5, _station.get_bridge_radius(), held):
+			expected.append(bridge.global_transform * point - _cruiser.global_position)
+		var gates := ApproachGuide.gate_centres(expected)
+		var points := _points("ApproachGuide")
+		if _cruiser._guide_over_rim != held or points.size() != gates.size() * 8 or _centre(points, gates.size() - 1).distance_to(gates[gates.size() - 1][0]) > 1.0:
+			print("FAIL _test_guide_keeps_its_shape_near_the_switch: held %s, now %s, %d points for %d gates" % [held, _cruiser._guide_over_rim, points.size(), gates.size()])
+			result = 1
+	return result

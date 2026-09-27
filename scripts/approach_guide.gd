@@ -28,6 +28,8 @@ const BRIDGE_MARGIN := 100.0
 # Within this angle of the pad (about half its face) the path may come down
 # to the pad's height.
 const PAD_WINDOW := 0.05
+# How far the one curve must clear the shelf to end a path over the rim.
+const RIM_HOLD := 200.0
 const PATH_SAMPLES := 128
 const SHOULDER_SAMPLES := 32
 # Rounding of the lifts that keep the path off the station: ramps rising
@@ -64,24 +66,17 @@ static func gate_distances(length: float) -> PackedFloat64Array:
 #   and short of its end), then down into the gap on a quarter ellipse.
 # Where either would still touch the station, it is lifted away from the
 # axis, with the lift rounded off (see _lift).
-static func approach_path(ship: Vector3, forward: Vector3, pad: Vector3, section_radius: float, half_gap: float, bridge_radius: float) -> PackedVector3Array:
+static func approach_path(ship: Vector3, forward: Vector3, pad: Vector3, section_radius: float, half_gap: float, bridge_radius: float, over_rim_before := false) -> PackedVector3Array:
 	var ship_radius := Vector2(ship.x, ship.z).length()
 	var ship_angle := atan2(ship.x, ship.z)
 	var pad_radius := Vector2(pad.x, pad.z).length()
 	var pad_angle := ship_angle + wrapf(atan2(pad.x, pad.z) - ship_angle, -PI, PI)
-	var outward := Vector3(sin(ship_angle), 0.0, cos(ship_angle))
-	var around := Vector3(cos(ship_angle), 0.0, -sin(ship_angle))
 	var start := Vector3(ship_radius, ship_angle, ship.y)
 	var shelf := section_radius + SECTION_MARGIN
 	var gap := half_gap - SECTION_MARGIN
-	var reach := maxf(ship.distance_to(pad), (ship_radius + pad_radius) * 0.5 * absf(pad_angle - ship_angle))
-	var start_rate := Vector3(forward.dot(outward), forward.dot(around) / maxf(ship_radius, 1.0), forward.y) * reach
-	var leg := _leg(start, start_rate, Vector3(pad_radius, pad_angle, pad.y), Vector3(-reach, 0.0, 0.0), PATH_SAMPLES)
-	var over_sections := false
-	for i in range(leg.radius.size()):
-		if absf(leg.height[i]) > gap and leg.radius[i] < shelf:
-			over_sections = true
-	if over_sections:
+	var start_rate := _start_rate(ship, forward, pad)
+	var leg := _single_leg(ship, forward, pad)
+	if over_rim(ship, forward, pad, section_radius, half_gap, over_rim_before):
 		var side := signf(ship.y) if ship.y != 0.0 else 1.0
 		var rim := Vector3(shelf, pad_angle, side * gap)
 		var rim_reach := maxf(Vector2(ship_radius - shelf, ship.y - rim.z).length(), (ship_radius + shelf) * 0.5 * absf(pad_angle - ship_angle))
@@ -98,6 +93,43 @@ static func approach_path(ship: Vector3, forward: Vector3, pad: Vector3, section
 	path[0] = ship
 	path[path.size() - 1] = pad
 	return path
+
+# Whether the path goes over the rim of a section (two pieces) rather than
+# as one curve: when the one curve would come under the sections' shelf.
+# Once over the rim (over_rim_before, last frame's answer) it stays so
+# until the one curve clears the shelf by RIM_HOLD: near the switch a
+# metre of motion or a degree of nose otherwise flips the shape, and far
+# gates jump by a kilometre.
+static func over_rim(ship: Vector3, forward: Vector3, pad: Vector3, section_radius: float, half_gap: float, over_rim_before := false) -> bool:
+	var leg := _single_leg(ship, forward, pad)
+	var shelf := section_radius + SECTION_MARGIN
+	var gap := half_gap - SECTION_MARGIN
+	var clearance := INF
+	for i in range(leg.radius.size()):
+		if absf(leg.height[i]) > gap:
+			clearance = minf(clearance, leg.radius[i] - shelf)
+	return clearance < (RIM_HOLD if over_rim_before else 0.0)
+
+# The one curve from the ship to the pad, before any lift.
+static func _single_leg(ship: Vector3, forward: Vector3, pad: Vector3) -> Leg:
+	var ship_radius := Vector2(ship.x, ship.z).length()
+	var ship_angle := atan2(ship.x, ship.z)
+	var pad_radius := Vector2(pad.x, pad.z).length()
+	var pad_angle := ship_angle + wrapf(atan2(pad.x, pad.z) - ship_angle, -PI, PI)
+	var reach := maxf(ship.distance_to(pad), (ship_radius + pad_radius) * 0.5 * absf(pad_angle - ship_angle))
+	return _leg(Vector3(ship_radius, ship_angle, ship.y), _start_rate(ship, forward, pad), Vector3(pad_radius, pad_angle, pad.y), Vector3(-reach, 0.0, 0.0), PATH_SAMPLES)
+
+# How fast the ship's round coordinates change leaving along `forward`, for
+# a curve as long as the way to the pad.
+static func _start_rate(ship: Vector3, forward: Vector3, pad: Vector3) -> Vector3:
+	var ship_radius := Vector2(ship.x, ship.z).length()
+	var ship_angle := atan2(ship.x, ship.z)
+	var pad_radius := Vector2(pad.x, pad.z).length()
+	var pad_angle := ship_angle + wrapf(atan2(pad.x, pad.z) - ship_angle, -PI, PI)
+	var outward := Vector3(sin(ship_angle), 0.0, cos(ship_angle))
+	var around := Vector3(cos(ship_angle), 0.0, -sin(ship_angle))
+	var reach := maxf(ship.distance_to(pad), (ship_radius + pad_radius) * 0.5 * absf(pad_angle - ship_angle))
+	return Vector3(forward.dot(outward), forward.dot(around) / maxf(ship_radius, 1.0), forward.y) * reach
 
 static func _hermite(t: float, p0: float, m0: float, p1: float, m1: float) -> float:
 	var t2 := t * t

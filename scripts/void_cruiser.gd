@@ -48,6 +48,10 @@ const SENSOR_DIRECTIONS := {
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 
 var _strobe_time: float = 0.0
+# The approach path's shape last frame, over a section's rim or not, and
+# the bridge it led to (see ApproachGuide.over_rim).
+var _guide_over_rim := false
+var _guide_bridge := -1
 var cruise_locked := false
 # The planet as last read from the scene (see _sync_planet); without one,
 # no orbital forces.
@@ -200,6 +204,9 @@ func _update_approach_guide() -> void:
 		var index: int = station.nearest_bridge_index(global_position)
 		var port: Node3D = station.get_docking_port(index)
 		var distance := global_position.distance_to(port.global_position)
+		if index != _guide_bridge:
+			_guide_over_rim = false
+			_guide_bridge = index
 		if distance >= ApproachGuide.MIN_RANGE and distance <= ApproachGuide.MAX_RANGE:
 			var up := global_transform.basis.y
 			var path := _approach_path(station, port)
@@ -211,6 +218,8 @@ func _update_approach_guide() -> void:
 				var centre := motion.normalized() * first.length()
 				marker_lines = ApproachGuide.marker_segments(centre, motion.normalized(), up)
 				on_path = ApproachGuide.marker_on_path(first, gates[0][1], up, centre)
+	if gate_lines.is_empty():
+		_guide_over_rim = false
 	_show_lines(guide, gate_lines)
 	(marker.material_override as StandardMaterial3D).albedo_color = MARKER_ON_PATH_COLOR if on_path else MARKER_OFF_PATH_COLOR
 	_show_lines(marker, marker_lines)
@@ -230,12 +239,16 @@ func _show_lines(lines: MeshInstance3D, segments: PackedVector3Array) -> void:
 
 # The approach path to `port`, relative to the ship: worked out in the frame
 # of the port's bridge (see approach_guide.gd), where the station near the
-# dock is round about the axis. It leaves along the nose (-Z).
+# dock is round about the axis. It leaves along the nose (-Z). Updates the
+# shape carried to the next frame.
 func _approach_path(station: Node3D, port: Node3D) -> PackedVector3Array:
 	var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
 	var to_bridge := bridge_frame.affine_inverse()
+	var ship: Vector3 = to_bridge * global_position
 	var nose: Vector3 = (to_bridge.basis * -global_transform.basis.z).normalized()
-	var local_path := ApproachGuide.approach_path(to_bridge * global_position, nose, port.transform.origin, station.section_radius, station.get_bridge_length() * 0.5, station.get_bridge_radius())
+	var half_gap: float = station.get_bridge_length() * 0.5
+	_guide_over_rim = ApproachGuide.over_rim(ship, nose, port.transform.origin, station.section_radius, half_gap, _guide_over_rim)
+	var local_path := ApproachGuide.approach_path(ship, nose, port.transform.origin, station.section_radius, half_gap, station.get_bridge_radius(), _guide_over_rim)
 	var path := PackedVector3Array()
 	for point in local_path:
 		path.append(bridge_frame * point - global_position)

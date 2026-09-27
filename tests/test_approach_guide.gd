@@ -24,6 +24,8 @@ func _init():
 	failures += _test_path_has_no_sharp_bends()
 	failures += _test_path_is_straight_when_lined_up()
 	failures += _test_path_curves_down_into_the_gap()
+	failures += _test_rim_choice_holds_near_the_switch()
+	failures += _test_path_follows_the_rim_choice()
 	failures += _test_marker_is_a_20_m_square_across_the_motion()
 	failures += _test_marker_on_path_only_inside_the_gate()
 
@@ -246,3 +248,68 @@ func _test_marker_on_path_only_inside_the_gate() -> int:
 			print("FAIL _test_marker_on_path_only_inside_the_gate: offset %s, expected %s" % [c[0], c[1]])
 			result = 1
 	return result
+
+# Counts how often the rim choice flips along `ships` ([ship, nose] each),
+# carrying the choice from one to the next as the ship does frame to frame.
+func _rim_flips(ships: Array) -> int:
+	var flips := 0
+	var over := false
+	for i in range(ships.size()):
+		var now: bool = ApproachGuide.over_rim(ships[i][0], ships[i][1], _pad(), SECTION_RADIUS, HALF_GAP, over)
+		if i > 0 and now != over:
+			flips += 1
+		over = now
+	return flips
+
+func _test_rim_choice_holds_near_the_switch() -> int:
+	var result := 0
+	# Closing in 1 m at a time: without a margin the path flipped between
+	# its two shapes, moving far gates by over a kilometre in one frame.
+	var closing := []
+	for step in range(4001):
+		var ship := _at(4000.0, 1.5, 4000.0 - step)
+		closing.append([ship, _toward_pad(ship)])
+	var flips := _rim_flips(closing)
+	if flips > 1:
+		print("FAIL _test_rim_choice_holds_near_the_switch: %d flips closing in along the ring" % flips)
+		result = 1
+	# The nose wandering a degree either side of the pad, as a pilot's does.
+	var wandering := []
+	var ship := _at(5000.0, 0.0, 3000.0)
+	var side := _toward_pad(ship).cross(Vector3.UP).normalized()
+	for step in range(320):
+		var degrees := -1.0 + 0.05 * float(pingpong(step, 40))
+		wandering.append([ship, _toward_pad(ship).rotated(side, deg_to_rad(degrees))])
+	flips = _rim_flips(wandering)
+	if flips > 1:
+		print("FAIL _test_rim_choice_holds_near_the_switch: %d flips with the nose wandering 1 degree" % flips)
+		result = 1
+	return result
+
+# A ship whose single curve clears the rim, but by less than the margin
+# that ends the rim shape: [ship, nose], or [] if none is found.
+func _ship_in_the_rim_margin() -> Array:
+	for step in range(4001):
+		var ship := _at(4000.0, 1.5, 4000.0 - step)
+		var nose := _toward_pad(ship)
+		if not ApproachGuide.over_rim(ship, nose, _pad(), SECTION_RADIUS, HALF_GAP, false) and ApproachGuide.over_rim(ship, nose, _pad(), SECTION_RADIUS, HALF_GAP, true):
+			return [ship, nose]
+	return []
+
+func _test_path_follows_the_rim_choice() -> int:
+	var c := _ship_in_the_rim_margin()
+	if c.is_empty():
+		print("FAIL _test_path_follows_the_rim_choice: no ship in the rim margin")
+		return 1
+	var single: PackedVector3Array = ApproachGuide.approach_path(c[0], c[1], _pad(), SECTION_RADIUS, HALF_GAP, BRIDGE_RADIUS, false)
+	var over: PackedVector3Array = ApproachGuide.approach_path(c[0], c[1], _pad(), SECTION_RADIUS, HALF_GAP, BRIDGE_RADIUS, true)
+	if single.size() != ApproachGuide.PATH_SAMPLES + 1 or over.size() != ApproachGuide.PATH_SAMPLES + ApproachGuide.SHOULDER_SAMPLES + 1:
+		print("FAIL _test_path_follows_the_rim_choice: %d and %d points" % [single.size(), over.size()])
+		return 1
+	for path in [single, over]:
+		for i in range(1, path.size()):
+			for k in range(21):
+				if _in_station(path[i - 1].lerp(path[i], k / 20.0)):
+					print("FAIL _test_path_follows_the_rim_choice: a path enters the station")
+					return 1
+	return 0
