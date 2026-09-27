@@ -157,7 +157,7 @@ func build_cockpit() -> void:
 	add_child(cockpit)
 	cockpit.build()
 
-# Square gates on the line to the nearest dock (see approach_guide.gd). Not
+# Square gates on the path to the nearest dock (see approach_guide.gd). Not
 # moved by the ship (top_level): _update_approach_guide places and redraws
 # it every frame.
 func build_approach_guide() -> void:
@@ -184,7 +184,8 @@ func _update_approach_guide() -> void:
 		station = get_node_or_null(station_path) as Node3D
 	if station != null and station.is_inside_tree():
 		var port: Node3D = station.get_docking_port(station.nearest_bridge_index(global_position))
-		segments = ApproachGuide.gate_segments(global_position, port.global_position, global_transform.basis.y)
+		if global_position.distance_to(port.global_position) <= ApproachGuide.MAX_RANGE:
+			segments = ApproachGuide.gates_along(_approach_path(station, port), global_transform.basis.y)
 	guide.visible = not segments.is_empty()
 	if segments.is_empty():
 		return
@@ -195,6 +196,17 @@ func _update_approach_guide() -> void:
 	var mesh := guide.mesh as ArrayMesh
 	mesh.clear_surfaces()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+
+# The approach path to `port`, relative to the ship: worked out in the frame
+# of the port's bridge (see approach_guide.gd), where the sections either
+# side are round about the axis.
+func _approach_path(station: Node3D, port: Node3D) -> PackedVector3Array:
+	var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
+	var local_path := ApproachGuide.approach_path(bridge_frame.affine_inverse() * global_position, port.transform.origin, station.section_radius, station.get_bridge_length() * 0.5)
+	var path := PackedVector3Array()
+	for point in local_path:
+		path.append(bridge_frame * point - global_position)
+	return path
 
 func _world_basis() -> Basis:
 	return global_transform.basis if is_inside_tree() else transform.basis

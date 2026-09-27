@@ -21,6 +21,7 @@ func _initialize():
 
 	_failures += await _test_guide_shows_near_a_dock_on_the_line_to_its_port()
 	_failures += await _test_guide_hides_far_from_every_dock()
+	_failures += await _test_guide_curves_around_a_section()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -28,11 +29,12 @@ func _initialize():
 		print("%d TEST(S) FAILED" % _failures)
 	quit()
 
-# Parks the ship `distance` out from port 0 along its outward axis. Being far
-# from the origin, this always makes the world shift on the next tick.
-func _park(distance: float) -> void:
+# Parks the ship `distance` out from port 0 along its outward axis and
+# `along` metres along the bridge's axis. Being far from the origin, this
+# always makes the world shift on the next tick.
+func _park(distance: float, along: float = 0.0) -> void:
 	var port: Node3D = _station.get_docking_port(0)
-	_cruiser.global_position = port.global_position + port.global_transform.basis.x.normalized() * distance
+	_cruiser.global_position = port.global_position + port.global_transform.basis.x.normalized() * distance + port.global_transform.basis.y.normalized() * along
 	_cruiser.velocity = Vector3.ZERO
 	for i in range(3):
 		await physics_frame
@@ -67,4 +69,25 @@ func _test_guide_hides_far_from_every_dock() -> int:
 	if guide.visible:
 		print("FAIL _test_guide_hides_far_from_every_dock: shown 15 km from the nearest dock")
 		return 1
+	return 0
+
+func _test_guide_curves_around_a_section() -> int:
+	# 6 km along the ring and 2.5 km out: the straight line to the pad would
+	# cut through the neighbouring section.
+	await _park(2500.0, 6000.0)
+	var guide: MeshInstance3D = _cruiser.get_node("ApproachGuide")
+	if not guide.visible:
+		print("FAIL _test_guide_curves_around_a_section: guide hidden")
+		return 1
+	var points: PackedVector3Array = (guide.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var to_bridge: Transform3D = _station.get_node("Bridge0").global_transform.affine_inverse()
+	var half_gap: float = _station.get_bridge_length() * 0.5
+	for g in range(points.size() / 8):
+		var centre := Vector3.ZERO
+		for k in range(8):
+			centre += points[g * 8 + k]
+		var local: Vector3 = to_bridge * (guide.global_position + centre / 8.0)
+		if absf(local.y) > half_gap and Vector2(local.x, local.z).length() < _station.section_radius:
+			print("FAIL _test_guide_curves_around_a_section: gate %d inside a section (%s in the bridge's frame)" % [g, local])
+			return 1
 	return 0
