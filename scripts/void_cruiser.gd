@@ -198,11 +198,13 @@ func _update_approach_guide() -> void:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
 
 # The approach path to `port`, relative to the ship: worked out in the frame
-# of the port's bridge (see approach_guide.gd), where the sections either
-# side are round about the axis.
+# of the port's bridge (see approach_guide.gd), where the station near the
+# dock is round about the axis. It leaves along the nose (-Z).
 func _approach_path(station: Node3D, port: Node3D) -> PackedVector3Array:
 	var bridge_frame: Transform3D = (port.get_parent() as Node3D).global_transform
-	var local_path := ApproachGuide.approach_path(bridge_frame.affine_inverse() * global_position, port.transform.origin, station.section_radius, station.get_bridge_length() * 0.5)
+	var to_bridge := bridge_frame.affine_inverse()
+	var nose: Vector3 = (to_bridge.basis * -global_transform.basis.z).normalized()
+	var local_path := ApproachGuide.approach_path(to_bridge * global_position, nose, port.transform.origin, station.section_radius, station.get_bridge_length() * 0.5, station.get_bridge_radius())
 	var path := PackedVector3Array()
 	for point in local_path:
 		path.append(bridge_frame * point - global_position)
