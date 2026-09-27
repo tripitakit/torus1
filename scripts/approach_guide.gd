@@ -1,8 +1,9 @@
 extends RefCounted
 
 # The docking approach guide: square gates along a curved path from the
-# ship to the nearest dock's pad, recomputed every frame. Far gates look
-# small in perspective, so the row reads as a path into the dock.
+# ship to the nearest dock's pad, recomputed every frame, plus a smaller
+# square on the ship's line of motion. Far gates look small in perspective,
+# so the row reads as a path into the dock.
 #
 # The path leaves along the ship's nose (the centre of the pilot's view)
 # and meets the pad square on. It is worked out in the frame of the pad's
@@ -19,6 +20,9 @@ const MAX_GATES := 40
 const SPACING := Vector2(50.0, 500.0)
 const FIRST_GATE := 100.0
 const GATE_SIZE := 30.0
+# The motion marker: smaller than a gate, so it can sit inside one.
+const MARKER_SIZE := 20.0
+const MARKER_MIN_SPEED := 1.0
 const SECTION_MARGIN := 300.0
 const BRIDGE_MARGIN := 100.0
 # Within this angle of the pad (about half its face) the path may come down
@@ -154,11 +158,10 @@ static func _lift(leg: Leg, pad_angle: float, pad_radius: float, shelf: float, g
 	for i in range(n + 1):
 		leg.radius[i] += lift[i]
 
-# The gates' outlines along `path` as line segments (pairs of points, in the
-# path's frame): GATE_SIZE squares facing along the path where they sit,
-# their "up" from up_hint (the ship's own up) unless that runs along it.
-static func gates_along(path: PackedVector3Array, up_hint: Vector3) -> PackedVector3Array:
-	var segments := PackedVector3Array()
+# The gates along `path`: [centre, unit direction of the path there] each,
+# in the path's frame.
+static func gate_centres(path: PackedVector3Array) -> Array:
+	var gates := []
 	var length := 0.0
 	for i in range(1, path.size()):
 		length += path[i - 1].distance_to(path[i])
@@ -172,15 +175,45 @@ static func gates_along(path: PackedVector3Array, up_hint: Vector3) -> PackedVec
 		if leg.length() <= 0.0:
 			continue
 		var along := leg.normalized()
-		_append_square(segments, path[i - 1] + along * (d - start), along, up_hint)
+		gates.append([path[i - 1] + along * (d - start), along])
+	return gates
+
+# The gates' outlines along `path` as line segments (pairs of points, in the
+# path's frame): GATE_SIZE squares facing along the path where they sit,
+# their "up" from up_hint (the ship's own up) unless that runs along it.
+static func gates_along(path: PackedVector3Array, up_hint: Vector3) -> PackedVector3Array:
+	var segments := PackedVector3Array()
+	for gate in gate_centres(path):
+		_append_square(segments, gate[0], gate[1], up_hint, GATE_SIZE)
 	return segments
 
-static func _append_square(segments: PackedVector3Array, centre: Vector3, along: Vector3, up_hint: Vector3) -> void:
+# The motion marker's outline: a MARKER_SIZE square at `centre`, facing
+# along `along` (the direction of motion).
+static func marker_segments(centre: Vector3, along: Vector3, up_hint: Vector3) -> PackedVector3Array:
+	var segments := PackedVector3Array()
+	_append_square(segments, centre, along, up_hint, MARKER_SIZE)
+	return segments
+
+# Whether the marker at `marker_centre` sits wholly inside the gate at
+# `gate_centre` facing `gate_along`, measured across the gate.
+static func marker_on_path(gate_centre: Vector3, gate_along: Vector3, up_hint: Vector3, marker_centre: Vector3) -> bool:
+	var axes := _square_axes(gate_along, up_hint)
+	var offset := marker_centre - gate_centre
+	var room := (GATE_SIZE - MARKER_SIZE) * 0.5
+	return absf(offset.dot(axes[0])) <= room and absf(offset.dot(axes[1])) <= room
+
+# Unit right and up of a square facing along `along`, up from up_hint.
+static func _square_axes(along: Vector3, up_hint: Vector3) -> Array:
 	var right := along.cross(up_hint)
 	if right.length() < 1e-6:
 		right = along.cross(Vector3.RIGHT if absf(along.x) < 0.9 else Vector3.BACK)
-	right = right.normalized() * GATE_SIZE * 0.5
-	var up := right.cross(along).normalized() * GATE_SIZE * 0.5
+	right = right.normalized()
+	return [right, right.cross(along).normalized()]
+
+static func _append_square(segments: PackedVector3Array, centre: Vector3, along: Vector3, up_hint: Vector3, size: float) -> void:
+	var axes := _square_axes(along, up_hint)
+	var right: Vector3 = axes[0] * size * 0.5
+	var up: Vector3 = axes[1] * size * 0.5
 	var corners := [centre - right - up, centre + right - up, centre + right + up, centre - right + up]
 	for k in range(4):
 		segments.append(corners[k])

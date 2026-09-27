@@ -3,6 +3,7 @@ extends SceneTree
 # The approach guide on the real scene (station, ports, origin shift).
 
 const ApproachGuide = preload("res://scripts/approach_guide.gd")
+const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 
 var _failures := 0
 var _scene: Node3D
@@ -24,6 +25,8 @@ func _initialize():
 	_failures += await _test_guide_hides_far_from_every_dock()
 	_failures += await _test_guide_hides_on_the_last_100_m()
 	_failures += await _test_guide_curves_around_a_section()
+	_failures += await _test_marker_turns_cyan_inside_the_first_gate()
+	_failures += await _test_marker_hides_when_still()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -80,7 +83,7 @@ func _test_guide_shows_15_km_out() -> int:
 
 func _test_guide_hides_far_from_every_dock() -> int:
 	await _park(25000.0)
-	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible:
+	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible or (_cruiser.get_node("HeadingMarker") as MeshInstance3D).visible:
 		print("FAIL _test_guide_hides_far_from_every_dock: shown 25 km from the nearest dock")
 		return 1
 	return 0
@@ -93,7 +96,7 @@ func _test_guide_hides_on_the_last_100_m() -> int:
 	_cruiser.global_transform = Transform3D(Basis.looking_at(port.global_transform.basis.x, port.global_transform.basis.y), _cruiser.global_position)
 	_cruiser.velocity = _station.get_docking_port_velocity(0) - _cruiser.global_transform.basis.z * 5.0
 	await process_frame
-	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible:
+	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible or (_cruiser.get_node("HeadingMarker") as MeshInstance3D).visible:
 		print("FAIL _test_guide_hides_on_the_last_100_m: shown 95 m from the dock")
 		return 1
 	return 0
@@ -114,4 +117,34 @@ func _test_guide_curves_around_a_section() -> int:
 		if absf(local.y) > half_gap and Vector2(local.x, local.z).length() < _station.section_radius:
 			print("FAIL _test_guide_curves_around_a_section: gate %d inside a section (%s in the bridge's frame)" % [g, local])
 			return 1
+	return 0
+
+func _test_marker_turns_cyan_inside_the_first_gate() -> int:
+	var result := 0
+	await _park(5000.0)
+	var marker: MeshInstance3D = _cruiser.get_node("HeadingMarker")
+	var nose: Vector3 = -_cruiser.global_transform.basis.z.normalized()
+	var side: Vector3 = _cruiser.global_transform.basis.x.normalized()
+	# [velocity relative to the dock, expected colour]: 2 m/s sideways in 50
+	# puts the marker 4 m off the first gate's centre, 10 m/s puts it 20 m.
+	for c in [[nose * 50.0, VoidCruiserScript.MARKER_ON_PATH_COLOR], [nose * 50.0 + side * 2.0, VoidCruiserScript.MARKER_ON_PATH_COLOR], [nose * 50.0 + side * 10.0, VoidCruiserScript.MARKER_OFF_PATH_COLOR]]:
+		_cruiser.velocity = _station.get_docking_port_velocity(0) + c[0]
+		await process_frame
+		var colour: Color = (marker.material_override as StandardMaterial3D).albedo_color
+		if not marker.visible or not colour.is_equal_approx(c[1]):
+			print("FAIL _test_marker_turns_cyan_inside_the_first_gate: moving %s, visible %s, colour %s" % [c[0], marker.visible, colour])
+			result = 1
+			continue
+		var centre := _centre(_points("HeadingMarker"), 0)
+		var expected: Vector3 = c[0].normalized() * ApproachGuide.FIRST_GATE
+		if centre.distance_to(expected) > 1.0:
+			print("FAIL _test_marker_turns_cyan_inside_the_first_gate: marker at %s, expected %s" % [centre, expected])
+			result = 1
+	return result
+
+func _test_marker_hides_when_still() -> int:
+	await _park(5000.0)
+	if (_cruiser.get_node("HeadingMarker") as MeshInstance3D).visible:
+		print("FAIL _test_marker_hides_when_still: shown at rest with the dock")
+		return 1
 	return 0

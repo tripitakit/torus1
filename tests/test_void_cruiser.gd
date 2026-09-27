@@ -684,11 +684,12 @@ func _test_approach_guide_hidden_without_a_station() -> int:
 	var cruiser := _make_cruiser()
 	cruiser.build_approach_guide()
 	cruiser._process(0.016)
-	var guide := cruiser.get_node_or_null("ApproachGuide") as MeshInstance3D
 	var result := 0
-	if guide == null or not guide.top_level or guide.visible or not (guide.mesh is ArrayMesh):
-		print("FAIL _test_approach_guide_hidden_without_a_station: guide missing, not top-level, not a mesh, or shown with no station")
-		result = 1
+	for node_name in ["ApproachGuide", "HeadingMarker"]:
+		var lines := cruiser.get_node_or_null(node_name) as MeshInstance3D
+		if lines == null or not lines.top_level or lines.visible or not (lines.mesh is ArrayMesh):
+			print("FAIL _test_approach_guide_hidden_without_a_station: %s missing, not top-level, not a mesh, or shown with no station" % node_name)
+			result = 1
 	cruiser.free()
 	return result
 

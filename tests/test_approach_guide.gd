@@ -24,6 +24,8 @@ func _init():
 	failures += _test_path_has_no_sharp_bends()
 	failures += _test_path_is_straight_when_lined_up()
 	failures += _test_path_curves_down_into_the_gap()
+	failures += _test_marker_is_a_20_m_square_across_the_motion()
+	failures += _test_marker_on_path_only_inside_the_gate()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -226,3 +228,21 @@ func _test_path_curves_down_into_the_gap() -> int:
 		print("FAIL _test_path_curves_down_into_the_gap: straight along the normal for the last kilometre")
 		return 1
 	return 0
+
+func _test_marker_is_a_20_m_square_across_the_motion() -> int:
+	var along := Vector3(0.3, 0.1, -1.0).normalized()
+	var segments: PackedVector3Array = ApproachGuide.marker_segments(along * 100.0, along, Vector3.UP)
+	if segments.size() != 8 or not _square_centre(segments, 0).is_equal_approx(along * 100.0) or not _is_square_across(segments, 0, along, ApproachGuide.MARKER_SIZE):
+		print("FAIL _test_marker_is_a_20_m_square_across_the_motion: got %s" % [segments])
+		return 1
+	return 0
+
+func _test_marker_on_path_only_inside_the_gate() -> int:
+	var result := 0
+	var gate := Vector3(0.0, 0.0, -100.0)
+	# [marker offset from the gate's centre, expected]: 5 m of room each way.
+	for c in [[Vector3.ZERO, true], [Vector3(4.0, 0.0, 0.0), true], [Vector3(-4.0, 4.0, 0.0), true], [Vector3(6.0, 0.0, 0.0), false], [Vector3(0.0, -6.0, 0.0), false], [Vector3(0.0, 0.0, 20.0), true]]:
+		if ApproachGuide.marker_on_path(gate, Vector3.FORWARD, Vector3.UP, gate + c[0]) != c[1]:
+			print("FAIL _test_marker_on_path_only_inside_the_gate: offset %s, expected %s" % [c[0], c[1]])
+			result = 1
+	return result
