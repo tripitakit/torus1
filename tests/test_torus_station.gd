@@ -523,13 +523,18 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 	# At the pixel floor the lamp is a full square: a 2 px quad cut to a
 	# circle covers almost no pixel centres and vanishes (seen in renders at
 	# 3 and 30 km). It rounds off only from 3 px up.
-	# The depth buffer cannot tell a lamp 1 m above its pad from the pad
-	# past ~2 km (renders lost every lamp there): lamps skip the depth test
-	# and hide themselves when their pad faces away from the camera.
-	for needle in ["skip_vertex_transform", "depth_test_disabled", "PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x", "max(lamp_size, min_pixels * pixel * depth)", "facing", "mod(TIME, period)", "discard", "round_shape", "3.0 * pixel * depth"]:
+	# Depth-tested, so sections and bridges in front hide the lamps; pulled
+	# toward the camera by max(own size, 1% of the distance) so the pad
+	# face does not cut them; hidden too when their pad faces away.
+	for needle in ["skip_vertex_transform", "PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x", "max(lamp_size, min_pixels * pixel * depth)", "pull", "max(world_size, 0.01 * depth)", "facing", "mod(TIME, period)", "discard", "round_shape", "3.0 * pixel * depth"]:
 		if not code.contains(needle):
 			print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: shader lacks '%s'" % needle)
 			result = 1
+	# Without the depth test, lamps floated over the 2 km-wide section hulls
+	# standing between the camera and the pad.
+	if code.contains("depth_test_disabled"):
+		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamps skip the depth test and show through sections")
+		result = 1
 	if not is_equal_approx(material.get_shader_parameter("lamp_size"), 8.0) or not is_equal_approx(material.get_shader_parameter("min_pixels"), 2.0):
 		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamp_size %s min_pixels %s" % [material.get_shader_parameter("lamp_size"), material.get_shader_parameter("min_pixels")])
 		result = 1

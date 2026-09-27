@@ -120,13 +120,24 @@ I render hanno mostrato due problemi, corretti:
   ritagliato a cerchio non copre quasi nessun centro di pixel, quindi
   spariva. Ora la luce è rotonda da 3 pixel in su e sotto è un quadratino
   pieno.
-- **Precisione del depth buffer:** oltre circa 2 km il depth buffer non
-  distingue una luce 1 m sopra il pad dal pad stesso, e tutte le luci
-  sparivano (anche avvicinandole alla camera della loro dimensione). Ora le
-  luci si disegnano senza test di profondità e si nascondono quando il loro
-  pad non guarda la camera (il nodo della luce ha come "su" la normale del
-  pad). Così restano nascoste dal lato opposto del bridge, ma un altro
-  oggetto che sta in mezzo (un'altra sezione) non le copre.
+- **Luci sparite oltre circa 2 km:** all'inizio era stata attribuita
+  alla precisione del depth buffer, e le luci erano state disegnate senza
+  test di profondità. La review finale ha mostrato che era sbagliato. I
+  render guardavano il pad inclinati lungo l'anello, e lì le sezioni ai due
+  capi del bridge (raggio 2000 m, circa 1400 m sopra il pad) lo coprono
+  davvero. Senza test di profondità le luci di più bridge galleggiavano
+  sopra le sezioni, proprio nell'avvicinamento più comune.
+- **Soluzione finale:**
+  - test di profondità attivo;
+  - la luce è avvicinata alla camera di max(sua dimensione, 1% della
+    distanza), con centro e dimensione scalati insieme (stessa posizione e
+    grandezza sullo schermo), così la faccia del pad non la taglia; resta
+    molto sotto i circa 900 m che servono per arrivare al bordo di una
+    sezione;
+  - in più la luce si nasconde quando il suo pad non guarda la camera (il
+    nodo della luce ha come "su" la normale del pad).
 
-Misurato: 4 luci da circa 10 pixel a 500 m, da 2 × 2 pixel da 8 km in su;
-nessuna luce dal lato opposto del bridge a 500 m, 3 km e 30 km.
+Misurato con la vista inclinata di traverso all'anello: 4 luci da circa
+10 pixel a 500 m, da 2 × 2 pixel da 3 km in su, fuse in un solo quadratino
+a 30 km. Lungo l'anello, oltre 2 km, la sezione le copre. Nessuna luce dal
+lato opposto del bridge a 500 m, 3 km e 30 km.

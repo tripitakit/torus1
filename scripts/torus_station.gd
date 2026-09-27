@@ -98,14 +98,15 @@ const LAMP_CULL_MARGIN := 500.0
 const LAMP_PERIOD := 1.5
 const LAMP_ON_TIME := 0.5
 # Billboard sized in camera space (writing MODELVIEW_MATRIX has no effect in
-# this double-precision build; skip_vertex_transform does). No depth test:
-# past ~2 km the depth buffer cannot tell a lamp 1 m above its pad from the
-# pad, and every lamp vanished. Instead a lamp hides itself when its pad
-# (its node's +Y) faces away from the camera, i.e. from the far side of its
-# bridge; other geometry in between does not hide it.
+# this double-precision build; skip_vertex_transform does). Depth-tested:
+# the sections at both ends of a bridge (2 km radius, ~1.4 km above the pad)
+# hide its lamps from shallow views along the ring, as they should. Pulled
+# toward the camera by max(own size, 1% of the distance) so the pad face
+# does not cut the quad, far short of the ~900 m to a section's rim. A lamp
+# also hides itself when its pad (its node's +Y) faces away.
 const LAMP_SHADER := """
 shader_type spatial;
-render_mode unshaded, cull_disabled, skip_vertex_transform, depth_test_disabled;
+render_mode unshaded, cull_disabled, skip_vertex_transform;
 
 uniform float lamp_size = 8.0;
 uniform float min_pixels = 2.0;
@@ -126,8 +127,10 @@ void vertex() {
 	// Width of one screen pixel per metre of depth.
 	float pixel = 2.0 / (PROJECTION_MATRIX[0][0] * VIEWPORT_SIZE.x);
 	float world_size = max(lamp_size, min_pixels * pixel * depth);
-	VERTEX = centre + VERTEX * world_size;
 	round_shape = step(3.0 * pixel * depth, world_size);
+	// Centre and size scaled together: same place and size on screen.
+	float pull = clamp((depth - max(world_size, 0.01 * depth)) / depth, 0.1, 1.0);
+	VERTEX = (centre + VERTEX * world_size) * pull;
 	vec3 pad_normal = (MODELVIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
 	facing = step(0.0, dot(pad_normal, -centre));
 }
