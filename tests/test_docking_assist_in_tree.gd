@@ -38,14 +38,14 @@ func _initialize():
 
 # Parks the ship `distance` out from port 0 along its outward axis, nose
 # along `nose` (in the port's axes: x out, y along the bridge, z across),
-# at rest with the pad. The world shifts on the next tick.
+# at rest (the pad is still). The world shifts on the next tick.
 func _park(distance: float, nose: Vector3 = Vector3(-1.0, 0.0, 0.0)) -> void:
 	var port: Node3D = _station.get_docking_port(0)
 	var axes: Basis = port.global_transform.basis.orthonormalized()
 	var at: Vector3 = port.global_position + axes.x * distance
 	var up: Vector3 = axes.y if absf(nose.y) < 0.9 else axes.x
 	_cruiser.global_transform = Transform3D(Basis.looking_at(axes * nose, up), at)
-	_cruiser.velocity = _station.get_docking_port_velocity(0)
+	_cruiser.velocity = Vector3.ZERO
 	_cruiser.brake_engaged = false
 	_cruiser.cruise_locked = false
 	for i in range(3):
@@ -128,7 +128,7 @@ func _test_panel_says_when_docking_is_possible() -> int:
 	if not _panel().visible or not status.visible or status.text != DockingAssist.READY_TEXT:
 		print("FAIL _test_panel_says_when_docking_is_possible: at rest 120 m out, visible %s, status '%s'" % [_panel().visible, status.text])
 		result = 1
-	_cruiser.velocity = _station.get_docking_port_velocity(0) + Vector3(25.0, 0.0, 0.0)
+	_cruiser.velocity = Vector3(25.0, 0.0, 0.0)
 	await process_frame
 	if status.text != DockingAssist.TOO_FAST_TEXT:
 		print("FAIL _test_panel_says_when_docking_is_possible: 25 m/s against the pad gave '%s'" % status.text)

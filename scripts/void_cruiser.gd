@@ -140,8 +140,8 @@ func _fly(delta: float) -> void:
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
 
 # The nearest dock within the guide's MAX_RANGE: station, bridge index,
-# port, straight distance to the pad and the pad's velocity. Empty off the
-# tree, with no station, or past that range.
+# port and straight distance to the pad. Empty off the tree, with no
+# station, or past that range.
 func _nearest_dock() -> Dictionary:
 	if not is_inside_tree():
 		return {}
@@ -153,7 +153,7 @@ func _nearest_dock() -> Dictionary:
 	var distance := global_position.distance_to(port.global_position)
 	if distance > ApproachGuide.MAX_RANGE:
 		return {}
-	return {"station": station, "index": index, "port": port, "distance": distance, "velocity": station.get_docking_port_velocity(index)}
+	return {"station": station, "index": index, "port": port, "distance": distance}
 
 func ring_omega() -> Vector3:
 	return planet_axis * OrbitalFrame.orbit_angular_velocity(planet_gm, ring_radius)
@@ -255,7 +255,8 @@ func _update_approach_guide() -> Dictionary:
 			_guide_bridge = dock.index
 		var port: Node3D = dock.port
 		var distance: float = dock.distance
-		var motion: Vector3 = velocity - dock.velocity
+		# The pad is still: motion relative to it is the ship's own.
+		var motion: Vector3 = velocity
 		var closing := motion.dot((port.global_position - global_position).normalized())
 		var length := distance
 		if distance >= ApproachGuide.MIN_RANGE:

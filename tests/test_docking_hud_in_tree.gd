@@ -37,14 +37,14 @@ func _initialize():
 
 # Parks the ship `distance` out from port 0 along its outward axis and
 # `along` metres along the bridge's axis, nose on a point `aside` metres
-# across the bridge from the port, at rest with the port. Being far from
+# across the bridge from the port, at rest (the pad is still). Being far from
 # the origin, this always makes the world shift on the next tick.
 func _park(distance: float, along: float = 0.0, aside: float = 0.0) -> void:
 	var port: Node3D = _station.get_docking_port(0)
 	var at: Vector3 = port.global_position + port.global_transform.basis.x.normalized() * distance + port.global_transform.basis.y.normalized() * along
 	var aim: Vector3 = port.global_position + port.global_transform.basis.z.normalized() * aside
 	_cruiser.global_transform = Transform3D(Basis.looking_at(aim - at, port.global_transform.basis.y), at)
-	_cruiser.velocity = _station.get_docking_port_velocity(0)
+	_cruiser.velocity = Vector3.ZERO
 	for i in range(3):
 		await physics_frame
 		await process_frame
@@ -95,7 +95,7 @@ func _test_guide_hides_on_the_last_100_m() -> int:
 	await _park(95.0)
 	var port: Node3D = _station.get_docking_port(0)
 	_cruiser.global_transform = Transform3D(Basis.looking_at(port.global_transform.basis.x, port.global_transform.basis.y), _cruiser.global_position)
-	_cruiser.velocity = _station.get_docking_port_velocity(0) - _cruiser.global_transform.basis.z * 5.0
+	_cruiser.velocity = -_cruiser.global_transform.basis.z * 5.0
 	await process_frame
 	if (_cruiser.get_node("ApproachGuide") as MeshInstance3D).visible or (_cruiser.get_node("HeadingMarker") as MeshInstance3D).visible:
 		print("FAIL _test_guide_hides_on_the_last_100_m: shown 95 m from the dock")
@@ -129,7 +129,7 @@ func _test_marker_turns_cyan_inside_the_first_gate() -> int:
 	# [velocity relative to the dock, expected colour]: 2 m/s sideways in 50
 	# puts the marker 4 m off the first gate's centre, 10 m/s puts it 20 m.
 	for c in [[nose * 50.0, VoidCruiserScript.MARKER_ON_PATH_COLOR], [nose * 50.0 + side * 2.0, VoidCruiserScript.MARKER_ON_PATH_COLOR], [nose * 50.0 + side * 10.0, VoidCruiserScript.MARKER_OFF_PATH_COLOR]]:
-		_cruiser.velocity = _station.get_docking_port_velocity(0) + c[0]
+		_cruiser.velocity = c[0]
 		await process_frame
 		var colour: Color = (marker.material_override as StandardMaterial3D).albedo_color
 		if not marker.visible or not colour.is_equal_approx(c[1]):

@@ -43,11 +43,11 @@ func _initialize():
 func _port() -> Node3D:
 	return _station.get_docking_port(0)
 
-# `speed` is relative to the port, which moves with its spinning bridge.
+# `speed` outward from the port, which stands still on its bridge.
 func _park_near_port(distance: float, speed: float) -> void:
 	var outward: Vector3 = _port().global_transform.basis.x.normalized()
 	_void_cruiser.global_position = _port().global_position + outward * distance
-	_void_cruiser.velocity = _station.get_docking_port_velocity(0) + outward * speed
+	_void_cruiser.velocity = outward * speed
 
 func _press_dock() -> void:
 	var event := InputEventAction.new()
@@ -85,13 +85,6 @@ func _test_dock_prompt_follows_distance_and_speed() -> int:
 	await _frames(3)
 	if label.visible:
 		print("FAIL _test_dock_prompt_follows_distance_and_speed: shown at 30 m/s")
-		result = 1
-	# Still in space while the pad sweeps past at ~35 m/s: too fast.
-	_park_near_port(100.0, 0.0)
-	_void_cruiser.velocity = Vector3.ZERO
-	await _frames(3)
-	if label.visible:
-		print("FAIL _test_dock_prompt_follows_distance_and_speed: shown while the pad moves at %.1f m/s relative to the ship" % _station.get_docking_port_velocity(0).length())
 		result = 1
 	return result
 
@@ -150,10 +143,9 @@ func _test_undock_sign_and_key_return_outside() -> int:
 		return 1
 	var outward: Vector3 = _port().global_transform.basis.x.normalized()
 	var distance: float = _void_cruiser.global_position.distance_to(_port().global_position)
-	# Out with the speed of the bridge under the ship: still relative to the pad.
-	var carried: Vector3 = _station.get_bridge_point_velocity(0, _void_cruiser.global_position)
-	if absf(distance - 60.0) > 0.5 or not _void_cruiser.velocity.is_equal_approx(carried) or carried.length() < 30.0:
-		print("FAIL _test_undock_sign_and_key_return_outside: %.2f m from the port (expected 60), velocity %s, bridge there moves at %s" % [distance, _void_cruiser.velocity, carried])
+	# Out at rest by the still pad.
+	if absf(distance - 60.0) > 0.5 or not _void_cruiser.velocity.is_zero_approx():
+		print("FAIL _test_undock_sign_and_key_return_outside: %.2f m from the port (expected 60), velocity %s, expected at rest" % [distance, _void_cruiser.velocity])
 		result = 1
 	if (-_void_cruiser.global_transform.basis.z).dot(outward) < 0.99:
 		print("FAIL _test_undock_sign_and_key_return_outside: the bow does not point outward")

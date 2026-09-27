@@ -69,9 +69,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _can_dock_now() -> bool:
 	var index: int = _station.nearest_bridge_index(_void_cruiser.global_position)
 	var port: Node3D = _station.get_docking_port(index)
-	# The pad spins with its bridge: what counts is the speed relative to it.
-	var relative: Vector3 = _void_cruiser.velocity - _station.get_docking_port_velocity(index)
-	return DockingRules.can_dock(port.global_position.distance_to(_void_cruiser.global_position), relative.length())
+	# The pad stands still on its bridge: the ship's own speed counts.
+	return DockingRules.can_dock(port.global_position.distance_to(_void_cruiser.global_position), _void_cruiser.velocity.length())
 
 # Every bridge inside has a dock; the one nearest the craft counts.
 func _can_undock_now() -> bool:
@@ -126,8 +125,8 @@ func exit_interior() -> void:
 	var outward: Vector3 = port.global_transform.basis.x.normalized()
 	var along: Vector3 = port.global_transform.basis.y.normalized()
 	_void_cruiser.global_transform = Transform3D(Basis.looking_at(outward, along), port.global_position + outward * UNDOCK_CLEARANCE)
-	# Moving with the bridge under the ship, so the pad does not run away.
-	_void_cruiser.velocity = _station.get_bridge_point_velocity(docked_bridge, _void_cruiser.global_position)
+	# Out at rest by the still pad.
+	_void_cruiser.velocity = Vector3.ZERO
 	_void_cruiser.angular_velocity = Vector3.ZERO
 	# Out under the pilot's own hand, whatever was on when docking.
 	_void_cruiser.brake_engaged = false

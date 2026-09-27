@@ -15,7 +15,7 @@ func _init():
 	failures += _test_uses_planet_node_radius_when_set()
 	failures += _test_sections_have_no_stripe_marker()
 	failures += _test_rotate_sections_applies_correct_local_y_angle()
-	failures += _test_rotate_sections_also_rotates_bridges()
+	failures += _test_rotate_sections_leaves_bridges_still()
 	failures += _test_sections_and_bridges_share_one_hull_material()
 	failures += _test_sections_share_one_mesh_resource()
 	failures += _test_bridges_share_one_mesh_resource()
@@ -29,9 +29,8 @@ func _init():
 	failures += _test_no_docking_collars_left()
 	failures += _test_each_bridge_has_a_dock_pad_flat_on_one_face()
 	failures += _test_dock_pads_share_mesh_and_textured_material()
-	failures += _test_port_turns_with_its_bridge()
+	failures += _test_port_sits_on_its_still_bridge()
 	failures += _test_bridge_radius_and_length_helpers()
-	failures += _test_spin_rate_is_public()
 	failures += _test_every_pad_has_four_corner_lamps()
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
 
@@ -179,24 +178,19 @@ func _test_rotate_sections_applies_correct_local_y_angle() -> int:
 	station.free()
 	return result
 
-func _test_rotate_sections_also_rotates_bridges() -> int:
-	# Bridges rotate rigidly together with the sections they connect — the
-	# whole ring spins as one piece, not sections-spin/bridges-fixed.
+func _test_rotate_sections_leaves_bridges_still() -> int:
+	# Sections spin for gravity; bridges, with their pads, stay put so the
+	# ships outside have a still dock to fly to.
 	var station := _make_station(4)
 	station.build_station()
 	var bridge: AnimatableBody3D = station.get_node("Bridge0")
-	var original_basis: Basis = bridge.transform.basis
-	var delta := 0.1
-	station._rotate_sections(delta)
-	var new_basis: Basis = bridge.transform.basis
-	var delta_basis: Basis = original_basis.inverse() * new_basis
-	var expected_omega: float = TorusGeometry.compute_section_angular_velocity(30.0, TorusGeometry.GRAVITY_1G)
-	var expected_delta_basis := Basis(Vector3.UP, expected_omega * delta)
+	var section: Node3D = station.get_node("Section0")
+	var bridge_basis: Basis = bridge.transform.basis
+	var section_basis: Basis = section.transform.basis
+	station._rotate_sections(0.1)
 	var result := 0
-	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \
-			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
-			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
-		print("FAIL _test_rotate_sections_also_rotates_bridges: delta_basis=%s expected=%s" % [delta_basis, expected_delta_basis])
+	if not bridge.transform.basis.is_equal_approx(bridge_basis) or section.transform.basis.is_equal_approx(section_basis):
+		print("FAIL _test_rotate_sections_leaves_bridges_still: bridge turned %s, section turned %s" % [not bridge.transform.basis.is_equal_approx(bridge_basis), not section.transform.basis.is_equal_approx(section_basis)])
 		result = 1
 	station.free()
 	return result
@@ -454,19 +448,19 @@ func _test_dock_pads_share_mesh_and_textured_material() -> int:
 	station.free()
 	return result
 
-func _test_port_turns_with_its_bridge() -> int:
+func _test_port_sits_on_its_still_bridge() -> int:
 	var station := _make_station(4)
 	station.build_station()
 	var bridge: Node3D = station.get_node("Bridge0")
 	var port: Node3D = station.get_docking_port(0)
 	var result := 0
 	if port.get_parent() != bridge:
-		print("FAIL _test_port_turns_with_its_bridge: the port is not on the bridge")
+		print("FAIL _test_port_sits_on_its_still_bridge: the port is not on the bridge")
 		result = 1
 	var before: Vector3 = bridge.transform * port.position
 	station._rotate_sections(1.0)
-	if (bridge.transform * port.position).is_equal_approx(before):
-		print("FAIL _test_port_turns_with_its_bridge: the port did not move as the bridge turned")
+	if not (bridge.transform * port.position).is_equal_approx(before):
+		print("FAIL _test_port_sits_on_its_still_bridge: the port moved as the sections turned")
 		result = 1
 	station.free()
 	return result
@@ -538,16 +532,6 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 		result = 1
 	if not is_equal_approx(material.get_shader_parameter("lamp_size"), 8.0) or not is_equal_approx(material.get_shader_parameter("min_pixels"), 2.0):
 		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamp_size %s min_pixels %s" % [material.get_shader_parameter("lamp_size"), material.get_shader_parameter("min_pixels")])
-		result = 1
-	station.free()
-	return result
-
-func _test_spin_rate_is_public() -> int:
-	# 1 g on a 30 m radius: sqrt(9.81 / 30) rad/s.
-	var station := _make_station(4)
-	var result := 0
-	if not is_equal_approx(station.get_spin_rate(), sqrt(9.81 / 30.0)):
-		print("FAIL _test_spin_rate_is_public: %f rad/s" % station.get_spin_rate())
 		result = 1
 	station.free()
 	return result

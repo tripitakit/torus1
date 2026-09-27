@@ -24,14 +24,14 @@ func _process(delta: float) -> void:
 	_rotate_sections(delta)
 
 func _rotate_sections(delta: float) -> void:
-	# Bridges spin rigidly together with the sections they connect: the
-	# whole ring rotates as one piece.
+	# Sections spin for artificial gravity; bridges stay still, so their
+	# docks do not move.
 	var omega := _spin_rate()
 	for child in get_children():
-		if child.name.begins_with("Section") or child.name.begins_with("Bridge"):
+		if child.name.begins_with("Section"):
 			child.rotate_object_local(Vector3.UP, omega * delta)
 
-# How fast sections and bridges spin (rad/s) for the target gravity.
+# How fast sections spin (rad/s) for the target gravity.
 func _spin_rate() -> float:
 	return TorusGeometry.compute_section_angular_velocity(section_radius, TorusGeometry.GRAVITY_1G * target_gravity_g)
 
@@ -42,10 +42,6 @@ func _effective_planet_radius() -> float:
 	if planet == null or not ("planet_radius" in planet):
 		return planet_radius
 	return planet.planet_radius
-
-# How fast sections and bridges spin about their own axes (rad/s).
-func get_spin_rate() -> float:
-	return _spin_rate()
 
 func get_bridge_radius() -> float:
 	return section_radius * BRIDGE_RADIUS_RATIO
@@ -59,16 +55,6 @@ func nearest_bridge_index(world_position: Vector3) -> int:
 
 func get_docking_port(bridge_index: int) -> Node3D:
 	return get_node("Bridge%d/Port" % bridge_index)
-
-# How fast a point of bridge `bridge_index` moves as the bridge spins:
-# spin x (point - bridge centre). In-tree only (global positions).
-func get_bridge_point_velocity(bridge_index: int, world_point: Vector3) -> Vector3:
-	var bridge: Node3D = get_node("Bridge%d" % bridge_index)
-	var spin: Vector3 = bridge.global_transform.basis.y.normalized() * _spin_rate()
-	return spin.cross(world_point - bridge.global_position)
-
-func get_docking_port_velocity(bridge_index: int) -> Vector3:
-	return get_bridge_point_velocity(bridge_index, get_docking_port(bridge_index).global_position)
 
 const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
 const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
@@ -256,11 +242,10 @@ func build_station() -> void:
 	for i in range(bridge_transforms.size()):
 		var bridge := AnimatableBody3D.new()
 		bridge.name = "Bridge%d" % i
-		# Bridges now rotate every frame together with sections — same
-		# reasoning as sections: a body under continuous external transform
-		# control should not be a StaticBody3D (see the sync_to_physics
-		# comment on the section body above for why sync_to_physics must
-		# also be off).
+		# Bridges stay still (only sections spin). They keep the section's
+		# body setup: AnimatableBody3D with sync_to_physics off, so a
+		# parent's transform change (as WorldOriginRebase applies) is picked
+		# up (see the sync_to_physics comment on the section body above).
 		bridge.sync_to_physics = false
 
 		var bridge_mesh_instance := MeshInstance3D.new()

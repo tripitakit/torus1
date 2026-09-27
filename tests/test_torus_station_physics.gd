@@ -25,12 +25,11 @@ func _initialize():
 	await physics_frame
 
 	_failures += await _test_section_rotation_accumulates_across_physics_ticks()
-	_failures += await _test_bridge_rotation_accumulates_across_physics_ticks()
+	_failures += await _test_bridges_stay_still_across_physics_ticks()
 	_failures += await _test_section_stays_aligned_with_parent_after_shift()
 	_failures += await _test_rotating_hull_resting_on_section_does_not_jump()
 	_failures += await _test_rotating_hull_resting_on_bridge_does_not_jump()
 	_failures += await _test_nearest_bridge_index_finds_each_port()
-	_failures += await _test_port_velocity_matches_its_motion()
 	_failures += await _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section()
 
 	if _failures == 0:
@@ -100,38 +99,22 @@ func _test_section_rotation_accumulates_across_physics_ticks() -> int:
 	station.free()
 	return result
 
-func _test_bridge_rotation_accumulates_across_physics_ticks() -> int:
-	# Same bug class as the section test above, now checked on a bridge:
-	# bridges also rotate every frame (together with sections) and are also
-	# AnimatableBody3D, so they need sync_to_physics=false too.
+func _test_bridges_stay_still_across_physics_ticks() -> int:
+	# Bridges no longer turn: several spin steps and physics ticks later a
+	# bridge has the orientation it started with.
 	var station := _make_station()
 	root.add_child(station)
 	station.set_process(false)
 	station.build_station()
 	var bridge: Node3D = station.get_node("Bridge0")
 	var original_basis: Basis = bridge.transform.basis
-
-	var sub_delta := 0.02
-	var calls_per_tick := 3
-	var num_ticks := 3
-	for tick in range(num_ticks):
-		for sub in range(calls_per_tick):
-			station._rotate_sections(sub_delta)
+	for tick in range(3):
+		for sub in range(3):
+			station._rotate_sections(0.02)
 		await physics_frame
-
-	var new_basis: Basis = bridge.transform.basis
-	var delta_basis: Basis = original_basis.inverse() * new_basis
-
-	var target_gravity: float = TorusGeometry.GRAVITY_1G * station.target_gravity_g
-	var omega: float = TorusGeometry.compute_section_angular_velocity(station.section_radius, target_gravity)
-	var total_expected_angle: float = omega * sub_delta * calls_per_tick * num_ticks
-	var expected_delta_basis := Basis(Vector3.UP, total_expected_angle)
-
 	var result := 0
-	if not delta_basis.x.is_equal_approx(expected_delta_basis.x) \
-			or not delta_basis.y.is_equal_approx(expected_delta_basis.y) \
-			or not delta_basis.z.is_equal_approx(expected_delta_basis.z):
-		print("FAIL _test_bridge_rotation_accumulates_across_physics_ticks: delta_basis=%s expected=%s" % [delta_basis, expected_delta_basis])
+	if not bridge.transform.basis.is_equal_approx(original_basis):
+		print("FAIL _test_bridges_stay_still_across_physics_ticks: the bridge turned to %s" % bridge.transform.basis)
 		result = 1
 	station.free()
 	return result
@@ -277,24 +260,5 @@ func _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section() -> int:
 		print("FAIL _test_void_cruiser_at_full_ramp_speed_bounces_off_a_section: came within %.1f m of the axis (hull at %.1f), outward speed %.1f" % [closest, station.section_radius, cruiser.velocity.dot(outward)])
 		result = 1
 	cruiser.free()
-	station.free()
-	return result
-
-func _test_port_velocity_matches_its_motion() -> int:
-	# The pad spins with the bridge; docking needs its velocity to match it.
-	var station := _make_full_scale_station()
-	root.add_child(station)
-	station.set_process(false)
-	station.build_station()
-	await process_frame
-	var port: Node3D = station.get_docking_port(0)
-	var velocity: Vector3 = station.get_docking_port_velocity(0)
-	var before: Vector3 = port.global_position
-	station._rotate_sections(0.01)
-	var measured: Vector3 = (port.global_position - before) / 0.01
-	var result := 0
-	if velocity.length() < 30.0 or velocity.distance_to(measured) > velocity.length() * 0.01:
-		print("FAIL _test_port_velocity_matches_its_motion: reported %s, measured %s" % [velocity, measured])
-		result = 1
 	station.free()
 	return result
