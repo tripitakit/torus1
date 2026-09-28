@@ -8,6 +8,7 @@ func _init():
 	failures += _test_rebuild_does_not_leak()
 	failures += _test_build_planet_sets_surface_material()
 	failures += _test_planet_has_clouds_and_atmosphere()
+	failures += _test_surface_mesh_is_fine_enough_to_land_on()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -93,6 +94,23 @@ func _test_planet_has_clouds_and_atmosphere() -> int:
 	var after: float = surface.get_shader_parameter("cloud_offset")
 	if not is_equal_approx(fposmod(after - before, 1.0), 0.25):
 		print("FAIL _test_planet_has_clouds_and_atmosphere: a quarter of CLOUD_TURN moved the clouds by %f of a turn" % fposmod(after - before, 1.0))
+		result = 1
+	planet.free()
+	return result
+
+func _test_surface_mesh_is_fine_enough_to_land_on() -> int:
+	# A crash stops the ship on the true sphere; the drawn faces sag inside it
+	# by about R (1 - cos(pi / segments)) round and R (1 - cos(pi / 2 rings))
+	# along. With the real radius that must stay within 50 m, not kilometres.
+	var planet: MeshInstance3D = PlanetScript.new()
+	planet.planet_radius = 1737400.0
+	planet.build_planet()
+	var sphere := planet.mesh as SphereMesh
+	var r: float = planet.planet_radius
+	var sag: float = r * (1.0 - cos(PI / sphere.radial_segments)) + r * (1.0 - cos(PI / (2.0 * sphere.rings)))
+	var result := 0
+	if sag > 50.0:
+		print("FAIL _test_surface_mesh_is_fine_enough_to_land_on: faces sag up to %.0f m (%d segments, %d rings)" % [sag, sphere.radial_segments, sphere.rings])
 		result = 1
 	planet.free()
 	return result

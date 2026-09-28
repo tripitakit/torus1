@@ -135,6 +135,9 @@ func _external_acceleration() -> Vector3:
 # thrust, scaled too.
 func _fly(delta: float) -> void:
 	if is_crashed:
+		# Nothing the pilot does meanwhile carries over to the restart.
+		_mouse_delta = Vector2.ZERO
+		_forward_hold_time = 0.0
 		return
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
@@ -173,6 +176,8 @@ func restart_after_crash() -> void:
 	is_crashed = false
 	velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
+	_mouse_delta = Vector2.ZERO
+	_forward_hold_time = 0.0
 
 # The nearest dock within the guide's MAX_RANGE: station, bridge index,
 # port and straight distance to the pad. Empty off the tree, with no

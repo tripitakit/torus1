@@ -14,6 +14,8 @@ const CLOUDS_PATH := "res://assets/textures/clouds/clouds.png"
 # Atmosphere shell above the surface (metres), and the clouds' turn
 # (seconds per turn, relative to the surface).
 const ATMOSPHERE_HEIGHT := 40000.0
+const SURFACE_SEGMENTS := 768
+const SURFACE_RINGS := 384
 const CLOUD_TURN := 3600.0
 const SURFACE_SHADER := """
 shader_type spatial;
@@ -87,10 +89,12 @@ func _build_surface_material() -> ShaderMaterial:
 	mat.set_shader_parameter("cloud_offset", 0.0)
 	return mat
 
-func _sphere(radius: float) -> SphereMesh:
+func _sphere(radius: float, segments := 64, rings := 32) -> SphereMesh:
 	var sphere := SphereMesh.new()
 	sphere.radius = radius
 	sphere.height = radius * 2.0
+	sphere.radial_segments = segments
+	sphere.rings = rings
 	return sphere
 
 # Replaces the child `layer_name` with a fresh sphere of `radius`.
@@ -108,7 +112,9 @@ func _layer(layer_name: String, radius: float, material: Material) -> MeshInstan
 	return layer
 
 func build_planet() -> void:
-	mesh = _sphere(planet_radius)
+	# Fine faces: a crash stops the ship on the true sphere (void_cruiser.gd),
+	# and 768 x 384 faces sag at most ~30 m inside it (64 x 32 sagged 4 km).
+	mesh = _sphere(planet_radius, SURFACE_SEGMENTS, SURFACE_RINGS)
 	material_override = _build_surface_material()
 	var shader := Shader.new()
 	shader.code = ATMOSPHERE_SHADER

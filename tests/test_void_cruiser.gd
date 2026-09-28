@@ -50,6 +50,7 @@ func _init():
 	failures += _test_brake_stops_the_ship_at_ten_times_thrust()
 	failures += _test_sphere_entry_finds_where_a_move_enters_the_planet()
 	failures += _test_crashes_on_the_planet_instead_of_passing_through()
+	failures += _test_restart_forgets_the_mouse_moved_on_the_crash_screen()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -837,6 +838,32 @@ func _test_crashes_on_the_planet_instead_of_passing_through() -> int:
 	Input.action_release("move_forward")
 	if not cruiser.position.is_equal_approx(at):
 		print("FAIL _test_crashes_on_the_planet_instead_of_passing_through: the wreck moved to %s" % cruiser.position)
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_restart_forgets_the_mouse_moved_on_the_crash_screen() -> int:
+	# Mouse moved while the crash screen is up must not spin the ship once it
+	# flies again, nor must W held through it resume a half-built ramp.
+	var cruiser := _make_cruiser()
+	cruiser.has_planet = true
+	cruiser.planet_center = Vector3.ZERO
+	cruiser.planet_radius = 1000.0
+	cruiser.position = Vector3(0.0, 1100.0, 0.0)
+	cruiser.velocity = Vector3(0.0, -6000.0, 0.0)
+	cruiser._physics_process(1.0 / 60.0)
+	var mouse := InputEventMouseMotion.new()
+	mouse.relative = Vector2(3000.0, 0.0)
+	cruiser._unhandled_input(mouse)
+	for i in range(10):
+		cruiser._physics_process(1.0 / 60.0)
+	# GameMode moves the ship away (to a dock) before it flies again.
+	cruiser.position = Vector3(0.0, 5000.0, 0.0)
+	cruiser.restart_after_crash()
+	cruiser._physics_process(1.0 / 60.0)
+	var result := 0
+	if cruiser.is_crashed or cruiser.angular_velocity.length() > 1e-6:
+		print("FAIL _test_restart_forgets_the_mouse_moved_on_the_crash_screen: spinning at %s after restart" % cruiser.angular_velocity)
 		result = 1
 	cruiser.free()
 	return result
