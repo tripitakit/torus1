@@ -7,6 +7,7 @@ func _init():
 	var failures := 0
 	failures += _test_panel_sets_exist_at_2048()
 	failures += _test_repeating_panel_sets_have_no_seams()
+	failures += _test_planet_maps()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -60,4 +61,32 @@ func _test_repeating_panel_sets_have_no_seams() -> int:
 		if across > inside * 3.0 + 0.05 or down > inside_rows * 3.0 + 0.05:
 			print("FAIL _test_repeating_panel_sets_have_no_seams: %s edges differ %.3f / %.3f, inside %.3f / %.3f" % [folder, across, down, inside, inside_rows])
 			result = 1
+	return result
+
+func _test_planet_maps() -> int:
+	# Surface maps and the cloud layer, 4096 x 2048 equirectangular; the
+	# clouds white with the cover as alpha, both clear and overcast skies
+	# along 20 degrees north (where the hurricane sits).
+	var result := 0
+	for path in ["res://assets/textures/planet/color.png", "res://assets/textures/planet/roughness.png", "res://assets/textures/planet/normal.png", "res://assets/textures/clouds/clouds.png"]:
+		var image := _image(path)
+		if image == null or image.get_size() != Vector2i(4096, 2048):
+			print("FAIL _test_planet_maps: %s missing or not 4096x2048" % path)
+			result = 1
+	var clouds := _image("res://assets/textures/clouds/clouds.png")
+	if clouds == null:
+		return 1
+	if clouds.detect_alpha() == Image.ALPHA_NONE:
+		print("FAIL _test_planet_maps: the clouds have no alpha")
+		return 1
+	var row := int(clouds.get_height() * (90.0 - 20.0) / 180.0)
+	var clear := false
+	var cloudy := false
+	for x in range(0, clouds.get_width(), 8):
+		var a := clouds.get_pixel(x, row).a
+		clear = clear or a < 0.1
+		cloudy = cloudy or a > 0.9
+	if not clear or not cloudy:
+		print("FAIL _test_planet_maps: along 20 N clear %s, overcast %s" % [clear, cloudy])
+		result = 1
 	return result

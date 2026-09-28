@@ -140,10 +140,10 @@ def build_clouds(centre):
         log_r = g.math('LOGARITHM', g.math('ADD', r, 0.02), math.e)
         arms = g.math('ADD', 0.5, g.math('MULTIPLY', g.math('COSINE', g.math('ADD', g.math('MULTIPLY', theta, 2.0), g.math('MULTIPLY', log_r, 5.0))), 0.5))
         falloff = g.math('SUBTRACT', 1.0, g.math('DIVIDE', r, 1.0, clamp=True))
-        core = g.math('SUBTRACT', 1.0, g.math('DIVIDE', r, 0.35, clamp=True))
+        core = g.math('SUBTRACT', 1.0, g.math('DIVIDE', g.math('POWER', r, 2.0), 0.3, clamp=True))
         eye = g.math('GREATER_THAN', r, 0.05)
         storm = g.math('MULTIPLY', g.math('MAXIMUM', g.math('MULTIPLY', g.math('POWER', arms, 0.7), falloff), core), eye)
-        storm = g.math('MULTIPLY', storm, g.math('ADD', 0.75, g.math('MULTIPLY', streaks, 0.5)), clamp=True)
+        storm = g.math('MULTIPLY', storm, g.math('ADD', 0.95, g.math('MULTIPLY', streaks, 0.4)), clamp=True)
         clear = g.math('SUBTRACT', 1.0, g.math('DIVIDE', r, 1.3, clamp=True))
         cover = g.math('MAXIMUM', g.math('MULTIPLY', cover, g.math('SUBTRACT', 1.0, clear)), storm)
         return {'cover': cover}

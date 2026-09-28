@@ -2,21 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b17sfku0t6uth"
-path.s3tc="res://.godot/imported/albedo.png-342c5a7225bf2180d66e9f396240e578.s3tc.ctex"
+uid="uid://bl8gmvikgnhe2"
+path="res://.godot/imported/color.png-17429d6402a4f0e35c8eb346bf49f45e.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/planet/albedo.png"
-dest_files=["res://.godot/imported/albedo.png-342c5a7225bf2180d66e9f396240e578.s3tc.ctex"]
+source_file="res://assets/textures/planet/color.png"
+dest_files=["res://.godot/imported/color.png-17429d6402a4f0e35c8eb346bf49f45e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -24,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1
