@@ -113,3 +113,20 @@
   - pianeta visto dalla stazione;
   - un bridge da vicino;
   - dall'interno, il tubo e una parete di fondo.
+
+## Revisione durante l'esecuzione (2026-09-28)
+
+- **Nuvole nello shader della superficie.** La sfera `Clouds` separata, 10 km
+  sopra la superficie, nel render mostrava macchie triangolari dove si vedeva la
+  superficie al posto delle nuvole.
+  - **Causa:** "z-fighting". Il renderer `gl_compatibility` usa un depth buffer
+    normale, e con la camera del pilota (da 2 m a 69.500 km) a 5000 km di
+    distanza non riesce a distinguere due superfici lontane 10 km.
+  - **Soluzione:** ora la superficie ha uno shader che sovrappone la mappa delle
+    nuvole spostata in longitudine (`cloud_offset`, un giro ogni 3600 s). Il
+    lato notte resta scuro, perché lo shader è illuminato.
+  - L'atmosfera resta una sfera a parte, additiva e senza scrittura di
+    profondità.
+- **Strisce di pericolo sulle pareti di fondo:** 24 per ripetizione davano un
+  effetto moiré. Ora sono larghe circa 10 m, a 45° vicino al foro.
+- **Uragano:** il nucleo è più largo e pieno, così al centro è opaco.
