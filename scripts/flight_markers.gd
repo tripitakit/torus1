@@ -6,7 +6,7 @@ extends Control
 # - the motion marker, magenta, where the craft is going: the classic
 #   flight path marker (a ring with wings and a tail); when the motion is
 #   behind the camera, a ring with an X at the opposite point (retrograde).
-#   Hidden under MIN_SPEED.
+#   Off the screen it waits on the edge on its side. Hidden under MIN_SPEED.
 
 enum Motion { NONE, PROGRADE, RETROGRADE }
 
@@ -27,6 +27,8 @@ const OUTLINE_WIDTH := 4.0
 const MIN_SPEED := 0.5
 # How far along the motion the projected point is taken (m).
 const PROJECT_DISTANCE := 1000.0
+# Off-screen motion waits this far inside the screen's edge (px).
+const EDGE_MARGIN := 24.0
 
 var motion: Motion = Motion.NONE
 var motion_point := Vector2.ZERO
@@ -36,17 +38,35 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 # Where the motion marker goes for `velocity` (world) seen by `camera`:
-# {"kind": Motion, "point": screen position}. In-tree camera only.
+# {"kind": Motion, "point": screen position}. Worked out in the camera's own
+# axes: motion toward the view is prograde, away from it retrograde (drawn
+# at the opposite point). Motion off the screen, or square across the view
+# (a strafe from rest), waits on the screen's edge on its side, EDGE_MARGIN
+# in. In-tree camera only.
 static func motion_marker(camera: Camera3D, velocity: Vector3) -> Dictionary:
 	if velocity.length() < MIN_SPEED:
 		return {"kind": Motion.NONE, "point": Vector2.ZERO}
-	var eye := camera.global_position
-	var along := velocity.normalized()
+	var view: Basis = camera.global_transform.basis.orthonormalized()
+	var d: Vector3 = view.inverse() * velocity.normalized()
 	var kind := Motion.PROGRADE
-	if camera.is_position_behind(eye + along * PROJECT_DISTANCE):
-		along = -along
+	if d.z > 1e-6:
+		d = -d
 		kind = Motion.RETROGRADE
-	return {"kind": kind, "point": camera.unproject_position(eye + along * PROJECT_DISTANCE)}
+	# The viewport's own size: the space unproject_position works in.
+	var screen := Vector2(camera.get_viewport().size)
+	var centre := screen * 0.5
+	# Screen direction of the motion (y grows downward).
+	var across := Vector2(d.x, -d.y)
+	if -d.z > 1e-3:
+		var point := camera.unproject_position(camera.global_position + view * d * PROJECT_DISTANCE)
+		if Rect2(Vector2.ONE * EDGE_MARGIN, screen - Vector2.ONE * 2.0 * EDGE_MARGIN).has_point(point):
+			return {"kind": kind, "point": point}
+		across = point - centre
+	if across.length() < 1e-9:
+		return {"kind": kind, "point": centre}
+	var room := centre - Vector2.ONE * EDGE_MARGIN
+	var reach := minf(room.x / absf(across.x) if absf(across.x) > 1e-9 else INF, room.y / absf(across.y) if absf(across.y) > 1e-9 else INF)
+	return {"kind": kind, "point": centre + across * reach}
 
 func update_motion(camera: Camera3D, velocity: Vector3) -> void:
 	var marker := motion_marker(camera, velocity)
