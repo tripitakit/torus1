@@ -9,6 +9,7 @@ func _init():
 	failures += _test_repeating_panel_sets_have_no_seams()
 	failures += _test_planet_maps()
 	failures += _test_imported_compressed_with_mipmaps()
+	failures += _test_star_map()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -106,6 +107,7 @@ func _test_imported_compressed_with_mipmaps() -> int:
 	for channel in ["color", "roughness", "normal"]:
 		paths.append("res://assets/textures/planet/%s.png" % channel)
 	paths.append("res://assets/textures/clouds/clouds.png")
+	paths.append("res://assets/textures/sky/stars.png")
 	for path in paths:
 		var config := ConfigFile.new()
 		if config.load(path + ".import") != OK:
@@ -117,3 +119,21 @@ func _test_imported_compressed_with_mipmaps() -> int:
 			print("FAIL _test_imported_compressed_with_mipmaps: %s imports with mode %s, mipmaps %s, normal map %s" % [path, config.get_value("params", "compress/mode", -1), config.get_value("params", "mipmaps/generate", false), config.get_value("params", "compress/normal_map", -1)])
 			result = 1
 	return result
+
+func _test_star_map() -> int:
+	# 8192 x 4096 with plenty of clearly visible stars.
+	var image := _image("res://assets/textures/sky/stars.png")
+	if image == null or image.get_size() != Vector2i(8192, 4096):
+		print("FAIL _test_star_map: missing or not 8192x4096")
+		return 1
+	var bright := 0
+	for y in range(0, image.get_height(), 2):
+		for x in range(0, image.get_width(), 2):
+			if image.get_pixel(x, y).get_luminance() > 0.35:
+				bright += 1
+	# Stars are 1-2 px with their peak on one pixel, most faint by design:
+	# about 5000 pixels over 0.35 on the whole map, a quarter of them here.
+	if bright < 500:
+		print("FAIL _test_star_map: only %d clearly visible star pixels on a quarter of the map" % bright)
+		return 1
+	return 0
