@@ -30,6 +30,7 @@ func _init():
 	failures += _test_at_most_64_lights_within_25_km_along_the_chain()
 	failures += _test_every_lit_object_gets_at_most_eight_lights()
 	failures += _test_building_at_docking_takes_under_three_seconds()
+	failures += _test_tube_and_caps_are_textured()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -442,3 +443,36 @@ func _test_building_at_docking_takes_under_three_seconds() -> int:
 		print("FAIL _test_building_at_docking_takes_under_three_seconds: %d ms" % elapsed)
 		return 1
 	return 0
+
+func _test_tube_and_caps_are_textured() -> int:
+	# Tube and end walls carry UVs and the interior panel textures.
+	var world := _make_world()
+	var result := 0
+	var tube := world._tube_mesh as ArrayMesh
+	var cap := world._cap_mesh as ArrayMesh
+	var tube_uv: PackedVector2Array = tube.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var cap_uv: PackedVector2Array = cap.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	if tube_uv.is_empty() or cap_uv.is_empty():
+		print("FAIL _test_tube_and_caps_are_textured: missing UVs (tube %d, cap %d)" % [tube_uv.size(), cap_uv.size()])
+		world.free()
+		return 1
+	var cap_min := Vector2(INF, INF)
+	var cap_max := -cap_min
+	for uv in cap_uv:
+		cap_min = cap_min.min(uv)
+		cap_max = cap_max.max(uv)
+	if not cap_min.is_equal_approx(Vector2.ZERO) or not cap_max.is_equal_approx(Vector2(world.CAP_TEXTURE_REPEATS, 1.0)):
+		print("FAIL _test_tube_and_caps_are_textured: cap UVs %s .. %s" % [cap_min, cap_max])
+		result = 1
+	var tube_max := 0.0
+	for uv in tube_uv:
+		tube_max = maxf(tube_max, uv.y)
+	if tube_max != roundf(tube_max) or tube_max < 1.0:
+		print("FAIL _test_tube_and_caps_are_textured: a tube piece spans %f repeats, not a whole number" % tube_max)
+		result = 1
+	for m in [world._tube_material, world._cap_material]:
+		if m == null or m.albedo_texture == null or m.normal_texture == null or not m.emission_enabled:
+			print("FAIL _test_tube_and_caps_are_textured: material %s lacks its textures" % m)
+			result = 1
+	world.free()
+	return result

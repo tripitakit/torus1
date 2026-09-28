@@ -30,6 +30,15 @@ const CHUNK_LENGTH_SEGMENTS := 4
 const CAP_SEGMENTS := 128
 const TUBE_SEGMENTS := 4
 const TUBE_ARC_SEGMENTS := 64
+# Interior panel textures (tools/blender/panel_textures.py): the tube repeats
+# about every TUBE_TILE_SIZE metres, a whole number of times round and along
+# each piece; an end wall repeats CAP_TEXTURE_REPEATS times round and spans
+# once from the bridge's hole to the section's rim.
+const TUBE_TILE_SIZE := 60.0
+const CAP_TEXTURE_REPEATS := 64
+const TUBE_TEXTURE_DIR := "res://assets/textures/interior_tube/"
+const CAP_TEXTURE_DIR := "res://assets/textures/interior_cap/"
+const PANEL_LIGHTS_ENERGY := 2.0
 
 # Sections load within LOAD_REACH chain periods of the craft (centre to
 # craft, along the axis) and unload past UNLOAD_REACH: the gap keeps a
@@ -61,8 +70,6 @@ const SUN_GLOBE_RADIUS := 30.0
 const LIGHT_FADE_BEGIN := 24000.0
 const LIGHT_FADE_LENGTH := 1000.0
 
-const STRUCTURE_COLOR := Color(0.45, 0.47, 0.5)
-
 const DOCK_PLATFORM_SIZE := Vector3(60.0, 4.0, 60.0)
 const DOCK_LIGHT_RANGE := 150.0
 const SPAWN_HEIGHT := 24.0
@@ -93,7 +100,8 @@ class SectionLoad:
 		return task_id < 0 and plan != null and pending_chunks.is_empty() and not unloading
 
 var _chain: Node3D
-var _structure_material: StandardMaterial3D
+var _tube_material: StandardMaterial3D
+var _cap_material: StandardMaterial3D
 var _sun_mesh: SphereMesh
 var _sun_material: StandardMaterial3D
 var _chunk_shape: Shape3D
@@ -106,7 +114,8 @@ var _sections := {}
 var _bridges := {}
 
 func build() -> void:
-	_structure_material = _make_material(STRUCTURE_COLOR, 0.6)
+	_tube_material = _panel_material(TUBE_TEXTURE_DIR)
+	_cap_material = _panel_material(CAP_TEXTURE_DIR)
 	_sun_mesh = SphereMesh.new()
 	_sun_mesh.radius = SUN_GLOBE_RADIUS
 	_sun_mesh.height = SUN_GLOBE_RADIUS * 2.0
@@ -117,9 +126,10 @@ func build() -> void:
 	# shifted: one collision shape for all of them. What is drawn on it comes
 	# from the section's plan.
 	_chunk_shape = _build_band_mesh(section_radius, TAU / CHUNKS_AROUND, CHUNK_LENGTH, CHUNK_ARC_SEGMENTS, CHUNK_LENGTH_SEGMENTS).create_trimesh_shape()
-	_cap_mesh = _build_annulus_mesh(bridge_radius, section_radius, CAP_SEGMENTS)
+	_cap_mesh = _build_annulus_mesh(bridge_radius, section_radius, CAP_SEGMENTS, CAP_TEXTURE_REPEATS)
 	_cap_shape = _cap_mesh.create_trimesh_shape()
-	_tube_mesh = _build_band_mesh(bridge_radius, TAU, bridge_length / TUBE_SEGMENTS, TUBE_ARC_SEGMENTS, 1)
+	var piece: float = bridge_length / TUBE_SEGMENTS
+	_tube_mesh = _build_band_mesh(bridge_radius, TAU, piece, TUBE_ARC_SEGMENTS, 1, maxf(1.0, roundf(TAU * bridge_radius / TUBE_TILE_SIZE)), maxf(1.0, roundf(piece / TUBE_TILE_SIZE)))
 	_tube_shape = _tube_mesh.create_trimesh_shape()
 	_dressing = TerrainDressingScript.new()
 	_chain = Node3D.new()
@@ -346,7 +356,7 @@ func _build_cap(cap_name: String, z: float, facing: float) -> StaticBody3D:
 	# The annulus faces -Z; half a turn around Y makes it face +Z.
 	var cap_basis := Basis() if facing < 0.0 else Basis(Vector3.UP, PI)
 	cap.transform = Transform3D(cap_basis, Vector3(0.0, 0.0, z))
-	_add_mesh_and_collision(cap, _cap_mesh, _cap_shape, _structure_material)
+	_add_mesh_and_collision(cap, _cap_mesh, _cap_shape, _cap_material)
 	return cap
 
 func _fade_with_distance(light: Light3D) -> void:
@@ -385,7 +395,7 @@ func _build_bridge(slot: int) -> Node3D:
 		var segment := StaticBody3D.new()
 		segment.name = "Segment_%d" % k
 		segment.position = Vector3(0.0, 0.0, -bridge_length * 0.5 + k * segment_length)
-		_add_mesh_and_collision(segment, _tube_mesh, _tube_shape, _structure_material)
+		_add_mesh_and_collision(segment, _tube_mesh, _tube_shape, _tube_material)
 		bridge.add_child(segment)
 	bridge.add_child(_build_dock())
 	return bridge
@@ -427,10 +437,17 @@ func _build_dock() -> Node3D:
 	dock.add_child(undock_sign)
 	return dock
 
-func _make_material(color: Color, roughness: float) -> StandardMaterial3D:
+# The interior panels in `dir` (color, roughness, normal, emission).
+func _panel_material(dir: String) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = roughness
+	material.albedo_texture = load(dir + "color.png")
+	material.roughness_texture = load(dir + "roughness.png")
+	material.normal_enabled = true
+	material.normal_texture = load(dir + "normal.png")
+	material.emission_enabled = true
+	material.emission = Color(0, 0, 0)
+	material.emission_texture = load(dir + "emission.png")
+	material.emission_energy_multiplier = PANEL_LIGHTS_ENERGY
 	return material
 
 func _add_mesh_and_collision(body: Node3D, mesh: Mesh, shape: Shape3D, material: Material) -> void:
@@ -445,7 +462,8 @@ func _add_mesh_and_collision(body: Node3D, mesh: Mesh, shape: Shape3D, material:
 	body.add_child(collision)
 
 # Inner wall of a cylinder: angle 0..angle_span, z 0..length, facing the axis.
-func _build_band_mesh(radius: float, angle_span: float, length: float, arc_segments: int, length_segments: int) -> ArrayMesh:
+# UV u runs 0..u_repeats round, v 0..v_repeats along.
+func _build_band_mesh(radius: float, angle_span: float, length: float, arc_segments: int, length_segments: int, u_repeats := 1.0, v_repeats := 1.0) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(arc_segments):
@@ -454,17 +472,23 @@ func _build_band_mesh(radius: float, angle_span: float, length: float, arc_segme
 		for j in range(length_segments):
 			var z0: float = length * j / length_segments
 			var z1: float = length * (j + 1) / length_segments
-			_add_quad(st,
+			var u0: float = u_repeats * a0 / angle_span
+			var u1: float = u_repeats * a1 / angle_span
+			var v0: float = v_repeats * z0 / length
+			var v1: float = v_repeats * z1 / length
+			_add_quad_uv(st,
 				InteriorLayout.cylinder_point(radius, a0, z0),
 				InteriorLayout.cylinder_point(radius, a1, z0),
 				InteriorLayout.cylinder_point(radius, a0, z1),
-				InteriorLayout.cylinder_point(radius, a1, z1))
+				InteriorLayout.cylinder_point(radius, a1, z1),
+				Vector2(u0, v0), Vector2(u1, v0), Vector2(u0, v1), Vector2(u1, v1))
 	st.generate_normals()
 	return st.commit()
 
 # Flat ring in the z = 0 plane from inner_radius to outer_radius, facing -Z.
-# inner_radius 0 gives a full disc.
-func _build_annulus_mesh(inner_radius: float, outer_radius: float, segments: int) -> ArrayMesh:
+# inner_radius 0 gives a full disc. UV u runs 0..u_repeats round, v 0 at the
+# inner edge to 1 at the outer.
+func _build_annulus_mesh(inner_radius: float, outer_radius: float, segments: int, u_repeats := 1.0) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(segments):
@@ -474,8 +498,10 @@ func _build_annulus_mesh(inner_radius: float, outer_radius: float, segments: int
 		var inner1 := InteriorLayout.cylinder_point(inner_radius, a1, 0.0)
 		var outer0 := InteriorLayout.cylinder_point(outer_radius, a0, 0.0)
 		var outer1 := InteriorLayout.cylinder_point(outer_radius, a1, 0.0)
+		var u0: float = u_repeats * i / segments
+		var u1: float = u_repeats * (i + 1) / segments
 		if inner_radius > 0.0:
-			_add_quad(st, inner0, outer0, inner1, outer1)
+			_add_quad_uv(st, inner0, outer0, inner1, outer1, Vector2(u0, 0.0), Vector2(u0, 1.0), Vector2(u1, 0.0), Vector2(u1, 1.0))
 		else:
 			_add_triangle(st, inner0, outer0, outer1)
 	st.generate_normals()
@@ -487,6 +513,12 @@ func _build_annulus_mesh(inner_radius: float, outer_radius: float, segments: int
 func _add_quad(st: SurfaceTool, p00: Vector3, p10: Vector3, p01: Vector3, p11: Vector3) -> void:
 	_add_triangle(st, p00, p10, p01)
 	_add_triangle(st, p10, p11, p01)
+
+# _add_quad with a UV per corner.
+func _add_quad_uv(st: SurfaceTool, p00: Vector3, p10: Vector3, p01: Vector3, p11: Vector3, t00: Vector2, t10: Vector2, t01: Vector2, t11: Vector2) -> void:
+	for corner in [[p00, t00], [p10, t10], [p01, t01], [p10, t10], [p11, t11], [p01, t01]]:
+		st.set_uv(corner[1])
+		st.add_vertex(corner[0])
 
 func _add_triangle(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
 	st.add_vertex(a)
