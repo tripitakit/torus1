@@ -8,6 +8,7 @@ func _init():
 	failures += _test_panel_sets_exist_at_2048()
 	failures += _test_repeating_panel_sets_have_no_seams()
 	failures += _test_planet_maps()
+	failures += _test_imported_compressed_with_mipmaps()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -89,4 +90,30 @@ func _test_planet_maps() -> int:
 	if not clear or not cloudy:
 		print("FAIL _test_planet_maps: along 20 N clear %s, overcast %s" % [clear, cloudy])
 		result = 1
+	return result
+
+func _test_imported_compressed_with_mipmaps() -> int:
+	# Every baked texture goes to the GPU VRAM-compressed with mipmaps (as the
+	# station's do): without mipmaps panels and stripes shimmer when small on
+	# screen, and uncompressed they took ~200 MB. Normal maps are imported as
+	# normal maps. Set explicitly: the 3D auto-detection only runs in the
+	# editor.
+	var result := 0
+	var paths := []
+	for folder in ["bridge", "interior_tube", "interior_cap"]:
+		for channel in ["color", "roughness", "normal", "emission"]:
+			paths.append("res://assets/textures/%s/%s.png" % [folder, channel])
+	for channel in ["color", "roughness", "normal"]:
+		paths.append("res://assets/textures/planet/%s.png" % channel)
+	paths.append("res://assets/textures/clouds/clouds.png")
+	for path in paths:
+		var config := ConfigFile.new()
+		if config.load(path + ".import") != OK:
+			print("FAIL _test_imported_compressed_with_mipmaps: no %s.import" % path)
+			result = 1
+			continue
+		var normal_map: int = 1 if path.ends_with("normal.png") else 0
+		if config.get_value("params", "compress/mode", -1) != 2 or config.get_value("params", "mipmaps/generate", false) != true or config.get_value("params", "detect_3d/compress_to", -1) != 0 or config.get_value("params", "compress/normal_map", -1) != normal_map:
+			print("FAIL _test_imported_compressed_with_mipmaps: %s imports with mode %s, mipmaps %s, normal map %s" % [path, config.get_value("params", "compress/mode", -1), config.get_value("params", "mipmaps/generate", false), config.get_value("params", "compress/normal_map", -1)])
+			result = 1
 	return result
