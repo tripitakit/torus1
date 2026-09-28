@@ -63,6 +63,10 @@ const HULL_EMISSION_PATH := "res://assets/textures/station/emission.png"
 const HULL_AO_PATH := "res://assets/textures/station/ao.png"
 const HULL_TILE_SIZE := 500.0
 const HULL_LIGHTS_ENERGY := 3.0
+# Bridges carry their own panels (rectangular; tools/blender/panel_textures.py),
+# about BRIDGE_TILE_SIZE metres a repeat.
+const BRIDGE_TEXTURE_DIR := "res://assets/textures/bridge/"
+const BRIDGE_TILE_SIZE := 100.0
 const BRIDGE_RADIUS_RATIO := 0.3
 # A docking pad on one flat face of every bridge prism, halfway along it,
 # spinning with the bridge. BRIDGE_SEGMENTS faces; PAD_FACE is the one just
@@ -152,6 +156,23 @@ func _build_hull_material(circumference: float, length: float) -> StandardMateri
 	mat.uv1_scale = Vector3(circumference / HULL_TILE_SIZE, length / HULL_TILE_SIZE, 1.0)
 	return mat
 
+# A whole number of repeats round and along, so no seam shows where the
+# texture wraps. A CylinderMesh side spans UV v 0..0.5 only: twice the scale.
+func _build_bridge_material(circumference: float, length: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load(BRIDGE_TEXTURE_DIR + "color.png")
+	mat.roughness_texture = load(BRIDGE_TEXTURE_DIR + "roughness.png")
+	mat.normal_enabled = true
+	mat.normal_texture = load(BRIDGE_TEXTURE_DIR + "normal.png")
+	mat.emission_enabled = true
+	mat.emission = Color(0, 0, 0)
+	mat.emission_texture = load(BRIDGE_TEXTURE_DIR + "emission.png")
+	mat.emission_energy_multiplier = HULL_LIGHTS_ENERGY
+	var round_repeats := maxf(1.0, roundf(circumference / BRIDGE_TILE_SIZE))
+	var along_repeats := maxf(1.0, roundf(length / BRIDGE_TILE_SIZE))
+	mat.uv1_scale = Vector3(round_repeats, along_repeats * 2.0, 1.0)
+	return mat
+
 # Not CylinderShape3D: at this scale Godot's cylinder collision gives bad
 # contacts against the ship's turning box, shoving a still ship up to ~100 m
 # per tick (see tests/test_torus_station_physics.gd). A convex prism with the
@@ -217,6 +238,7 @@ func build_station() -> void:
 
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)
+	var bridge_material := _build_bridge_material(TAU * get_bridge_radius(), bridge_length)
 	var bridge_mesh := CylinderMesh.new()
 	bridge_mesh.top_radius = get_bridge_radius()
 	bridge_mesh.bottom_radius = get_bridge_radius()
@@ -251,7 +273,7 @@ func build_station() -> void:
 		var bridge_mesh_instance := MeshInstance3D.new()
 		bridge_mesh_instance.name = "Mesh"
 		bridge_mesh_instance.mesh = bridge_mesh
-		bridge_mesh_instance.material_override = hull_material
+		bridge_mesh_instance.material_override = bridge_material
 		bridge.add_child(bridge_mesh_instance)
 
 		var bridge_collision := CollisionShape3D.new()

@@ -33,6 +33,7 @@ func _init():
 	failures += _test_bridge_radius_and_length_helpers()
 	failures += _test_every_pad_has_four_corner_lamps()
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
+	failures += _test_bridges_have_their_own_panels()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -196,14 +197,17 @@ func _test_rotate_sections_leaves_bridges_still() -> int:
 	return result
 
 func _test_sections_and_bridges_share_one_hull_material() -> int:
-	# Sections+bridges must all reference the SAME material resource, not a
-	# fresh StandardMaterial3D per mesh — with num_sections in the thousands,
-	# per-object materials would duplicate a GPU resource needlessly.
+	# Every section references the SAME hull material, and every bridge the
+	# SAME bridge material — not a fresh StandardMaterial3D per mesh: with
+	# num_sections in the thousands, per-object materials would duplicate a
+	# GPU resource needlessly. (Bridges have their own panels since the
+	# rectangular texture.)
 	var station := _make_station(4)
 	station.build_station()
 	var section0_mesh: MeshInstance3D = station.get_node("Section0").get_node("Mesh")
 	var section1_mesh: MeshInstance3D = station.get_node("Section1").get_node("Mesh")
 	var bridge0_mesh: MeshInstance3D = station.get_node("Bridge0").get_node("Mesh")
+	var bridge1_mesh: MeshInstance3D = station.get_node("Bridge1").get_node("Mesh")
 	var result := 0
 	if section0_mesh.material_override == null:
 		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0/Mesh has no material_override")
@@ -211,8 +215,8 @@ func _test_sections_and_bridges_share_one_hull_material() -> int:
 	elif section0_mesh.material_override != section1_mesh.material_override:
 		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 and Section1 use different material resources")
 		result = 1
-	elif section0_mesh.material_override != bridge0_mesh.material_override:
-		print("FAIL _test_sections_and_bridges_share_one_hull_material: Section0 and Bridge0 use different material resources")
+	elif bridge0_mesh.material_override == null or bridge0_mesh.material_override != bridge1_mesh.material_override:
+		print("FAIL _test_sections_and_bridges_share_one_hull_material: Bridge0 and Bridge1 use different material resources")
 		result = 1
 	station.free()
 	return result
@@ -532,6 +536,30 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 		result = 1
 	if not is_equal_approx(material.get_shader_parameter("lamp_size"), 8.0) or not is_equal_approx(material.get_shader_parameter("min_pixels"), 2.0):
 		print("FAIL _test_lamp_shader_keeps_a_minimum_size_and_blinks: lamp_size %s min_pixels %s" % [material.get_shader_parameter("lamp_size"), material.get_shader_parameter("min_pixels")])
+		result = 1
+	station.free()
+	return result
+
+func _test_bridges_have_their_own_panels() -> int:
+	# Bridges: rectangular panels (bridge/), a whole number of ~100 m repeats
+	# round and along the side (the side's UV v spans 0..0.5); sections keep
+	# the hexagon hull.
+	var station := _make_station(4)
+	station.build_station()
+	var bridge_mat := (station.get_node("Bridge0/Mesh") as MeshInstance3D).material_override as StandardMaterial3D
+	var section_mat := (station.get_node("Section0/Mesh") as MeshInstance3D).material_override as StandardMaterial3D
+	var result := 0
+	if bridge_mat == null or bridge_mat == section_mat or bridge_mat.albedo_texture == null or not bridge_mat.albedo_texture.resource_path.ends_with("bridge/color.png") or not bridge_mat.emission_enabled or bridge_mat.emission_texture == null or bridge_mat.normal_texture == null:
+		print("FAIL _test_bridges_have_their_own_panels: bridge material %s" % bridge_mat)
+		station.free()
+		return 1
+	var round_repeats: float = bridge_mat.uv1_scale.x
+	var along_repeats: float = bridge_mat.uv1_scale.y * 0.5
+	if round_repeats != roundf(round_repeats) or along_repeats != roundf(along_repeats) or round_repeats < 1.0 or along_repeats < 1.0:
+		print("FAIL _test_bridges_have_their_own_panels: uv scale %s is not whole repeats" % bridge_mat.uv1_scale)
+		result = 1
+	if not section_mat.albedo_texture.resource_path.ends_with("station/albedo.png"):
+		print("FAIL _test_bridges_have_their_own_panels: the sections lost the hexagons")
 		result = 1
 	station.free()
 	return result
