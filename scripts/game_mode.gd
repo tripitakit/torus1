@@ -87,6 +87,7 @@ func enter_interior(bridge_index: int) -> void:
 		_detached.append([child, child.get_index()])
 	for entry in _detached:
 		parent.remove_child(entry[0])
+	_show_dome(false)
 
 	_interior = InteriorWorldScript.new()
 	_interior.name = "InteriorWorld"
@@ -134,6 +135,7 @@ func exit_interior() -> void:
 	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
 	if pilot_camera:
 		pilot_camera.make_current()
+	_show_dome(true)
 	docked_bridge = -1
 	mode = Mode.VOID
 
@@ -159,3 +161,9 @@ func _build_fade() -> void:
 	_curtain.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_curtain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade.add_child(_curtain)
+
+# The space backdrop (space_sky.gd on the kept WorldEnvironment), off inside.
+func _show_dome(shown: bool) -> void:
+	var world := get_parent().get_node_or_null("WorldEnvironment")
+	if world != null and world.has_method("show_dome"):
+		world.show_dome(shown)

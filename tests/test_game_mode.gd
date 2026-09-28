@@ -118,6 +118,10 @@ func _test_dock_key_near_port_enters_interior() -> int:
 	if _scene.get_node_or_null("WorldEnvironment") == null:
 		print("FAIL _test_dock_key_near_port_enters_interior: WorldEnvironment was removed")
 		result = 1
+	# Inside, the star dome must not show through the chain's open ends.
+	elif (_scene.get_node("WorldEnvironment") as WorldEnvironment).environment.background_mode != Environment.BG_COLOR:
+		print("FAIL _test_dock_key_near_port_enters_interior: the star dome is still the background inside")
+		result = 1
 	if root.get_camera_3d() != interior.get_node("InternalCruiser/Camera"):
 		print("FAIL _test_dock_key_near_port_enters_interior: the window renders %s" % root.get_camera_3d())
 		result = 1
@@ -155,6 +159,9 @@ func _test_undock_sign_and_key_return_outside() -> int:
 		result = 1
 	if root.get_camera_3d() != _void_cruiser.get_node("Cockpit/PilotCamera"):
 		print("FAIL _test_undock_sign_and_key_return_outside: the window renders %s, expected PilotCamera" % root.get_camera_3d())
+		result = 1
+	if (_scene.get_node("WorldEnvironment") as WorldEnvironment).environment.background_mode != Environment.BG_SKY:
+		print("FAIL _test_undock_sign_and_key_return_outside: the star dome did not come back outside")
 		result = 1
 	return result
 

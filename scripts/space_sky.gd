@@ -54,3 +54,9 @@ func build_sky() -> void:
 	env.background_mode = Environment.BG_SKY
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment = env
+
+# Inside the station the dome is switched off (plain black): the chain's
+# open ends must not show the stars.
+func show_dome(shown: bool) -> void:
+	if environment != null:
+		environment.background_mode = Environment.BG_SKY if shown else Environment.BG_COLOR
