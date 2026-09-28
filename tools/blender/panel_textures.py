@@ -89,7 +89,9 @@ def build_cap(g):
     color = g.mix(g.math('SUBTRACT', 1.0, panel), color, (0.04, 0.04, 0.05, 1.0))
     # Hazard bands at the hole (v < 0.035) and the rim (v > 0.965).
     band = g.math('MAXIMUM', g.math('LESS_THAN', v, 0.035), g.math('GREATER_THAN', v, 0.965))
-    stripes = g.math('GREATER_THAN', g.math('FRACT', g.math('MULTIPLY', g.math('ADD', u, g.math('MULTIPLY', v, 4.0)), 24.0)), 0.5)
+    # About 10 m wide at 45 degrees next to the hole: a tile of u is 1/64 of
+    # the circle (59 m there), v spans the 1400 m wall.
+    stripes = g.math('GREATER_THAN', g.math('FRACT', g.math('ADD', g.math('MULTIPLY', u, 6.0), g.math('MULTIPLY', v, 140.0))), 0.5)
     hazard = g.mix(stripes, (0.03, 0.03, 0.03, 1.0), (0.95, 0.72, 0.08, 1.0))
     color = g.mix(band, color, hazard)
     # Small lamps along the hazard bands.
