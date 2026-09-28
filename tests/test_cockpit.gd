@@ -19,6 +19,7 @@ func _init():
 	failures += _test_approach_panel_writes_and_colours_the_readout()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_top_centre()
+	failures += _test_hud_hosts_the_flight_markers_full_screen()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -303,6 +304,16 @@ func _test_approach_panel_writes_and_colours_the_readout() -> int:
 	cockpit.update_approach({})
 	if (cockpit.get_node("Hud/ApproachPanel") as Control).visible:
 		print("FAIL _test_approach_panel_writes_and_colours_the_readout: an empty readout left it shown")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_hud_hosts_the_flight_markers_full_screen() -> int:
+	var cockpit := _make_cockpit()
+	var result := 0
+	var markers := cockpit.get_node_or_null("Hud/FlightMarkers") as Control
+	if markers == null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE or not is_equal_approx(markers.anchor_right, 1.0) or not is_equal_approx(markers.anchor_bottom, 1.0):
+		print("FAIL _test_hud_hosts_the_flight_markers_full_screen: missing, catching the mouse, or not full screen")
 		result = 1
 	cockpit.free()
 	return result

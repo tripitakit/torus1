@@ -6,7 +6,7 @@ const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 func _init():
 	var failures := 0
 	failures += _test_first_person_camera()
-	failures += _test_no_hud()
+	failures += _test_hud_is_only_the_flight_markers()
 	failures += _test_small_hull()
 	failures += _test_ramp_stops_at_10x()
 	failures += _test_top_speed_about_1_km_s_after_the_ramp()
@@ -34,11 +34,15 @@ func _test_first_person_camera() -> int:
 	cruiser.free()
 	return result
 
-func _test_no_hud() -> int:
+func _test_hud_is_only_the_flight_markers() -> int:
+	# No cockpit panels inside: just the boresight and the motion marker.
 	var cruiser := _make_cruiser()
+	cruiser.build_hud()
 	var result := 0
-	if cruiser.find_children("*", "CanvasLayer", true, false).size() > 0 or cruiser.get_node_or_null("Cockpit") != null:
-		print("FAIL _test_no_hud: the internal-cruiser must have no HUD")
+	var layers := cruiser.find_children("*", "CanvasLayer", true, false)
+	var markers := cruiser.get_node_or_null("Hud/FlightMarkers") as Control
+	if layers.size() != 1 or markers == null or cruiser.get_node("Hud").get_child_count() != 1 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		print("FAIL _test_hud_is_only_the_flight_markers: the internal-cruiser's HUD must be the flight markers alone")
 		result = 1
 	cruiser.free()
 	return result

@@ -91,6 +91,8 @@ func _process(delta: float) -> void:
 		cockpit.set_thrust_scale(thrust_scale)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
 		cockpit.update_attitude(attitude_matrix())
+		if is_inside_tree():
+			cockpit.update_motion(velocity)
 	var readout := _update_approach_guide()
 	if cockpit:
 		cockpit.update_approach(readout)

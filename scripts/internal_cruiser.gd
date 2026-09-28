@@ -1,9 +1,10 @@
 extends "res://scripts/flying_craft.gd"
 
 # The small craft flown inside the station: same controls as the
-# void-cruiser, a shorter thrust ramp (it stops at 10x, about 1 km/s), no HUD
-# and no gravity.
+# void-cruiser, a shorter thrust ramp (it stops at 10x, about 1 km/s), no
+# gravity, and no HUD but the boresight and motion marker.
 
+const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
 const HULL_SIZE := Vector3(4.0, 2.0, 8.0)
 const CAMERA_POSITION := Vector3(0.0, 0.3, -2.0)
 const CAMERA_HFOV := 90.0
@@ -19,6 +20,7 @@ func _init() -> void:
 func _ready() -> void:
 	build_collision_shape()
 	build_camera()
+	build_hud()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func build_collision_shape() -> void:
@@ -39,6 +41,21 @@ func build_camera() -> void:
 	camera.far = CAMERA_FAR
 	camera.current = true
 	add_child(camera)
+
+# Only the boresight and the motion marker (see flight_markers.gd).
+func build_hud() -> void:
+	var hud := CanvasLayer.new()
+	hud.name = "Hud"
+	add_child(hud)
+	var markers: Control = FlightMarkersScript.new()
+	markers.name = "FlightMarkers"
+	hud.add_child(markers)
+
+func _process(_delta: float) -> void:
+	var markers := get_node_or_null("Hud/FlightMarkers") as Control
+	var camera := get_node_or_null("Camera") as Camera3D
+	if markers != null and camera != null and is_inside_tree():
+		markers.update_motion(camera, velocity)
 
 func _physics_process(delta: float) -> void:
 	_fly(delta)

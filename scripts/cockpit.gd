@@ -3,6 +3,7 @@ extends Node3D
 const CockpitHudFormat = preload("res://scripts/cockpit_hud_format.gd")
 const VelocityCrossScript = preload("res://scripts/velocity_cross.gd")
 const NavballScript = preload("res://scripts/navball.gd")
+const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
 
 # The ship's own exterior markers (nav-light spheres) sit on this visual
 # layer; the pilot camera, inside the hull, skips them.
@@ -97,6 +98,11 @@ func set_thrust_scale(scale: float) -> void:
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
 	(get_node("Hud/VelocityCross") as Control).set_velocity(components, cruise)
+
+# The boresight and the motion marker for `velocity` (world, m/s) seen by
+# the pilot camera. In-tree only.
+func update_motion(velocity: Vector3) -> void:
+	(get_node("Hud/FlightMarkers") as Control).update_motion(get_node("PilotCamera") as Camera3D, velocity)
 
 # The ship's attitude in the ring's frame (see Attitude.navball_matrix).
 func update_attitude(matrix: Basis) -> void:
@@ -208,6 +214,10 @@ func _build_hud() -> void:
 	navball.offset_top = HUD_MARGIN
 	navball.offset_bottom = HUD_MARGIN + NavballScript.PANEL_SIZE.y
 	hud.add_child(navball)
+	# Boresight and motion marker over the whole view.
+	var markers: Control = FlightMarkersScript.new()
+	markers.name = "FlightMarkers"
+	hud.add_child(markers)
 
 	update_hud(0.0, {})
 
