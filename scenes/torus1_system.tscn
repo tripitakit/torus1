@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/void_cruiser.gd" id="3_cruiser"]
 [ext_resource type="Script" path="res://scripts/world_origin_rebase.gd" id="4_rebase"]
 [ext_resource type="Script" path="res://scripts/game_mode.gd" id="5_game_mode"]
+[ext_resource type="Script" path="res://scripts/space_sky.gd" id="6_sky"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -17,6 +18,7 @@ ambient_light_energy = 0.25
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=339021847]
 environment = SubResource("Environment_1")
+script = ExtResource("6_sky")
 
 [node name="PlanetSystem" type="Node3D" parent="." unique_id=205893441]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -4000, -6959600)

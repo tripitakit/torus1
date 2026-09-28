@@ -8,6 +8,7 @@ func _init():
 	failures += _test_up_and_down_thrust_on_z_and_x()
 	failures += _test_no_flight_assist_key()
 	failures += _test_brake_action_is_bound_to_b()
+	failures += _test_world_environment_builds_the_sky()
 	failures += _test_void_cruiser_orbits_with_the_station()
 
 	if failures == 0:
@@ -168,3 +169,14 @@ func _test_brake_action_is_bound_to_b() -> int:
 		print("FAIL _test_brake_action_is_bound_to_b: no 'brake' action on the B key")
 		return 1
 	return 0
+
+func _test_world_environment_builds_the_sky() -> int:
+	# The space backdrop (star dome and sun) comes from space_sky.gd.
+	var scene: Node = load("res://scenes/torus1_system.tscn").instantiate()
+	var world := scene.get_node_or_null("WorldEnvironment")
+	var result := 0
+	if world == null or world.get_script() == null or world.get_script().resource_path != "res://scripts/space_sky.gd":
+		print("FAIL _test_world_environment_builds_the_sky: WorldEnvironment does not run space_sky.gd")
+		result = 1
+	scene.free()
+	return result

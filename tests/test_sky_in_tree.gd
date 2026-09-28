@@ -10,6 +10,7 @@ func _initialize():
 	for i in range(3):
 		await process_frame
 	_failures += await _test_atmosphere_follows_the_scene_sun(scene)
+	_failures += _test_sky_is_up_in_the_scene(scene)
 	if _failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -35,3 +36,10 @@ func _test_atmosphere_follows_the_scene_sun(scene: Node3D) -> int:
 		print("FAIL _test_atmosphere_follows_the_scene_sun: after turning the sun, atmosphere %s, SunLight +Z %s" % [_sun_direction(scene), sun.global_transform.basis.z])
 		result = 1
 	return result
+
+func _test_sky_is_up_in_the_scene(scene: Node3D) -> int:
+	var world: WorldEnvironment = scene.get_node("WorldEnvironment")
+	if world.environment == null or world.environment.background_mode != Environment.BG_SKY:
+		print("FAIL _test_sky_is_up_in_the_scene: the space background is not the sky")
+		return 1
+	return 0
