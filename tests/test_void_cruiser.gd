@@ -48,6 +48,8 @@ func _init():
 	failures += _test_brake_key_toggles_and_turns_cruise_off()
 	failures += _test_thrust_keys_release_the_brake()
 	failures += _test_brake_stops_the_ship_at_ten_times_thrust()
+	failures += _test_sphere_entry_finds_where_a_move_enters_the_planet()
+	failures += _test_crashes_on_the_planet_instead_of_passing_through()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -795,6 +797,46 @@ func _test_brake_stops_the_ship_at_ten_times_thrust() -> int:
 		cruiser._physics_process(1.0 / 60.0)
 	if not cruiser.velocity.is_zero_approx() or not cruiser.brake_engaged:
 		print("FAIL _test_brake_stops_the_ship_at_ten_times_thrust: %s after 1 s, brake %s" % [cruiser.velocity, cruiser.brake_engaged])
+		result = 1
+	cruiser.free()
+	return result
+
+func _test_sphere_entry_finds_where_a_move_enters_the_planet() -> int:
+	var result := 0
+	var centre := Vector3(0.0, -2000.0, 0.0)
+	# [from, to, expected fraction]: straight down through the top of a
+	# 1000 m sphere; a miss beside it; a move that stops short; already in.
+	for c in [[Vector3(0.0, -500.0, 0.0), Vector3(0.0, -1500.0, 0.0), 0.5], [Vector3(1500.0, -500.0, 0.0), Vector3(1500.0, -3500.0, 0.0), -1.0], [Vector3(0.0, 0.0, 0.0), Vector3(0.0, -900.0, 0.0), -1.0], [Vector3(0.0, -1500.0, 0.0), Vector3(0.0, -1600.0, 0.0), 0.0]]:
+		var t: float = VoidCruiserPhysics.sphere_entry(c[0], c[1], centre, 1000.0)
+		if not is_equal_approx(t, c[2]):
+			print("FAIL _test_sphere_entry_finds_where_a_move_enters_the_planet: %s -> %s gave %f, expected %f" % [c[0], c[1], t, c[2]])
+			result = 1
+	return result
+
+func _test_crashes_on_the_planet_instead_of_passing_through() -> int:
+	# 6 km/s straight down from 100 m over a 1000 m planet: in one tick the
+	# move would cross the whole surface. The ship stops on it instead (10 m
+	# up), still, crashed, and thrust no longer moves it.
+	var cruiser := _make_cruiser()
+	cruiser.has_planet = true
+	cruiser.planet_center = Vector3.ZERO
+	cruiser.planet_radius = 1000.0
+	cruiser.position = Vector3(0.0, 1100.0, 0.0)
+	cruiser.velocity = Vector3(0.0, -6000.0, 0.0)
+	var result := 0
+	var told := [false]
+	cruiser.crashed.connect(func(): told[0] = true)
+	cruiser._physics_process(1.0 / 60.0)
+	if not cruiser.is_crashed or not told[0] or not cruiser.velocity.is_zero_approx() or absf(cruiser.position.length() - (1000.0 + cruiser.PLANET_CLEARANCE)) > 0.01:
+		print("FAIL _test_crashes_on_the_planet_instead_of_passing_through: crashed %s (signal %s), at %s, velocity %s" % [cruiser.is_crashed, told[0], cruiser.position, cruiser.velocity])
+		result = 1
+	var at := cruiser.position
+	Input.action_press("move_forward")
+	for i in range(30):
+		cruiser._physics_process(1.0 / 60.0)
+	Input.action_release("move_forward")
+	if not cruiser.position.is_equal_approx(at):
+		print("FAIL _test_crashes_on_the_planet_instead_of_passing_through: the wreck moved to %s" % cruiser.position)
 		result = 1
 	cruiser.free()
 	return result

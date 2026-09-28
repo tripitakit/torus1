@@ -32,3 +32,22 @@ static func compute_bounce_velocity(velocity: Vector3, normal: Vector3, restitut
 static func compute_strobe_energy(time: float, period: float, on_duration: float, energy: float) -> float:
 	var phase: float = fmod(time, period)
 	return energy if phase < on_duration else 0.0
+
+# Where the move from `from` to `to` first enters the sphere at `centre` of
+# `radius`, as a fraction 0..1 of the move; -1 if it does not; 0 if it
+# starts inside. Swept, so a fast ship cannot step over the surface.
+static func sphere_entry(from: Vector3, to: Vector3, centre: Vector3, radius: float) -> float:
+	var start := from - centre
+	if start.length() <= radius:
+		return 0.0
+	var move := to - from
+	var a := move.dot(move)
+	if a <= 0.0:
+		return -1.0
+	var b := 2.0 * start.dot(move)
+	var c := start.dot(start) - radius * radius
+	var disc := b * b - 4.0 * a * c
+	if disc < 0.0:
+		return -1.0
+	var t := (-b - sqrt(disc)) / (2.0 * a)
+	return t if t >= 0.0 and t <= 1.0 else -1.0

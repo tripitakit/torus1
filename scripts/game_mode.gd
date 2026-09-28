@@ -17,6 +17,15 @@ const FADE_TIME := 0.4
 # The void-cruiser reappears this far out from the port it docked at.
 const UNDOCK_CLEARANCE := 60.0
 const KEPT_WHILE_INSIDE := ["WorldEnvironment"]
+# A crash on the planet: a flash, the pilot camera shaking, a fade to the
+# crash screen that waits for R, then the ship back at rest by a dock.
+const CRASH_FLASH_TIME := 0.15
+const CRASH_SHAKE_TIME := 0.6
+const CRASH_SHAKE := 0.4
+const CRASH_FADE_TIME := 1.0
+const CRASH_FLASH_COLOR := Color(1.0, 0.75, 0.45, 1.0)
+const CRASH_SCREEN_COLOR := Color(0.22, 0.02, 0.02, 0.92)
+const CRASH_TEXT := "CRASH\nPRESS R TO RESTART"
 
 var mode: Mode = Mode.VOID
 var docked_bridge := -1
@@ -27,11 +36,17 @@ var _interior: Node3D
 var _detached: Array = []
 var _transitioning := false
 var _curtain: ColorRect
+var _crash_label: Label
+# Crashed, and whether the crash screen is up (waiting for R).
+var _crashed := false
+var _crash_screen_up := false
 
 func _ready() -> void:
 	_station = get_node(station_path)
 	_void_cruiser = get_node(void_cruiser_path)
 	_build_fade()
+	if _void_cruiser.has_signal("crashed"):
+		_void_cruiser.crashed.connect(_on_crashed)
 
 func _notification(what: int) -> void:
 	# Freed while inside (the game quits): the outside world is out of the
@@ -49,6 +64,9 @@ func is_inside() -> bool:
 func is_transitioning() -> bool:
 	return _transitioning
 
+func is_crashed() -> bool:
+	return _crashed
+
 func _process(_delta: float) -> void:
 	if mode == Mode.VOID:
 		var cockpit := _void_cruiser.get_node_or_null("Cockpit")
@@ -59,6 +77,10 @@ func _process(_delta: float) -> void:
 		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _crashed:
+		if _crash_screen_up and event.is_action_pressed("restart"):
+			restart_after_crash()
+		return
 	if _transitioning or not event.is_action_pressed("dock"):
 		return
 	if mode == Mode.VOID and _can_dock_now():
@@ -122,22 +144,63 @@ func exit_interior() -> void:
 		parent.move_child(entry[0], entry[1])
 	_detached.clear()
 
-	var port: Node3D = _station.get_docking_port(docked_bridge)
-	var outward: Vector3 = port.global_transform.basis.x.normalized()
-	var along: Vector3 = port.global_transform.basis.y.normalized()
-	_void_cruiser.global_transform = Transform3D(Basis.looking_at(outward, along), port.global_position + outward * UNDOCK_CLEARANCE)
-	# Out at rest by the still pad.
-	_void_cruiser.velocity = Vector3.ZERO
-	_void_cruiser.angular_velocity = Vector3.ZERO
-	# Out under the pilot's own hand, whatever was on when docking.
-	_void_cruiser.brake_engaged = false
-	_void_cruiser.cruise_locked = false
+	_place_by_port(docked_bridge)
 	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
 	if pilot_camera:
 		pilot_camera.make_current()
 	_show_dome(true)
 	docked_bridge = -1
 	mode = Mode.VOID
+
+# The void-cruiser at rest UNDOCK_CLEARANCE out from `bridge`'s port, bow
+# outward, under the pilot's own hand (brake and cruise off).
+func _place_by_port(bridge: int) -> void:
+	var port: Node3D = _station.get_docking_port(bridge)
+	var outward: Vector3 = port.global_transform.basis.x.normalized()
+	var along: Vector3 = port.global_transform.basis.y.normalized()
+	_void_cruiser.global_transform = Transform3D(Basis.looking_at(outward, along), port.global_position + outward * UNDOCK_CLEARANCE)
+	_void_cruiser.velocity = Vector3.ZERO
+	_void_cruiser.angular_velocity = Vector3.ZERO
+	_void_cruiser.brake_engaged = false
+	_void_cruiser.cruise_locked = false
+
+func _on_crashed() -> void:
+	if _crashed:
+		return
+	_crashed = true
+	_crash_screen_up = false
+	var camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	var tween := create_tween()
+	tween.tween_property(_curtain, "color", CRASH_FLASH_COLOR, CRASH_FLASH_TIME * 0.5)
+	tween.tween_property(_curtain, "color", Color(CRASH_FLASH_COLOR, 0.0), CRASH_FLASH_TIME * 0.5)
+	if camera != null:
+		tween.tween_method(_shake.bind(camera), 1.0, 0.0, CRASH_SHAKE_TIME)
+	tween.tween_property(_curtain, "color", CRASH_SCREEN_COLOR, CRASH_FADE_TIME)
+	tween.tween_callback(_show_crash_screen)
+
+# Shakes `camera` by up to CRASH_SHAKE metres times `strength`.
+func _shake(strength: float, camera: Camera3D) -> void:
+	camera.h_offset = randf_range(-1.0, 1.0) * CRASH_SHAKE * strength
+	camera.v_offset = randf_range(-1.0, 1.0) * CRASH_SHAKE * strength
+
+func _show_crash_screen() -> void:
+	_crash_label.visible = true
+	_crash_screen_up = true
+
+# R on the crash screen: back at rest by the nearest dock, the screen fading
+# away.
+func restart_after_crash() -> void:
+	_place_by_port(_station.nearest_bridge_index(_void_cruiser.global_position))
+	_void_cruiser.restart_after_crash()
+	var camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	if camera != null:
+		camera.h_offset = 0.0
+		camera.v_offset = 0.0
+	_crash_label.visible = false
+	_crash_screen_up = false
+	_crashed = false
+	var tween := create_tween()
+	tween.tween_property(_curtain, "color", Color(0.0, 0.0, 0.0, 0.0), FADE_TIME)
 
 func _transition(action: Callable) -> void:
 	_transitioning = true
@@ -161,6 +224,16 @@ func _build_fade() -> void:
 	_curtain.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_curtain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade.add_child(_curtain)
+	_crash_label = Label.new()
+	_crash_label.name = "CrashLabel"
+	_crash_label.text = CRASH_TEXT
+	_crash_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_crash_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_crash_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_crash_label.add_theme_font_size_override("font_size", 48)
+	_crash_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.8))
+	_crash_label.visible = false
+	fade.add_child(_crash_label)
 
 # The space backdrop (space_sky.gd on the kept WorldEnvironment), off inside.
 func _show_dome(shown: bool) -> void:

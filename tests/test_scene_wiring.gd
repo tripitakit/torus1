@@ -8,6 +8,7 @@ func _init():
 	failures += _test_up_and_down_thrust_on_z_and_x()
 	failures += _test_no_flight_assist_key()
 	failures += _test_brake_action_is_bound_to_b()
+	failures += _test_restart_action_is_bound_to_r()
 	failures += _test_world_environment_builds_the_sky()
 	failures += _test_void_cruiser_orbits_with_the_station()
 
@@ -180,3 +181,9 @@ func _test_world_environment_builds_the_sky() -> int:
 		result = 1
 	scene.free()
 	return result
+
+func _test_restart_action_is_bound_to_r() -> int:
+	if not InputMap.has_action("restart") or _key_codes("restart") != [KEY_R]:
+		print("FAIL _test_restart_action_is_bound_to_r: no 'restart' action on the R key")
+		return 1
+	return 0

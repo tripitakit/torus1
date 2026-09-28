@@ -48,6 +48,8 @@ const SENSOR_DIRECTIONS := {
 }
 # The pilot's eye, inside the hull box, 7 m behind the bow face.
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
+# The wreck comes to rest this far above the planet's surface.
+const PLANET_CLEARANCE := 10.0
 
 var _strobe_time: float = 0.0
 # The approach path's shape last frame, over a section's rim or not, and
@@ -56,6 +58,9 @@ var _guide_over_rim := false
 var _guide_bridge := -1
 var cruise_locked := false
 var brake_engaged := false
+# Crashed on the planet: the wreck stays put until GameMode restarts it.
+signal crashed
+var is_crashed := false
 # The precision factor this tick (1 away from docks; see DockingAssist).
 var thrust_scale := 1.0
 # The planet as last read from the scene (see _sync_planet); without one,
@@ -129,6 +134,8 @@ func _external_acceleration() -> Vector3:
 # ramp. The brake stops the ship at up to BRAKE_MULTIPLIER times the base
 # thrust, scaled too.
 func _fly(delta: float) -> void:
+	if is_crashed:
+		return
 	var thrust_input := _read_thrust_input()
 	_update_forward_hold_time(thrust_input.z, delta)
 	var dock := _nearest_dock()
@@ -137,6 +144,35 @@ func _fly(delta: float) -> void:
 	if brake_engaged:
 		velocity = DockingAssist.brake_velocity(velocity, Vector3.ZERO, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
 	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
+
+# Any touch of the planet is a crash, no bounce: the move is swept against
+# the planet's sphere (PLANET_CLEARANCE up) before it is made.
+func _move(delta: float) -> void:
+	if has_planet:
+		var from := _world_position()
+		var entry := VoidCruiserPhysics.sphere_entry(from, from + velocity * delta, planet_center, planet_radius + PLANET_CLEARANCE)
+		if entry >= 0.0:
+			_crash_at(from + velocity * delta * entry)
+			return
+	super(delta)
+
+func _crash_at(where: Vector3) -> void:
+	if is_inside_tree():
+		global_position = where
+	else:
+		position = where
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	brake_engaged = false
+	cruise_locked = false
+	is_crashed = true
+	crashed.emit()
+
+# Flying again after a crash (GameMode has placed the ship).
+func restart_after_crash() -> void:
+	is_crashed = false
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 
 # The nearest dock within the guide's MAX_RANGE: station, bridge index,
 # port and straight distance to the pad. Empty off the tree, with no

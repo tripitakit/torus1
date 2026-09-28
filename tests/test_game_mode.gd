@@ -32,6 +32,8 @@ func _initialize():
 	_failures += await _test_second_dock_press_during_transition_is_ignored()
 	_failures += await _test_interior_sections_follow_the_docked_bridge()
 	_failures += await _test_undock_from_another_bridge_exits_at_its_collar()
+	_failures += await _test_restart_key_does_nothing_before_a_crash()
+	_failures += await _test_crash_shows_the_screen_and_r_restarts_at_a_dock()
 	_failures += await _test_outside_world_is_freed_if_the_scene_goes_while_inside()
 
 	if _failures == 0:
@@ -264,3 +266,55 @@ func _test_outside_world_is_freed_if_the_scene_goes_while_inside() -> int:
 			station.free()
 		return 1
 	return 0
+
+func _press_restart() -> void:
+	var event := InputEventAction.new()
+	event.action = "restart"
+	event.pressed = true
+	_game_mode._unhandled_input(event)
+
+func _test_restart_key_does_nothing_before_a_crash() -> int:
+	_park_near_port(300.0, 0.0)
+	await _frames(2)
+	_press_restart()
+	await _frames(2)
+	# The world may shift under the ship: measure from the port.
+	var from_port: float = _void_cruiser.global_position.distance_to(_port().global_position)
+	if _game_mode.is_crashed() or absf(from_port - 300.0) > 1.0:
+		print("FAIL _test_restart_key_does_nothing_before_a_crash: R moved the ship or started a crash")
+		return 1
+	return 0
+
+func _test_crash_shows_the_screen_and_r_restarts_at_a_dock() -> int:
+	var result := 0
+	# Dive into the planet from 100 m over it.
+	var planet: Node3D = _scene.get_node("PlanetSystem/Planet")
+	var up: Vector3 = (_void_cruiser.global_position - planet.global_position).normalized()
+	_void_cruiser.global_position = planet.global_position + up * (planet.planet_radius + 100.0)
+	# 150 m in a tick: through the surface in one step unless swept.
+	_void_cruiser.velocity = -up * 9000.0
+	await physics_frame
+	_void_cruiser._physics_process(1.0 / 60.0)
+	if not _void_cruiser.is_crashed or not _game_mode.is_crashed():
+		print("FAIL _test_crash_shows_the_screen_and_r_restarts_at_a_dock: no crash (ship %s, game %s)" % [_void_cruiser.is_crashed, _game_mode.is_crashed()])
+		return 1
+	# Flash, shake, fade to the crash screen, which then waits for R.
+	await create_timer(_game_mode.CRASH_FLASH_TIME + _game_mode.CRASH_SHAKE_TIME + _game_mode.CRASH_FADE_TIME + 0.3).timeout
+	var label := _game_mode.get_node("Fade/CrashLabel") as Label
+	var curtain := _game_mode.get_node("Fade/Curtain") as ColorRect
+	if not label.visible or not label.text.begins_with("CRASH") or curtain.color.a < 0.8:
+		print("FAIL _test_crash_shows_the_screen_and_r_restarts_at_a_dock: screen not up (label %s '%s', curtain %s)" % [label.visible, label.text, curtain.color])
+		result = 1
+	_press_dock()
+	await _frames(2)
+	if _game_mode.is_inside():
+		print("FAIL _test_crash_shows_the_screen_and_r_restarts_at_a_dock: F docked from the crash screen")
+		result = 1
+	_press_restart()
+	await create_timer(_game_mode.FADE_TIME + 0.3).timeout
+	var index: int = _station.nearest_bridge_index(_void_cruiser.global_position)
+	var distance: float = _void_cruiser.global_position.distance_to(_station.get_docking_port(index).global_position)
+	if _game_mode.is_crashed() or _void_cruiser.is_crashed or absf(distance - 60.0) > 1.0 or not _void_cruiser.velocity.is_zero_approx() or label.visible or curtain.color.a > 0.01:
+		print("FAIL _test_crash_shows_the_screen_and_r_restarts_at_a_dock: after R crashed %s/%s, %.1f m from a port, velocity %s, label %s, curtain %s" % [_game_mode.is_crashed(), _void_cruiser.is_crashed, distance, _void_cruiser.velocity, label.visible, curtain.color])
+		result = 1
+	return result
