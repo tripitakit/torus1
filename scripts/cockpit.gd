@@ -202,17 +202,17 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(approach_lines, APPROACH_LINES[key], settings)
-	# Top centre.
+	# Bottom right.
 	var navball: Control = NavballScript.new()
 	navball.name = "Navball"
-	navball.anchor_left = 0.5
-	navball.anchor_right = 0.5
-	navball.anchor_top = 0.0
-	navball.anchor_bottom = 0.0
-	navball.offset_left = -NavballScript.PANEL_SIZE.x * 0.5
-	navball.offset_right = NavballScript.PANEL_SIZE.x * 0.5
-	navball.offset_top = HUD_MARGIN
-	navball.offset_bottom = HUD_MARGIN + NavballScript.PANEL_SIZE.y
+	navball.anchor_left = 1.0
+	navball.anchor_right = 1.0
+	navball.anchor_top = 1.0
+	navball.anchor_bottom = 1.0
+	navball.offset_left = -HUD_MARGIN - NavballScript.PANEL_SIZE.x
+	navball.offset_right = -HUD_MARGIN
+	navball.offset_top = -HUD_MARGIN - NavballScript.PANEL_SIZE.y
+	navball.offset_bottom = -HUD_MARGIN
 	hud.add_child(navball)
 	# Boresight and motion marker over the whole view.
 	var markers: Control = FlightMarkersScript.new()

@@ -24,8 +24,11 @@ func _test_a_ball_in_its_own_little_world() -> int:
 		print("FAIL _test_a_ball_in_its_own_little_world: missing Viewport, Ball or Camera")
 		navball.free()
 		return 1
-	if not viewport.own_world_3d or not viewport.transparent_bg or viewport.size != Vector2i(Navball.BALL_PIXELS, Navball.BALL_PIXELS):
-		print("FAIL _test_a_ball_in_its_own_little_world: viewport own world %s, transparent %s, size %s" % [viewport.own_world_3d, viewport.transparent_bg, viewport.size])
+	if not viewport.own_world_3d or not viewport.transparent_bg or viewport.size != Vector2i(126, 126):
+		print("FAIL _test_a_ball_in_its_own_little_world: viewport own world %s, transparent %s, size %s; expected 126 x 126" % [viewport.own_world_3d, viewport.transparent_bg, viewport.size])
+		result = 1
+	if not navball.size.is_equal_approx(Vector2(140.0, 140.0)) or not navball.custom_minimum_size.is_equal_approx(Vector2(140.0, 140.0)):
+		print("FAIL _test_a_ball_in_its_own_little_world: panel size %s/minimum %s, expected (140, 140)" % [navball.size, navball.custom_minimum_size])
 		result = 1
 	if camera.projection != Camera3D.PROJECTION_ORTHOGONAL or not (ball.mesh is SphereMesh) or not (ball.material_override is ShaderMaterial):
 		print("FAIL _test_a_ball_in_its_own_little_world: camera not orthogonal, or ball not a shaded sphere")

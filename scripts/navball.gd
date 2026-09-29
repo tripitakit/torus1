@@ -7,10 +7,10 @@ extends Control
 # with the direction it stands for. A fixed yellow wing symbol marks the
 # nose.
 
-const PANEL_SIZE := Vector2(200.0, 200.0)
-const BALL_PIXELS := 180
+const PANEL_SIZE := Vector2(140.0, 140.0)
+const BALL_PIXELS := 126
 const WING_COLOR := Color(1.0, 0.85, 0.2)
-const WING_WIDTH := 3.0
+const WING_WIDTH := 2.1
 const BALL_SHADER := """
 shader_type spatial;
 render_mode unshaded;
@@ -111,7 +111,7 @@ func _init() -> void:
 	wings.width = WING_WIDTH
 	wings.default_color = WING_COLOR
 	var centre := PANEL_SIZE * 0.5
-	for point in [Vector2(-40.0, 0.0), Vector2(-14.0, 0.0), Vector2(0.0, 10.0), Vector2(14.0, 0.0), Vector2(40.0, 0.0)]:
+	for point in [Vector2(-28.0, 0.0), Vector2(-9.8, 0.0), Vector2(0.0, 7.0), Vector2(9.8, 0.0), Vector2(28.0, 0.0)]:
 		wings.add_point(centre + point)
 	add_child(wings)
 
