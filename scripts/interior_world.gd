@@ -205,6 +205,14 @@ func nearest_dock_slot(point: Vector3) -> int:
 func get_bridge_ring_index(slot: int) -> int:
 	return InteriorLayout.bridge_ring_index(docked_bridge_index, slot, ring_sections)
 
+# Which section a point in this node's coordinates is inside of, and that
+# section's true ring index (for the HUD's section ID readout).
+func nearest_section_slot(point: Vector3) -> int:
+	return InteriorLayout.nearest_section_slot(chain_z(point), period())
+
+func get_section_ring_index(slot: int) -> int:
+	return InteriorLayout.section_ring_index(docked_bridge_index, slot, ring_sections)
+
 # Lights the sign of bridge `slot` when undocking is possible there; every
 # other sign stays idle.
 func set_undock_ready(slot: int, undock_ready: bool) -> void:

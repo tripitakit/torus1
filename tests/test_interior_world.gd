@@ -21,6 +21,7 @@ func _init():
 	failures += _test_every_bridge_has_its_tube_and_textured_dock_but_no_lights()
 	failures += _test_spawn_above_the_docked_bridge_platform()
 	failures += _test_nearest_dock_slot_and_ring_numbers()
+	failures += _test_nearest_section_slot_and_ring_numbers()
 	failures += _test_only_the_named_sign_lights()
 	failures += _test_sections_come_from_their_ring_indices()
 	failures += _test_plan_from_the_worker_thread_matches_a_direct_one()
@@ -263,6 +264,25 @@ func _test_nearest_dock_slot_and_ring_numbers() -> int:
 	last.ring_sections = 2000
 	if last.get_bridge_ring_index(0) != 1999 or last.get_bridge_ring_index(1) != 0 or last.get_bridge_ring_index(-1) != 1998:
 		print("FAIL _test_nearest_dock_slot_and_ring_numbers: from bridge 1999, slots -1/0/1 are bridges %d/%d/%d" % [last.get_bridge_ring_index(-1), last.get_bridge_ring_index(0), last.get_bridge_ring_index(1)])
+		result = 1
+	last.free()
+	return result
+
+func _test_nearest_section_slot_and_ring_numbers() -> int:
+	# Craft z picks which section it is inside of (not the nearest bridge);
+	# the section's true ring index wraps like the bridges' does.
+	var world := _make_world()
+	var result := 0
+	for c in [[Vector3(0.0, 0.0, -0.5 * PERIOD), 0], [Vector3(0.0, 0.0, -1.5 * PERIOD), 1], [Vector3(0.0, 0.0, 0.5 * PERIOD), -1]]:
+		if world.nearest_section_slot(c[0]) != c[1]:
+			print("FAIL _test_nearest_section_slot_and_ring_numbers: %s gave slot %d, expected %d" % [c[0], world.nearest_section_slot(c[0]), c[1]])
+			result = 1
+	world.free()
+	var last: Node3D = InteriorWorldScript.new()
+	last.docked_bridge_index = 1999
+	last.ring_sections = 2000
+	if last.get_section_ring_index(0) != 0 or last.get_section_ring_index(-1) != 1999:
+		print("FAIL _test_nearest_section_slot_and_ring_numbers: from bridge 1999, sections at slot -1/0 are %d/%d" % [last.get_section_ring_index(-1), last.get_section_ring_index(0)])
 		result = 1
 	last.free()
 	return result
