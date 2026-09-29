@@ -2,11 +2,14 @@ extends SceneTree
 
 const InternalCruiserScript = preload("res://scripts/internal_cruiser.gd")
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
+const InteriorWorldScript = preload("res://scripts/interior_world.gd")
+const SectionLabelScript = preload("res://scripts/section_label.gd")
 
 func _init():
 	var failures := 0
 	failures += _test_first_person_camera()
-	failures += _test_hud_is_only_the_flight_markers()
+	failures += _test_hud_has_only_the_flight_markers_and_section_panel()
+	failures += _test_section_id_panel_shows_the_current_section()
 	failures += _test_small_hull()
 	failures += _test_ramp_stops_at_10x()
 	failures += _test_top_speed_about_1_km_s_after_the_ramp()
@@ -34,17 +37,45 @@ func _test_first_person_camera() -> int:
 	cruiser.free()
 	return result
 
-func _test_hud_is_only_the_flight_markers() -> int:
-	# No cockpit panels inside: just the boresight and the motion marker.
+func _test_hud_has_only_the_flight_markers_and_section_panel() -> int:
+	# No cockpit panels inside: just the boresight/motion marker and the
+	# current-section readout, nothing else.
 	var cruiser := _make_cruiser()
 	cruiser.build_hud()
 	var result := 0
 	var layers := cruiser.find_children("*", "CanvasLayer", true, false)
 	var markers := cruiser.get_node_or_null("Hud/FlightMarkers") as Control
-	if layers.size() != 1 or markers == null or cruiser.get_node("Hud").get_child_count() != 1 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
-		print("FAIL _test_hud_is_only_the_flight_markers: the internal-cruiser's HUD must be the flight markers alone")
+	var panel := cruiser.get_node_or_null("Hud/SectionPanel") as Control
+	if layers.size() != 1 or markers == null or panel == null or cruiser.get_node("Hud").get_child_count() != 2 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		print("FAIL _test_hud_has_only_the_flight_markers_and_section_panel: the internal-cruiser's HUD must be just the flight markers and the section panel")
 		result = 1
 	cruiser.free()
+	return result
+
+func _test_section_id_panel_shows_the_current_section() -> int:
+	# The panel reads off whichever section the craft's position is inside of
+	# (see InteriorLayout.nearest_section_slot), not the nearest bridge.
+	var world: Node3D = InteriorWorldScript.new()
+	world.section_radius = 2000.0
+	world.section_length = 20000.0
+	world.bridge_radius = 600.0
+	world.bridge_length = 1834.0
+	world.docked_bridge_index = 7
+	world.ring_sections = 2000
+	world.build()
+	var cruiser := _make_cruiser()
+	cruiser.build_hud()
+	world.add_child(cruiser)
+	cruiser.position = Vector3(0.0, 0.0, -1.5 * (world.section_length + world.bridge_length))
+	cruiser._process(0.0)
+	var slot: int = world.nearest_section_slot(cruiser.position)
+	var expected: String = SectionLabelScript.format_id(world.get_section_ring_index(slot))
+	var label := cruiser.get_node_or_null("Hud/SectionPanel/SectionLabel") as Label
+	var result := 0
+	if label == null or label.text != expected:
+		print("FAIL _test_section_id_panel_shows_the_current_section: got '%s', expected '%s'" % [label.text if label != null else "<missing>", expected])
+		result = 1
+	world.free()
 	return result
 
 func _test_small_hull() -> int:
