@@ -78,7 +78,7 @@ const LABEL_COLOR := Color(1.0, 0.96, 0.88)
 const LABEL_ENERGY := 4.0
 const LABEL_SHADER := """
 shader_type spatial;
-render_mode unshaded, cull_back;
+render_mode unshaded, cull_disabled;
 
 uniform sampler2D atlas : source_color, filter_linear_mipmap;
 uniform vec3 label_color : source_color = vec3(1.0, 0.96, 0.88);

@@ -36,6 +36,7 @@ func _init():
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
 	failures += _test_sections_use_the_bridge_panel_texture()
 	failures += _test_every_section_has_its_id_stencilled_on_the_hull()
+	failures += _test_label_shader_does_not_back_face_cull()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -568,6 +569,31 @@ func _test_every_section_has_its_id_stencilled_on_the_hull() -> int:
 	var mat := labels.material_override as ShaderMaterial
 	if mat == null or (mat.get_shader_parameter("atlas") as Texture2D) == null or not (mat.get_shader_parameter("atlas") as Texture2D).resource_path.ends_with("labels/atlas.png"):
 		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: label material lacks the shared atlas")
+		result = 1
+	station.free()
+	return result
+
+func _test_label_shader_does_not_back_face_cull() -> int:
+	# Verified live (real GPU, real scene, real gameplay loop): with
+	# cull_back the label quads never render — swapping to cull_disabled in
+	# an otherwise-identical material made "T1-0001" appear immediately, at
+	# every distance and rotation angle tried. The quad's winding, as
+	# actually built from label_instances()'s basis and carried through a
+	# section's live (rotated) transform, ends up back-facing the camera in
+	# the real scene even though isolated repros (fixed, unrotated
+	# transforms) showed it front-facing — headless can't render to tell
+	# the difference, so this pins the fix as a shader-source assertion.
+	# A thin decorative hull marking has no reason to cull either face.
+	var station := _make_station(4)
+	station.build_station()
+	var labels := station.get_node("Section0/Labels") as MultiMeshInstance3D
+	var code: String = (labels.material_override as ShaderMaterial).shader.code
+	var result := 0
+	if code.contains("cull_back"):
+		print("FAIL _test_label_shader_does_not_back_face_cull: shader still has cull_back")
+		result = 1
+	if not code.contains("cull_disabled"):
+		print("FAIL _test_label_shader_does_not_back_face_cull: shader should declare cull_disabled")
 		result = 1
 	station.free()
 	return result
