@@ -20,6 +20,7 @@ func _init():
 	failures += _test_chain_slot_positions()
 	failures += _test_ring_indices_wrap()
 	failures += _test_nearest_bridge_slot()
+	failures += _test_nearest_section_slot()
 	failures += _test_sections_within_reach()
 	failures += _test_bridges_of_sections()
 
@@ -147,6 +148,27 @@ func _test_nearest_bridge_slot() -> int:
 		if slot != c[1]:
 			print("FAIL _test_nearest_bridge_slot: z %f gave slot %d, expected %d" % [c[0], slot, c[1]])
 			result = 1
+	return result
+
+func _test_nearest_section_slot() -> int:
+	# Section slot s is centred at -(s + 0.5) * period (see section_slot_z):
+	# exactly there it must give back s, and a point anywhere inside that
+	# section (up to half the period either way) must still give s.
+	var p := _period()
+	var result := 0
+	for c in [[0.0, -1], [-0.5 * p, 0], [-1.5 * p, 1], [0.5 * p, -1], [2.5 * p, -3], [-0.9 * p, 0], [-0.1 * p, 0]]:
+		var slot: int = InteriorLayout.nearest_section_slot(c[0], p)
+		if slot != c[1]:
+			print("FAIL _test_nearest_section_slot: z %f gave slot %d, expected %d" % [c[0], slot, c[1]])
+			result = 1
+	# Round-trip through section_slot_z for a spread of slots and periods.
+	for period in [1.0, 21834.0, 500.0]:
+		for slot in range(-5, 6):
+			var z: float = InteriorLayout.section_slot_z(slot, period)
+			var got: int = InteriorLayout.nearest_section_slot(z, period)
+			if got != slot:
+				print("FAIL _test_nearest_section_slot: round-trip slot %d (period %f) gave %d" % [slot, period, got])
+				result = 1
 	return result
 
 func _test_sections_within_reach() -> int:

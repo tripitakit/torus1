@@ -54,6 +54,10 @@ static func section_ring_index(docked_bridge: int, slot: int, ring_sections: int
 static func nearest_bridge_slot(z: float, period: float) -> int:
 	return roundi(-z / period)
 
+# Section slot s is centred at -(s + 0.5) * period (see section_slot_z).
+static func nearest_section_slot(z: float, period: float) -> int:
+	return roundi(-z / period - 0.5)
+
 # Section slots whose centre is within `reach` of z along the axis, ascending.
 static func sections_within(z: float, period: float, reach: float) -> Array:
 	var slots := []
