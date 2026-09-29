@@ -72,6 +72,7 @@ const LABEL_CHAR_HEIGHT := 1400.0
 const LABEL_CHAR_WIDTH := 840.0
 const LABEL_SPACING := 130.0
 const LABEL_LIFT_RATIO := 0.0005
+const LABEL_CURVE_SEGMENTS := 16
 const LABEL_VISIBILITY_RANGE := 90000.0
 const LABEL_ATLAS_PATH := "res://assets/textures/labels/atlas.png"
 const LABEL_COLOR := Color(1.0, 0.96, 0.88)
@@ -173,7 +174,7 @@ void fragment() {
 # One mesh and one material for every lamp.
 var _lamp_mesh: QuadMesh
 var _lamp_material: ShaderMaterial
-var _label_quad_mesh: QuadMesh
+var _label_glyph_mesh: ArrayMesh
 var _label_material: ShaderMaterial
 
 # A whole number of repeats round and along, so no seam shows where the
@@ -196,9 +197,9 @@ func _build_panel_material(circumference: float, length: float) -> StandardMater
 	return mat
 
 # The section's ID (see section_label.gd), stencilled at 4 points round the
-# circumference. One MultiMeshInstance3D per section: a shared unit quad,
-# each character an instance whose transform (position, size, orientation)
-# and atlas cell (custom data) are computed once at build time.
+# circumference. One MultiMeshInstance3D per section: a shared curved glyph
+# mesh, each character an instance whose transform (position, size,
+# orientation) and atlas cell (custom data) are computed once at build time.
 func _build_section_labels(section_index: int) -> MultiMeshInstance3D:
 	var text := SectionLabelScript.format_id(section_index)
 	var surface_radius := section_radius * (1.0 + LABEL_LIFT_RATIO)
@@ -208,7 +209,7 @@ func _build_section_labels(section_index: int) -> MultiMeshInstance3D:
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_custom_data = true
-	multimesh.mesh = _label_quad_mesh
+	multimesh.mesh = _label_glyph_mesh
 	multimesh.instance_count = instances.size()
 	for i in range(instances.size()):
 		multimesh.set_instance_transform(i, instances[i].transform)
@@ -256,8 +257,8 @@ func build_station() -> void:
 
 	var section_shape := _build_prism_shape(section_mesh)
 
-	_label_quad_mesh = QuadMesh.new()
-	_label_quad_mesh.size = Vector2.ONE
+	var label_surface_radius := section_radius * (1.0 + LABEL_LIFT_RATIO)
+	_label_glyph_mesh = SectionLabelScript.build_curved_glyph_mesh(label_surface_radius, LABEL_CHAR_HEIGHT, LABEL_CURVE_SEGMENTS)
 	var label_shader := Shader.new()
 	label_shader.code = LABEL_SHADER
 	_label_material = ShaderMaterial.new()

@@ -36,6 +36,7 @@ func _init():
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
 	failures += _test_sections_use_the_bridge_panel_texture()
 	failures += _test_every_section_has_its_id_stencilled_on_the_hull()
+	failures += _test_section_labels_use_the_curved_glyph_mesh()
 	failures += _test_label_shader_does_not_back_face_cull()
 
 	if failures == 0:
@@ -573,11 +574,34 @@ func _test_every_section_has_its_id_stencilled_on_the_hull() -> int:
 	station.free()
 	return result
 
+func _test_section_labels_use_the_curved_glyph_mesh() -> int:
+	var station := _make_station(4)
+	station.section_radius = 2000.0
+	station.build_station()
+	var labels := station.get_node("Section0/Labels") as MultiMeshInstance3D
+	var mesh := labels.multimesh.mesh
+	if not mesh is ArrayMesh:
+		print("FAIL _test_section_labels_use_the_curved_glyph_mesh: labels still use a flat primitive mesh")
+		station.free()
+		return 1
+	var vertices: PackedVector3Array = (mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var has_cylindrical_depth := false
+	for vertex in vertices:
+		if vertex.z < -1.0:
+			has_cylindrical_depth = true
+			break
+	if vertices.size() <= 4 or not has_cylindrical_depth:
+		print("FAIL _test_section_labels_use_the_curved_glyph_mesh: assigned mesh has no cylindrical depth")
+		station.free()
+		return 1
+	station.free()
+	return 0
+
 func _test_label_shader_does_not_back_face_cull() -> int:
 	# Verified live (real GPU, real scene, real gameplay loop): with
-	# cull_back the label quads never render — swapping to cull_disabled in
+	# cull_back the label glyphs never render — swapping to cull_disabled in
 	# an otherwise-identical material made "T1-0001" appear immediately, at
-	# every distance and rotation angle tried. The quad's winding, as
+	# every distance and rotation angle tried. The glyph mesh's winding, as
 	# actually built from label_instances()'s basis and carried through a
 	# section's live (rotated) transform, ends up back-facing the camera in
 	# the real scene even though isolated repros (fixed, unrotated
