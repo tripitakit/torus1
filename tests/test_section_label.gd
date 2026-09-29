@@ -8,7 +8,6 @@ func _init():
 	failures += _test_glyph_uv_finds_each_cell()
 	failures += _test_label_instances_read_left_to_right_from_outside()
 	failures += _test_glyph_mesh_follows_the_cylinder_radius()
-	failures += _test_four_angles_ninety_degrees_apart()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -86,15 +85,4 @@ func _test_glyph_mesh_follows_the_cylinder_radius() -> int:
 	if not found_recessed_edge:
 		print("FAIL _test_glyph_mesh_follows_the_cylinder_radius: mesh is still flat")
 		result = 1
-	return result
-
-func _test_four_angles_ninety_degrees_apart() -> int:
-	var result := 0
-	if SectionLabel.ANGLES.size() != 4:
-		print("FAIL _test_four_angles_ninety_degrees_apart: %d angles, expected 4" % SectionLabel.ANGLES.size())
-		return 1
-	for i in range(4):
-		if not is_equal_approx(SectionLabel.ANGLES[i], i * PI * 0.5):
-			print("FAIL _test_four_angles_ninety_degrees_apart: angle %d is %f" % [i, SectionLabel.ANGLES[i]])
-			result = 1
 	return result

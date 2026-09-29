@@ -196,16 +196,14 @@ func _build_panel_material(circumference: float, length: float) -> StandardMater
 	mat.uv1_scale = Vector3(round_repeats, along_repeats * 2.0, 1.0)
 	return mat
 
-# The section's ID (see section_label.gd), stencilled at 4 points round the
+# The section's ID (see section_label.gd), stencilled once on the outer
 # circumference. One MultiMeshInstance3D per section: a shared curved glyph
 # mesh, each character an instance whose transform (position, size,
 # orientation) and atlas cell (custom data) are computed once at build time.
 func _build_section_labels(section_index: int) -> MultiMeshInstance3D:
 	var text := SectionLabelScript.format_id(section_index)
 	var surface_radius := section_radius * (1.0 + LABEL_LIFT_RATIO)
-	var instances := []
-	for angle in SectionLabelScript.ANGLES:
-		instances += SectionLabelScript.label_instances(text, angle, surface_radius, LABEL_CHAR_WIDTH, LABEL_CHAR_HEIGHT, LABEL_SPACING)
+	var instances := SectionLabelScript.label_instances(text, SectionLabelScript.ANGLE, surface_radius, LABEL_CHAR_WIDTH, LABEL_CHAR_HEIGHT, LABEL_SPACING)
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_custom_data = true

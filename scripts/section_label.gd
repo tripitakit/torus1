@@ -1,18 +1,18 @@
 extends RefCounted
 
 # Station identification stencilled on each section's outer hull (see
-# torus_station.gd): "T1-0001" up to "T1-<num_sections>", at 4 points round
-# the circumference (every 90 degrees), reading along the section's length
-# with each character upright (its own "up" the circumferential tangent)
-# and facing outward. Drawn as MultiMesh instances sampling a shared glyph
+# torus_station.gd): "T1-0001" up to "T1-<num_sections>", once on the outer
+# circumference, reading along the section's length with each character
+# upright (its own "up" the circumferential tangent) and facing outward.
+# Drawn as MultiMesh instances sampling a shared glyph
 # atlas (tools/labels/build_label_atlas.py): one curved strip per character,
 # its atlas cell picked per instance through the MultiMesh's custom data.
 
 const GLYPHS := "0123456789T-"
 const ATLAS_COLS := 4
 const ATLAS_ROWS := 3
-# Angles round the circumference the label repeats at.
-const ANGLES: Array[float] = [0.0, PI * 0.5, PI, PI * 1.5]
+# Position of the single label round the circumference.
+const ANGLE := 0.0
 
 # "T1-0001" for section index 0, up to "T1-<num_sections>" for the last.
 static func format_id(section_index: int) -> String:

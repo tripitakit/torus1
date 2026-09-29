@@ -543,8 +543,8 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 	return result
 
 func _test_every_section_has_its_id_stencilled_on_the_hull() -> int:
-	# 4 positions round the circumference x 7 characters in "T1-0003" (index
-	# 2): one MultiMeshInstance3D per section, visible from well beyond
+	# One 7-character "T1-0003" marking (index 2) per section: one
+	# MultiMeshInstance3D per section, visible from well beyond
 	# 80 km, using the shared glyph atlas. Headless runs cannot read
 	# MultiMesh instances back (see test_terrain_dressing.gd), so the actual
 	# placement and atlas cells are checked directly against SectionLabel's
@@ -557,7 +557,7 @@ func _test_every_section_has_its_id_stencilled_on_the_hull() -> int:
 		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: no Labels multimesh on Section2")
 		return 1
 	var text := SectionLabelScript.format_id(2)
-	var expected_count: int = SectionLabelScript.ANGLES.size() * text.length()
+	var expected_count := text.length()
 	if labels.multimesh.instance_count != expected_count:
 		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: %d instances, expected %d" % [labels.multimesh.instance_count, expected_count])
 		result = 1
