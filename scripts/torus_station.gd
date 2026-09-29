@@ -94,9 +94,7 @@ void vertex() {
 
 void fragment() {
 	float glyph = texture(atlas, atlas_uv).a;
-	if (glyph < 0.5) {
-		discard;
-	}
+	ALPHA = glyph;
 	ALBEDO = label_color;
 	EMISSION = label_color * label_energy;
 }

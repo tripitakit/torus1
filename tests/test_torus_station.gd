@@ -38,6 +38,7 @@ func _init():
 	failures += _test_every_section_has_its_id_stencilled_on_the_hull()
 	failures += _test_section_labels_use_the_curved_glyph_mesh()
 	failures += _test_label_shader_does_not_back_face_cull()
+	failures += _test_label_shader_preserves_filtered_alpha()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -618,6 +619,25 @@ func _test_label_shader_does_not_back_face_cull() -> int:
 		result = 1
 	if not code.contains("cull_disabled"):
 		print("FAIL _test_label_shader_does_not_back_face_cull: shader should declare cull_disabled")
+		result = 1
+	station.free()
+	return result
+
+func _test_label_shader_preserves_filtered_alpha() -> int:
+	# Headless runs have no framebuffer, so the actual temporal result is
+	# covered by the live render probe. This pins its material contract: atlas
+	# coverage must blend continuously instead of crossing a binary cutoff as
+	# the rotating glyph moves through subpixels.
+	var station := _make_station(4)
+	station.build_station()
+	var labels := station.get_node("Section0/Labels") as MultiMeshInstance3D
+	var code: String = (labels.material_override as ShaderMaterial).shader.code
+	var result := 0
+	if code.contains("discard") or code.contains("ALPHA_SCISSOR_THRESHOLD"):
+		print("FAIL _test_label_shader_preserves_filtered_alpha: shader still uses a binary alpha cutoff")
+		result = 1
+	if not code.contains("ALPHA = glyph"):
+		print("FAIL _test_label_shader_preserves_filtered_alpha: shader does not blend the atlas coverage")
 		result = 1
 	station.free()
 	return result
