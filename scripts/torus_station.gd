@@ -3,6 +3,7 @@ extends Node3D
 
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
+const SectionLabelScript = preload("res://scripts/section_label.gd")
 
 @export var planet_radius: float = 1737400.0
 @export var orbit_altitude: float = 5212200.0
@@ -56,17 +57,49 @@ func nearest_bridge_index(world_position: Vector3) -> int:
 func get_docking_port(bridge_index: int) -> Node3D:
 	return get_node("Bridge%d/Port" % bridge_index)
 
-const HULL_ALBEDO_PATH := "res://assets/textures/station/albedo.png"
-const HULL_ROUGHNESS_PATH := "res://assets/textures/station/roughness.png"
-const HULL_NORMAL_PATH := "res://assets/textures/station/normal.png"
-const HULL_EMISSION_PATH := "res://assets/textures/station/emission.png"
-const HULL_AO_PATH := "res://assets/textures/station/ao.png"
-const HULL_TILE_SIZE := 500.0
 const HULL_LIGHTS_ENERGY := 3.0
-# Bridges carry their own panels (rectangular; tools/blender/panel_textures.py),
-# about BRIDGE_TILE_SIZE metres a repeat.
+# Sections and bridges both carry the rectangular panel texture (much nicer
+# than the old hexagon hull; tools/blender/panel_textures.py), about
+# BRIDGE_TILE_SIZE metres a repeat. Each gets its own material resource
+# (their circumference and length give different whole-repeat counts).
 const BRIDGE_TEXTURE_DIR := "res://assets/textures/bridge/"
 const BRIDGE_TILE_SIZE := 100.0
+# Station identification stencilled on every section's outer hull (see
+# section_label.gd): character size and gap (about 1 degree tall seen from
+# LABEL_VISIBILITY_RANGE, so it reads from well outside a bridge's approach),
+# lifted just off the surface so it does not z-fight the panel texture.
+const LABEL_CHAR_HEIGHT := 1400.0
+const LABEL_CHAR_WIDTH := 840.0
+const LABEL_SPACING := 130.0
+const LABEL_LIFT_RATIO := 0.0005
+const LABEL_VISIBILITY_RANGE := 90000.0
+const LABEL_ATLAS_PATH := "res://assets/textures/labels/atlas.png"
+const LABEL_COLOR := Color(1.0, 0.96, 0.88)
+const LABEL_ENERGY := 4.0
+const LABEL_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_back;
+
+uniform sampler2D atlas : source_color, filter_linear_mipmap;
+uniform vec3 label_color : source_color = vec3(1.0, 0.96, 0.88);
+uniform float label_energy = 4.0;
+
+varying vec2 atlas_uv;
+
+void vertex() {
+	// INSTANCE_CUSTOM carries this instance's atlas cell: xy = origin, zw = size.
+	atlas_uv = INSTANCE_CUSTOM.xy + UV * INSTANCE_CUSTOM.zw;
+}
+
+void fragment() {
+	float glyph = texture(atlas, atlas_uv).a;
+	if (glyph < 0.5) {
+		discard;
+	}
+	ALBEDO = label_color;
+	EMISSION = label_color * label_energy;
+}
+"""
 const BRIDGE_RADIUS_RATIO := 0.3
 # A docking pad on one flat face of every bridge prism, halfway along it,
 # spinning with the bridge. BRIDGE_SEGMENTS faces; PAD_FACE is the one just
@@ -140,25 +173,14 @@ void fragment() {
 # One mesh and one material for every lamp.
 var _lamp_mesh: QuadMesh
 var _lamp_material: ShaderMaterial
-
-func _build_hull_material(circumference: float, length: float) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = load(HULL_ALBEDO_PATH)
-	mat.roughness_texture = load(HULL_ROUGHNESS_PATH)
-	mat.normal_enabled = true
-	mat.normal_texture = load(HULL_NORMAL_PATH)
-	mat.emission_enabled = true
-	mat.emission = Color(0, 0, 0)
-	mat.emission_texture = load(HULL_EMISSION_PATH)
-	mat.emission_energy_multiplier = HULL_LIGHTS_ENERGY
-	mat.ao_enabled = true
-	mat.ao_texture = load(HULL_AO_PATH)
-	mat.uv1_scale = Vector3(circumference / HULL_TILE_SIZE, length / HULL_TILE_SIZE, 1.0)
-	return mat
+var _label_quad_mesh: QuadMesh
+var _label_material: ShaderMaterial
 
 # A whole number of repeats round and along, so no seam shows where the
 # texture wraps. A CylinderMesh side spans UV v 0..0.5 only: twice the scale.
-func _build_bridge_material(circumference: float, length: float) -> StandardMaterial3D:
+# Used for both sections and bridges (each its own resource, different
+# repeat counts).
+func _build_panel_material(circumference: float, length: float) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = load(BRIDGE_TEXTURE_DIR + "color.png")
 	mat.roughness_texture = load(BRIDGE_TEXTURE_DIR + "roughness.png")
@@ -172,6 +194,33 @@ func _build_bridge_material(circumference: float, length: float) -> StandardMate
 	var along_repeats := maxf(1.0, roundf(length / BRIDGE_TILE_SIZE))
 	mat.uv1_scale = Vector3(round_repeats, along_repeats * 2.0, 1.0)
 	return mat
+
+# The section's ID (see section_label.gd), stencilled at 4 points round the
+# circumference. One MultiMeshInstance3D per section: a shared unit quad,
+# each character an instance whose transform (position, size, orientation)
+# and atlas cell (custom data) are computed once at build time.
+func _build_section_labels(section_index: int) -> MultiMeshInstance3D:
+	var text := SectionLabelScript.format_id(section_index)
+	var surface_radius := section_radius * (1.0 + LABEL_LIFT_RATIO)
+	var instances := []
+	for angle in SectionLabelScript.ANGLES:
+		instances += SectionLabelScript.label_instances(text, angle, surface_radius, LABEL_CHAR_WIDTH, LABEL_CHAR_HEIGHT, LABEL_SPACING)
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
+	multimesh.mesh = _label_quad_mesh
+	multimesh.instance_count = instances.size()
+	for i in range(instances.size()):
+		multimesh.set_instance_transform(i, instances[i].transform)
+		var uv: Rect2 = instances[i].uv
+		multimesh.set_instance_custom_data(i, Color(uv.position.x, uv.position.y, uv.size.x, uv.size.y))
+	var node := MultiMeshInstance3D.new()
+	node.name = "Labels"
+	node.multimesh = multimesh
+	node.material_override = _label_material
+	node.visibility_range_end = LABEL_VISIBILITY_RANGE
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
 
 # Not CylinderShape3D: at this scale Godot's cylinder collision gives bad
 # contacts against the ship's turning box, shoving a still ship up to ~100 m
@@ -198,7 +247,7 @@ func build_station() -> void:
 			child.queue_free()
 
 	var effective_planet_radius := _effective_planet_radius()
-	var hull_material := _build_hull_material(TAU * section_radius, section_length)
+	var section_material := _build_panel_material(TAU * section_radius, section_length)
 
 	var section_mesh := CylinderMesh.new()
 	section_mesh.top_radius = section_radius
@@ -206,6 +255,16 @@ func build_station() -> void:
 	section_mesh.height = section_length
 
 	var section_shape := _build_prism_shape(section_mesh)
+
+	_label_quad_mesh = QuadMesh.new()
+	_label_quad_mesh.size = Vector2.ONE
+	var label_shader := Shader.new()
+	label_shader.code = LABEL_SHADER
+	_label_material = ShaderMaterial.new()
+	_label_material.shader = label_shader
+	_label_material.set_shader_parameter("atlas", load(LABEL_ATLAS_PATH))
+	_label_material.set_shader_parameter("label_color", LABEL_COLOR)
+	_label_material.set_shader_parameter("label_energy", LABEL_ENERGY)
 
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
@@ -225,7 +284,7 @@ func build_station() -> void:
 		var section_mesh_instance := MeshInstance3D.new()
 		section_mesh_instance.name = "Mesh"
 		section_mesh_instance.mesh = section_mesh
-		section_mesh_instance.material_override = hull_material
+		section_mesh_instance.material_override = section_material
 		section.add_child(section_mesh_instance)
 
 		var section_collision := CollisionShape3D.new()
@@ -233,12 +292,14 @@ func build_station() -> void:
 		section_collision.shape = section_shape
 		section.add_child(section_collision)
 
+		section.add_child(_build_section_labels(i))
+
 		section.transform = section_transforms[i]
 		add_child(section)
 
 	var bridge_length := TorusGeometry.compute_bridge_length(effective_planet_radius, orbit_altitude, num_sections, section_length)
 	var bridge_transforms := TorusGeometry.compute_bridge_transforms(effective_planet_radius, orbit_altitude, num_sections, section_length)
-	var bridge_material := _build_bridge_material(TAU * get_bridge_radius(), bridge_length)
+	var bridge_material := _build_panel_material(TAU * get_bridge_radius(), bridge_length)
 	var bridge_mesh := CylinderMesh.new()
 	bridge_mesh.top_radius = get_bridge_radius()
 	bridge_mesh.bottom_radius = get_bridge_radius()

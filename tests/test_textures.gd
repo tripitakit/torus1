@@ -108,6 +108,7 @@ func _test_imported_compressed_with_mipmaps() -> int:
 		paths.append("res://assets/textures/planet/%s.png" % channel)
 	paths.append("res://assets/textures/clouds/clouds.png")
 	paths.append("res://assets/textures/sky/stars.png")
+	paths.append("res://assets/textures/labels/atlas.png")
 	for path in paths:
 		var config := ConfigFile.new()
 		if config.load(path + ".import") != OK:

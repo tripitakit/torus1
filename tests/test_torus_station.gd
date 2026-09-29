@@ -2,6 +2,7 @@ extends SceneTree
 
 const TorusStationScript = preload("res://scripts/torus_station.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
+const SectionLabelScript = preload("res://scripts/section_label.gd")
 const PlanetScript = preload("res://scripts/planet.gd")
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")
 
@@ -19,7 +20,7 @@ func _init():
 	failures += _test_sections_and_bridges_share_one_hull_material()
 	failures += _test_sections_share_one_mesh_resource()
 	failures += _test_bridges_share_one_mesh_resource()
-	failures += _test_hull_material_has_emission_and_ao()
+	failures += _test_section_panel_material_has_emission()
 	failures += _test_sections_are_animatable_bodies()
 	failures += _test_bridges_are_animatable_bodies()
 	failures += _test_sections_have_matching_collision_shape()
@@ -33,7 +34,8 @@ func _init():
 	failures += _test_bridge_radius_and_length_helpers()
 	failures += _test_every_pad_has_four_corner_lamps()
 	failures += _test_lamp_shader_keeps_a_minimum_size_and_blinks()
-	failures += _test_bridges_have_their_own_panels()
+	failures += _test_sections_use_the_bridge_panel_texture()
+	failures += _test_every_section_has_its_id_stencilled_on_the_hull()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -247,22 +249,20 @@ func _test_bridges_share_one_mesh_resource() -> int:
 	station.free()
 	return result
 
-func _test_hull_material_has_emission_and_ao() -> int:
+func _test_section_panel_material_has_emission() -> int:
+	# Sections use the same panel look as bridges (see
+	# _test_sections_use_the_bridge_panel_texture): small lights painted into
+	# the texture, additive over black so only those spots glow.
 	var station := _make_station(4)
 	station.build_station()
 	var section_mesh: MeshInstance3D = station.get_node("Section0").get_node("Mesh")
 	var mat: StandardMaterial3D = section_mesh.material_override
 	var result := 0
 	if not mat.emission_enabled or mat.emission_texture == null:
-		print("FAIL _test_hull_material_has_emission_and_ao: emission not enabled or no emission_texture")
+		print("FAIL _test_section_panel_material_has_emission: emission not enabled or no emission_texture")
 		result = 1
-	# Emission operator is additive (color + texture): a non-black base color
-	# would make the whole hull glow, not just the lights painted in the texture.
 	if not mat.emission.is_equal_approx(Color(0, 0, 0)):
-		print("FAIL _test_hull_material_has_emission_and_ao: base emission color=%s expected black" % mat.emission)
-		result = 1
-	if not mat.ao_enabled or mat.ao_texture == null:
-		print("FAIL _test_hull_material_has_emission_and_ao: ao not enabled or no ao_texture")
+		print("FAIL _test_section_panel_material_has_emission: base emission color=%s expected black" % mat.emission)
 		result = 1
 	station.free()
 	return result
@@ -540,26 +540,62 @@ func _test_lamp_shader_keeps_a_minimum_size_and_blinks() -> int:
 	station.free()
 	return result
 
-func _test_bridges_have_their_own_panels() -> int:
-	# Bridges: rectangular panels (bridge/), a whole number of ~100 m repeats
-	# round and along the side (the side's UV v spans 0..0.5); sections keep
-	# the hexagon hull.
+func _test_every_section_has_its_id_stencilled_on_the_hull() -> int:
+	# 4 positions round the circumference x 7 characters in "T1-0003" (index
+	# 2): one MultiMeshInstance3D per section, visible from well beyond
+	# 80 km, using the shared glyph atlas. Headless runs cannot read
+	# MultiMesh instances back (see test_terrain_dressing.gd), so the actual
+	# placement and atlas cells are checked directly against SectionLabel's
+	# own output in test_section_label.gd; here only the wiring is checked.
+	var station := _make_station(4)
+	station.build_station()
+	var result := 0
+	var labels := station.get_node_or_null("Section2/Labels") as MultiMeshInstance3D
+	if labels == null or labels.multimesh == null:
+		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: no Labels multimesh on Section2")
+		return 1
+	var text := SectionLabelScript.format_id(2)
+	var expected_count: int = SectionLabelScript.ANGLES.size() * text.length()
+	if labels.multimesh.instance_count != expected_count:
+		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: %d instances, expected %d" % [labels.multimesh.instance_count, expected_count])
+		result = 1
+	if not labels.multimesh.use_custom_data:
+		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: no per-instance custom data (needed for the atlas cell)")
+		result = 1
+	if labels.visibility_range_end < 80000.0:
+		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: visibility range %f, must reach 80 km" % labels.visibility_range_end)
+		result = 1
+	var mat := labels.material_override as ShaderMaterial
+	if mat == null or (mat.get_shader_parameter("atlas") as Texture2D) == null or not (mat.get_shader_parameter("atlas") as Texture2D).resource_path.ends_with("labels/atlas.png"):
+		print("FAIL _test_every_section_has_its_id_stencilled_on_the_hull: label material lacks the shared atlas")
+		result = 1
+	station.free()
+	return result
+
+func _test_sections_use_the_bridge_panel_texture() -> int:
+	# Sections now use the same rectangular panel texture as bridges (much
+	# nicer than the old hexagon hull), each with its own material resource
+	# (their circumference and length give a different whole-repeat count),
+	# a whole number of ~100 m repeats round and along the side (the side's
+	# UV v spans 0..0.5, so the scale doubles that).
 	var station := _make_station(4)
 	station.build_station()
 	var bridge_mat := (station.get_node("Bridge0/Mesh") as MeshInstance3D).material_override as StandardMaterial3D
 	var section_mat := (station.get_node("Section0/Mesh") as MeshInstance3D).material_override as StandardMaterial3D
 	var result := 0
-	if bridge_mat == null or bridge_mat == section_mat or bridge_mat.albedo_texture == null or not bridge_mat.albedo_texture.resource_path.ends_with("bridge/color.png") or not bridge_mat.emission_enabled or bridge_mat.emission_texture == null or bridge_mat.normal_texture == null:
-		print("FAIL _test_bridges_have_their_own_panels: bridge material %s" % bridge_mat)
+	if bridge_mat == null or section_mat == null or bridge_mat == section_mat:
+		print("FAIL _test_sections_use_the_bridge_panel_texture: bridge and section must be separate material resources")
 		station.free()
 		return 1
-	var round_repeats: float = bridge_mat.uv1_scale.x
-	var along_repeats: float = bridge_mat.uv1_scale.y * 0.5
-	if round_repeats != roundf(round_repeats) or along_repeats != roundf(along_repeats) or round_repeats < 1.0 or along_repeats < 1.0:
-		print("FAIL _test_bridges_have_their_own_panels: uv scale %s is not whole repeats" % bridge_mat.uv1_scale)
-		result = 1
-	if not section_mat.albedo_texture.resource_path.ends_with("station/albedo.png"):
-		print("FAIL _test_bridges_have_their_own_panels: the sections lost the hexagons")
-		result = 1
+	for mat in [bridge_mat, section_mat]:
+		if mat.albedo_texture == null or not mat.albedo_texture.resource_path.ends_with("bridge/color.png") or not mat.emission_enabled or mat.emission_texture == null or mat.normal_texture == null:
+			print("FAIL _test_sections_use_the_bridge_panel_texture: material %s lacks the panel textures" % mat)
+			result = 1
+			continue
+		var round_repeats: float = mat.uv1_scale.x
+		var along_repeats: float = mat.uv1_scale.y * 0.5
+		if round_repeats != roundf(round_repeats) or along_repeats != roundf(along_repeats) or round_repeats < 1.0 or along_repeats < 1.0:
+			print("FAIL _test_sections_use_the_bridge_panel_texture: uv scale %s is not whole repeats" % mat.uv1_scale)
+			result = 1
 	station.free()
 	return result
