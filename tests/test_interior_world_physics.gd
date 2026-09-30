@@ -11,6 +11,7 @@ var _failures := 0
 func _initialize():
 	await process_frame
 	_failures += await _test_rotating_hull_resting_on_terrain_does_not_jump()
+	_failures += await _test_hull_pushed_into_a_hillside_stops_on_it()
 	if _failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -47,6 +48,51 @@ func _test_rotating_hull_resting_on_terrain_does_not_jump() -> int:
 	world.free()
 	return result
 
+func _test_hull_pushed_into_a_hillside_stops_on_it() -> int:
+	# No gravity inside: push the hull 60 m straight at a hillside from 30 m
+	# above it. It must stop on the drawn ground, not pass through.
+	var world: Node3D = InteriorWorldScript.new()
+	world.build()
+	root.add_child(world)
+	var plan = world.get_section_plan(0)
+	var start_z: float = -(world.bridge_length * 0.5 + world.section_length)
+	var spot := Vector2(-1.0, -1.0)
+	for along in range(SectionPlan.LOTS_ALONG):
+		for around in range(SectionPlan.LOTS_AROUND):
+			var center: Vector2 = plan.lot_center(around, along)
+			if plan.height_at(center.x, center.y) > 50.0 and plan.slope_at(center.x, center.y).length() > 0.1:
+				spot = center
+				break
+		if spot.x >= 0.0:
+			break
+	var result := 0
+	if spot.x < 0.0:
+		print("FAIL _test_hull_pushed_into_a_hillside_stops_on_it: no sloped point over 50 m in section 0")
+		world.free()
+		return 1
+	var ground: float = plan.height_at(spot.x, spot.y)
+	var angle: float = spot.x / world.section_radius
+	var outward := Vector3(cos(angle), sin(angle), 0.0)
+	var hull := CharacterBody3D.new()
+	var shape_node := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(4.0, 2.0, 8.0)
+	shape_node.shape = box
+	hull.add_child(shape_node)
+	root.add_child(hull)
+	hull.global_position = outward * (world.section_radius - ground - 30.0) + Vector3(0.0, 0.0, start_z + spot.y)
+	await physics_frame
+	var hit := hull.move_and_collide(outward * 60.0)
+	var reached: float = Vector2(hull.global_position.x, hull.global_position.y).length()
+	# Stopped with its centre above the ground (nearer the axis than it), and
+	# within the hull's half diagonal plus the slope's lean.
+	if hit == null or reached > world.section_radius - ground or reached < world.section_radius - ground - 15.0:
+		print("FAIL _test_hull_pushed_into_a_hillside_stops_on_it: hit %s, centre %.1f m from the axis, ground at %.1f" % [hit != null, reached, world.section_radius - ground])
+		result = 1
+	hull.free()
+	world.free()
+	return result
+
 # A point `height` above the centre of the first field lot of the ahead section.
 func _field_point(world: Node3D, height: float) -> Vector3:
 	var plan = world.get_section_plan(0)
@@ -56,6 +102,6 @@ func _field_point(world: Node3D, height: float) -> Vector3:
 			if plan.zone_at(around, along) == SectionPlan.Zone.FIELD:
 				var center: Vector2 = plan.lot_center(around, along)
 				var angle: float = center.x / world.section_radius
-				var r: float = world.section_radius - height
+				var r: float = world.section_radius - plan.height_at(center.x, center.y) - height
 				return Vector3(cos(angle) * r, sin(angle) * r, start_z + center.y)
 	return Vector3.ZERO

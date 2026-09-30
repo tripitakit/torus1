@@ -13,8 +13,8 @@ const PERIOD := LENGTH + BRIDGE_LENGTH
 func _init():
 	var failures := 0
 	failures += _test_docking_builds_sections_minus_one_and_zero_and_three_bridges()
-	failures += _test_sections_of_320_dressed_chunks_sharing_one_collision_shape()
-	failures += _test_terrain_vertices_on_the_wall_facing_the_axis()
+	failures += _test_sections_of_320_dressed_chunks_flat_ones_sharing_one_shape()
+	failures += _test_terrain_vertices_at_their_height_facing_the_axis()
 	failures += _test_terrain_chunks_tile_the_whole_wall()
 	failures += _test_both_caps_open_and_facing_in()
 	failures += _test_twenty_suns_per_section_on_the_axis()
@@ -97,38 +97,58 @@ func _test_docking_builds_sections_minus_one_and_zero_and_three_bridges() -> int
 	world.free()
 	return result
 
-func _test_sections_of_320_dressed_chunks_sharing_one_collision_shape() -> int:
+func _test_sections_of_320_dressed_chunks_flat_ones_sharing_one_shape() -> int:
+	# Flat chunks share the level-0 trimesh; chunks with relief own theirs.
 	var world := _make_world()
 	var result := 0
-	var first_shape: Shape3D = null
+	var shared: Shape3D = world._chunk_shape
+	var owned := {}
 	for slot in [-1, 0]:
 		var section := world.get_node("Chain/Section_%d" % slot)
+		var plan = world.get_section_plan(slot)
 		var chunks := section.find_children("Chunk_*", "StaticBody3D", false, false)
 		if chunks.size() != 320:
-			print("FAIL _test_sections_of_320_dressed_chunks_sharing_one_collision_shape: section %d has %d chunks, expected 320" % [slot, chunks.size()])
+			print("FAIL _test_sections_of_320_dressed_chunks_flat_ones_sharing_one_shape: section %d has %d chunks, expected 320" % [slot, chunks.size()])
 			result = 1
 		for chunk in chunks:
+			var parts := String(chunk.name).split("_")
+			var raised: bool = plan.chunk_has_relief(int(parts[1]), int(parts[2]))
 			var shape: Shape3D = (chunk.get_node("Collision") as CollisionShape3D).shape
-			if first_shape == null:
-				first_shape = shape
 			var dressed: bool = chunk.get_node_or_null("Surface") != null or chunk.get_node_or_null("Water") != null
-			if shape != first_shape or not (shape is ConcavePolygonShape3D) or not dressed:
-				print("FAIL _test_sections_of_320_dressed_chunks_sharing_one_collision_shape: section %d %s not dressed or not sharing the trimesh shape" % [slot, chunk.name])
+			var right: bool = (shape != shared and not owned.has(shape)) if raised else shape == shared
+			if not right or not (shape is ConcavePolygonShape3D) or not dressed:
+				print("FAIL _test_sections_of_320_dressed_chunks_flat_ones_sharing_one_shape: section %d %s (relief %s) not dressed or wrong shape" % [slot, chunk.name, raised])
 				result = 1
 				break
+			if raised:
+				owned[shape] = true
 	world.free()
 	return result
 
-func _test_terrain_vertices_on_the_wall_facing_the_axis() -> int:
+func _test_terrain_vertices_at_their_height_facing_the_axis() -> int:
+	# In the chunk's own frame (the Surface and Water nodes sit at its origin).
 	var world := _make_world()
-	var chunk: Node3D = world.get_node("Chain/Section_0/Chunk_03_07")
-	var result := 0
-	for part in ["Surface", "Water"]:
-		var node := chunk.get_node_or_null(part) as MeshInstance3D
-		if node:
-			result = maxi(result, _check_wall("_test_terrain_vertices_on_the_wall_facing_the_axis", node.mesh, _world_transform(chunk), RADIUS))
+	var plan = world.get_section_plan(0)
+	for key in [Vector2i(3, 7), Vector2i(10, 12)]:
+		var chunk: Node3D = world.get_node("Chain/Section_0/Chunk_%02d_%02d" % [key.x, key.y])
+		var start := Vector2(key.x * 3 * plan.lot_width, key.y * 4 * plan.lot_length)
+		for part in ["Surface", "Water"]:
+			var node := chunk.get_node_or_null(part) as MeshInstance3D
+			if node == null:
+				continue
+			for s in range(node.mesh.get_surface_count()):
+				var arrays: Array = node.mesh.surface_get_arrays(s)
+				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+				for i in range(vertices.size()):
+					var v: Vector3 = vertices[i]
+					var expected: float = RADIUS - plan.height_at(start.x + atan2(v.y, v.x) * RADIUS, start.y + v.z)
+					if absf(Vector2(v.x, v.y).length() - expected) > 0.01 or normals[i].dot(Vector3(-v.x, -v.y, 0.0)) <= 0.0:
+						print("FAIL _test_terrain_vertices_at_their_height_facing_the_axis: chunk %s vertex %s at %.3f, expected %.3f" % [key, v, Vector2(v.x, v.y).length(), expected])
+						world.free()
+						return 1
 	world.free()
-	return result
+	return 0
 
 func _test_terrain_chunks_tile_the_whole_wall() -> int:
 	var world := _make_world()
