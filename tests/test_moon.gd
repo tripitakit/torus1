@@ -33,6 +33,7 @@ func _initialize():
 	_failures += _test_surface_mesh()
 	_failures += _test_altitude()
 	_failures += _test_far_version()
+	_failures += _test_maps_have_mipmaps()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -117,4 +118,13 @@ func _test_far_version() -> int:
 	if far == null or near.visibility_range_end != MoonScript.FAR_SWITCH or far.visibility_range_begin != MoonScript.FAR_SWITCH or far.visibility_range_end != 0.0 or far.material_override != near.material_override or far.mesh.get_faces().size() / 3 > 20000:
 		print("FAIL _test_far_version: far surface missing or not set up")
 		return 1
+	return 0
+
+func _test_maps_have_mipmaps() -> int:
+	# The shader samples with gradients: without mip levels a 2048 px map on
+	# a 12 px moon shimmers.
+	for path in [MoonScript.COLOR_PATH, MoonScript.NORMAL_PATH]:
+		if not (load(path) as Texture2D).get_image().has_mipmaps():
+			print("FAIL _test_maps_have_mipmaps: %s has none" % path)
+			return 1
 	return 0

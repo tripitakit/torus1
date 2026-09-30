@@ -149,7 +149,9 @@ func moon_readout() -> Dictionary:
 	var target := landing_target()
 	if not target.is_empty():
 		number = target.number
-		height = (global_position - (target.pad as Transform3D).origin).dot(up)
+		# Over the pad its top counts; away from it the ground curves off
+		# under the pad's plane (199 m at 10 km), so the lower of the two.
+		height = minf(height, (global_position - (target.pad as Transform3D).origin).dot(up))
 	return LandingReadout.readout(height - HALF_HEIGHT, vertical, drift, tilt, number, is_landed)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -219,16 +221,18 @@ func _fly(delta: float) -> void:
 func _move(delta: float) -> void:
 	var moon := moon_node()
 	if in_moon_frame and moon != null:
-		# The moon's ground: a sphere HALF_HEIGHT under the ship's centre.
+		# The moon's ground: a sphere as far under the ship's centre as the
+		# hull's lowest corner (a tilted hull reaches lower than HALF_HEIGHT).
 		# Only moving down into it counts (lifting off starts on it).
 		var start := _world_position()
 		var up: Vector3 = moon.up_at(start)
 		if velocity.dot(up) < 0.0:
-			var entry := VoidCruiserPhysics.sphere_entry(start, start + velocity * delta, moon.centre(), MoonOrbit.RADIUS + HALF_HEIGHT)
+			var reach := hull_reach(up)
+			var entry := VoidCruiserPhysics.sphere_entry(start, start + velocity * delta, moon.centre(), MoonOrbit.RADIUS + reach)
 			if entry >= 0.0:
 				var point: Vector3 = start + velocity * delta * entry
 				var ground_up: Vector3 = moon.up_at(point)
-				touch_down(point, ground_up, moon.centre() + ground_up * (MoonOrbit.RADIUS + HALF_HEIGHT))
+				touch_down(point, ground_up, moon.centre() + ground_up * (MoonOrbit.RADIUS + reach))
 				return
 		# Base Selene: a level surface (a pad, a roof) is a touch-down, a wall
 		# a bounce.
@@ -247,6 +251,12 @@ func _move(delta: float) -> void:
 			_crash_at(from + velocity * delta * entry)
 			return
 	super(delta)
+
+# How far below the ship's centre its hull reaches along `up` (half the
+# box's extent along that direction).
+func hull_reach(up: Vector3) -> float:
+	var hull := _world_basis().orthonormalized()
+	return absf(up.dot(hull.x)) * HULL_SIZE.x * 0.5 + absf(up.dot(hull.y)) * HULL_SIZE.y * 0.5 + absf(up.dot(hull.z)) * HULL_SIZE.z * 0.5
 
 static func landing_ok(motion: Vector3, up: Vector3, ship_up: Vector3) -> bool:
 	var along: float = motion.dot(up)

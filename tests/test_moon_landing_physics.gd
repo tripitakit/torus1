@@ -50,6 +50,8 @@ func _initialize():
 	_failures += await _test_soft_landing_on_a_pad()
 	_failures += await _test_hitting_a_module_bounces()
 	_failures += await _test_guide_points_at_the_nearest_pad()
+	_failures += await _test_altitude_reads_zero_landed_away_from_the_pads()
+	_failures += await _test_tilted_landing_rests_its_lowest_corner_on_the_ground()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -73,6 +75,15 @@ func _place(point: Vector3, extra := Vector3.ZERO) -> void:
 	_ship.angular_velocity = Vector3.ZERO
 	_ship.global_transform = Transform3D(Basis(side, up, side.cross(up)), point)
 	_ship.velocity = MoonOrbit.to_ring_velocity(Vector3.ZERO, point - _moon.planet_centre(), _moon.axis(), _moon.relative_rate()) + extra
+
+# Waits until the ship has joined the moon's frame (a tick after _place):
+# only then is a velocity set by a test relative to the moon.
+func _attached() -> void:
+	for tick in range(10):
+		await physics_frame
+		if _ship.in_moon_frame:
+			await physics_frame
+			return
 
 func _moon_local() -> Vector3:
 	return _moon.to_local(_ship.global_position)
@@ -169,8 +180,10 @@ func _test_landing_ok_limits() -> int:
 # `velocity`: x across (the ship's side), y up.
 func _drop(direction: Vector3, height: float, velocity: Vector2, tilt := 0.0) -> void:
 	var point := _above(direction, height + VoidCruiserScript.HALF_HEIGHT)
+	if _ship.is_crashed:
+		_ship.restart_after_crash()
 	_place(point)
-	await physics_frame
+	await _attached()
 	var up: Vector3 = _moon.up_at(_ship.global_position)
 	var level: Basis = _ship.global_transform.basis
 	_ship.global_transform.basis = Basis(level.x.normalized(), deg_to_rad(tilt)) * level
@@ -300,3 +313,34 @@ func _test_guide_points_at_the_nearest_pad() -> int:
 		result = 1
 	_ship.brake_engaged = false
 	return result
+
+func _test_altitude_reads_zero_landed_away_from_the_pads() -> int:
+	# 10 km from the base, inside the guide's range: the ground curves away
+	# under the pads' plane, the panel must still read the real height.
+	var point := _at_base(10000.0, 0.0, 5.0 + VoidCruiserScript.HALF_HEIGHT)
+	_place(point)
+	await _attached()
+	_ship.velocity = -_moon.up_at(_ship.global_position) * 1.0
+	for tick in range(600):
+		await physics_frame
+		if _ship.is_landed or _ship.is_crashed:
+			break
+	var alt: String = _ship.moon_readout().get("alt", "")
+	if not _ship.is_landed or alt != "ALT 0 m":
+		print("FAIL _test_altitude_reads_zero_landed_away_from_the_pads: landed %s, crashed %s, panel %s, altitude %.2f" % [_ship.is_landed, _ship.is_crashed, alt, _moon.altitude(_ship.global_position)])
+		return 1
+	return 0
+
+func _test_tilted_landing_rests_its_lowest_corner_on_the_ground() -> int:
+	# 20 degrees nose-down (within the 25 allowed): the hull's lowest corner
+	# rests on the ground, not metres into it.
+	await _drop(Vector3(0.6, 0.7, -0.3), 12.0, Vector2(0.0, -1.0), 20.0)
+	var lowest := INF
+	for x in [-7.5, 7.5]:
+		for y in [-3.75, 3.75]:
+			for z in [-15.0, 15.0]:
+				lowest = minf(lowest, _moon.altitude(_ship.global_transform * Vector3(x, y, z)))
+	if not _ship.is_landed or lowest < -0.05 or lowest > 0.1:
+		print("FAIL _test_tilted_landing_rests_its_lowest_corner_on_the_ground: landed %s, lowest corner %.2f m up" % [_ship.is_landed, lowest])
+		return 1
+	return 0
