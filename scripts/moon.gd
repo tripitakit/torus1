@@ -83,6 +83,9 @@ void fragment() {
 @export var ring_radius: float = 6949600.0
 
 var angle := MoonOrbit.START_ANGLE
+# The angle the last advance() turned: a ship in the moon's frame is turned
+# by the same (void_cruiser.gd), the moon moving first each tick.
+var last_step := 0.0
 
 func _ready() -> void:
 	build()
@@ -92,7 +95,8 @@ func _physics_process(delta: float) -> void:
 	advance(delta)
 
 func advance(delta: float) -> void:
-	angle += relative_rate() * delta
+	last_step = relative_rate() * delta
+	angle += last_step
 	_place()
 
 func _place() -> void:

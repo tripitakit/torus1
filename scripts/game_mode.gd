@@ -187,11 +187,17 @@ func _show_crash_screen() -> void:
 	_crash_label.visible = true
 	_crash_screen_up = true
 
-# R on the crash screen: back at rest by the nearest dock, the screen fading
-# away.
+# R on the crash screen: back at rest by the nearest dock (or, after a crash
+# on the moon, landed on Base Selene's pad 1), the screen fading away.
 func restart_after_crash() -> void:
-	_place_by_port(_station.nearest_bridge_index(_void_cruiser.global_position))
-	_void_cruiser.restart_after_crash()
+	var moon: Node3D = _void_cruiser.moon_node() if _void_cruiser.has_method("moon_node") else null
+	if _void_cruiser.get("crashed_on_moon") and moon != null:
+		var pad: Transform3D = moon.pad_transform(1)
+		_void_cruiser.restart_after_crash()
+		_void_cruiser.land_at(Transform3D(pad.basis, pad.origin + pad.basis.y.normalized() * _void_cruiser.HALF_HEIGHT))
+	else:
+		_place_by_port(_station.nearest_bridge_index(_void_cruiser.global_position))
+		_void_cruiser.restart_after_crash()
 	var camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
 	if camera != null:
 		camera.h_offset = 0.0

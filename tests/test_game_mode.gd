@@ -34,6 +34,7 @@ func _initialize():
 	_failures += await _test_undock_from_another_bridge_exits_at_its_collar()
 	_failures += await _test_restart_key_does_nothing_before_a_crash()
 	_failures += await _test_crash_shows_the_screen_and_r_restarts_at_a_dock()
+	_failures += await _test_moon_crash_restarts_landed_on_pad_1()
 	_failures += await _test_outside_world_is_freed_if_the_scene_goes_while_inside()
 
 	if _failures == 0:
@@ -284,6 +285,40 @@ func _test_restart_key_does_nothing_before_a_crash() -> int:
 		print("FAIL _test_restart_key_does_nothing_before_a_crash: R moved the ship or started a crash")
 		return 1
 	return 0
+
+func _test_moon_crash_restarts_landed_on_pad_1() -> int:
+	# Dive into the moon; after R the ship rests on pad 1, carried with the
+	# moon (its own physics on for this test).
+	const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+	var moon: Node3D = _scene.get_node("PlanetSystem/Moon")
+	_void_cruiser.set_physics_process(true)
+	var down := -Vector3(0.3, 0.9, 0.2).normalized()
+	var point: Vector3 = moon.to_global(-down * (MoonOrbit.RADIUS + 200.0))
+	_void_cruiser.in_moon_frame = false
+	_void_cruiser.global_position = point
+	_void_cruiser.velocity = MoonOrbit.to_ring_velocity(Vector3.ZERO, point - moon.planet_centre(), moon.axis(), moon.relative_rate()) + (moon.to_global(Vector3.ZERO) - point).normalized() * 100.0
+	for i in range(240):
+		await physics_frame
+		if _void_cruiser.is_crashed:
+			break
+	var result := 0
+	if not _void_cruiser.is_crashed or not _void_cruiser.crashed_on_moon:
+		print("FAIL _test_moon_crash_restarts_landed_on_pad_1: no crash on the moon")
+		_void_cruiser.set_physics_process(false)
+		return 1
+	await create_timer(_game_mode.CRASH_FLASH_TIME + _game_mode.CRASH_SHAKE_TIME + _game_mode.CRASH_FADE_TIME + 0.3).timeout
+	_press_restart()
+	await create_timer(_game_mode.FADE_TIME + 0.3).timeout
+	var pad: Transform3D = moon.pad_transform(1)
+	var above: float = (_void_cruiser.global_position - pad.origin).dot(pad.basis.y.normalized())
+	var across: float = ((_void_cruiser.global_position - pad.origin) - pad.basis.y.normalized() * above).length()
+	if _void_cruiser.is_crashed or not _void_cruiser.is_landed or not _void_cruiser.in_moon_frame or absf(above - _void_cruiser.HALF_HEIGHT) > 0.1 or across > 0.1:
+		print("FAIL _test_moon_crash_restarts_landed_on_pad_1: crashed %s, landed %s, in the moon's frame %s, %.2f m over pad 1, %.2f m off its centre" % [_void_cruiser.is_crashed, _void_cruiser.is_landed, _void_cruiser.in_moon_frame, above, across])
+		result = 1
+	_void_cruiser.set_physics_process(false)
+	_void_cruiser.is_landed = false
+	_void_cruiser.in_moon_frame = false
+	return result
 
 func _test_crash_shows_the_screen_and_r_restarts_at_a_dock() -> int:
 	var result := 0

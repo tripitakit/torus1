@@ -86,8 +86,6 @@ var planet_radius := 1737400.0
 var in_moon_frame := false
 var is_landed := false
 var crashed_on_moon := false
-# The moon's angle when the ship last followed it.
-var _moon_angle_seen := 0.0
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -282,9 +280,6 @@ func land_at(where: Transform3D) -> void:
 	cruise_locked = false
 	is_landed = true
 	in_moon_frame = true
-	var moon := moon_node()
-	if moon != null:
-		_moon_angle_seen = moon.angle
 
 func _crash_at(where: Vector3) -> void:
 	if is_inside_tree():
@@ -551,11 +546,11 @@ func moon_node() -> Node3D:
 
 # The ship joins the moon's frame below ATTACH_ALTITUDE and leaves it above
 # DETACH_ALTITUDE, its velocity converted so the true motion does not jump;
-# then, in the frame, it turns with the moon about the planet's axis by
-# however far the moon turned since the ship last looked. Frame first, turn
-# second: the moon has already moved this tick, so a ship joining now is
-# carried this tick, and one leaving now is not (its ring-frame velocity
-# moves it instead).
+# then, in the frame, it turns with the moon about the planet's axis by the
+# moon's own last step. Frame first, turn second: the moon has already moved
+# this tick, so a ship joining now is carried this tick, and one leaving now
+# is not (its ring-frame velocity moves it instead). The moon's step, not an
+# angle the ship remembers: ticks the ship missed never pile up into a jump.
 func _follow_moon() -> void:
 	var moon := moon_node()
 	if moon == null:
@@ -570,10 +565,9 @@ func _follow_moon() -> void:
 		velocity = MoonOrbit.to_ring_velocity(velocity, offset, moon.axis(), moon.relative_rate())
 		in_moon_frame = false
 	if in_moon_frame:
-		var turn: Transform3D = MoonOrbit.spin(moon.axis(), moon.angle - _moon_angle_seen, moon.planet_centre())
+		var turn: Transform3D = MoonOrbit.spin(moon.axis(), moon.last_step, moon.planet_centre())
 		global_transform = turn * global_transform
 		velocity = turn.basis * velocity
-	_moon_angle_seen = moon.angle
 
 # The ship's velocity in the ring's frame, whichever frame it flies in.
 func ring_velocity() -> Vector3:
