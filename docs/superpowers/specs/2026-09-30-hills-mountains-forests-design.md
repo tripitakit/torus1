@@ -136,9 +136,15 @@ Ordine: zone → città → **catena** → **colline** → colture → filari �
   tronco marrone con alfa 0, chioma bianca con alfa 1.
 - **Disegno:** per blocco un nodo `Trees` con due `MultiMeshInstance3D`
   (`Conifers`, `Broadleaves`), buffer preparato sul thread di lavoro (12
-  numeri di trasformazione + 4 di dati propri: colore della chioma), uno
-  shader che mescola il colore del tronco e quello della chioma con l'alfa,
-  niente ombre, visibili fino a 3 km, `custom_aabb` fino alla cima più alta.
+  numeri di trasformazione + 4 di colore di istanza: il verde della chioma),
+  uno shader che tiene il tronco marrone dove l'alfa del vertice è 0 e usa il
+  colore (vertice bianco × istanza verde) sulla chioma, niente ombre, visibili
+  fino a 3 km, `custom_aabb` fino alla cima più alta.
+  - Cambiato dopo il primo render: con i dati propri (`custom data`) il
+    renderer di compatibilità mostrava chiome rosse, blu e magenta.
+  - La larghezza della chioma (35–50% dell'altezza) tiene conto della
+    larghezza della mesh unitaria (0,6 conifera, 0,72 latifoglia): corretto
+    dopo la revisione finale, prima le chiome uscivano al 24–36%.
 - Sul thread principale solo la creazione delle MultiMesh con il buffer.
 
 ### `scripts/interior_world.gd`
@@ -182,3 +188,11 @@ le MultiMesh degli alberi).
 
 Verifica finale nel gioco dal vivo, con la build a precisione doppia: FPS
 sopra i boschi, aspetto di catena e guglie.
+
+## Misure dopo l'esecuzione
+
+- 8 sezioni su 30 con catena; cime fra circa 1050 e 1500 m.
+- Circa 90.000 alberi per sezione senza catena, 140–166.000 con catena.
+- Attracco 2,2–2,4 s (limite 3 s); frame peggiore in volo 25 ms (limite 50).
+- GPU reale (GTX 1650 Super, 1600 × 900): 60 FPS stabili (vsync) sopra la
+  catena e il bosco, 2,5–2,9 milioni di primitive, 735–1480 draw call.
