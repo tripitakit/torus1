@@ -7,6 +7,7 @@ extends Node3D
 
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
+const MoonBase = preload("res://scripts/moon_base.gd")
 
 const COLOR_PATH := "res://assets/textures/moon/color.png"
 const NORMAL_PATH := "res://assets/textures/moon/normal.png"
@@ -98,6 +99,13 @@ func _place() -> void:
 	var planet := get_node_or_null(planet_path) as Node3D
 	var planet_transform := Transform3D() if planet == null else planet.transform
 	transform = planet_transform * Transform3D(MoonOrbit.moon_basis(angle), MoonOrbit.centre_offset(angle))
+	# The base's physics body would learn its parent's move only when the
+	# tree flushes transform notifications, and an animatable (kinematic)
+	# body only moves at the next physics step: either way a tick late, ~32 m
+	# off under a ship on a pad. A static body, told now, moves at once.
+	var base := get_node_or_null("Base") as CollisionObject3D
+	if base != null and base.is_inside_tree():
+		PhysicsServer3D.body_set_state(base.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, base.global_transform)
 
 func relative_rate() -> float:
 	return MoonOrbit.relative_rate(planet_gm, ring_radius)
@@ -169,6 +177,23 @@ func build() -> void:
 	material.set_shader_parameter("surface_normal", load(NORMAL_PATH))
 	surface.material_override = material
 	add_child(surface)
+	var old_base := get_node_or_null("Base")
+	if old_base != null:
+		remove_child(old_base)
+		old_base.queue_free()
+	# Base Selene: a static body moved with the moon (see _place), as a ship
+	# landed on it is (carried by the same turn).
+	var base := StaticBody3D.new()
+	base.name = "Base"
+	base.transform = base_local_transform()
+	MoonBase.build(base, MoonOrbit.RADIUS)
+	add_child(base)
+
+# The top centre of pad `number` (1-6), y the local up (world).
+func pad_transform(number: int) -> Transform3D:
+	var centre: Vector2 = MoonBase.pad_centres()[number - 1]
+	var ground: Transform3D = MoonBase.ground(centre.x, centre.y, MoonOrbit.RADIUS)
+	return base_transform() * Transform3D(ground.basis, ground.origin + ground.basis.y * MoonBase.PAD_HEIGHT)
 
 # The sphere in rings round the base (its pole): dense near it, sparse far.
 # Vertex 0 is the base point, then SEGMENTS per ring, then the antipode.

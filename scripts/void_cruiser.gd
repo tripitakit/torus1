@@ -210,6 +210,16 @@ func _move(delta: float) -> void:
 				var ground_up: Vector3 = moon.up_at(point)
 				touch_down(point, ground_up, moon.centre() + ground_up * (MoonOrbit.RADIUS + HALF_HEIGHT))
 				return
+		# Base Selene: a level surface (a pad, a roof) is a touch-down, a wall
+		# a bounce.
+		var collision := move_and_collide(velocity * delta)
+		if collision:
+			var normal := collision.get_normal()
+			if normal.dot(moon.up_at(global_position)) >= cos(LANDING_TILT):
+				touch_down(global_position, moon.up_at(global_position), global_position)
+			else:
+				velocity = VoidCruiserPhysics.compute_bounce_velocity(velocity, normal, collision_restitution)
+		return
 	if has_planet:
 		var from := _world_position()
 		var entry := VoidCruiserPhysics.sphere_entry(from, from + velocity * delta, planet_center, planet_radius + PLANET_CLEARANCE)

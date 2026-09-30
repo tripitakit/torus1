@@ -47,6 +47,8 @@ func _initialize():
 	_failures += await _test_fast_touch_crashes()
 	_failures += await _test_sideways_touch_crashes()
 	_failures += await _test_tilted_touch_crashes()
+	_failures += await _test_soft_landing_on_a_pad()
+	_failures += await _test_hitting_a_module_bounces()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -235,3 +237,47 @@ func _test_sideways_touch_crashes() -> int:
 func _test_tilted_touch_crashes() -> int:
 	await _drop(Vector3(-0.2, 0.9, -0.4), 5.0, Vector2(0.0, -1.0), 30.0)
 	return _crash_check("_test_tilted_touch_crashes")
+
+# A point of the base's tangent plane (x east, z south), `height` above the
+# sphere under it.
+func _at_base(x: float, z: float, height: float) -> Vector3:
+	var r := MoonOrbit.RADIUS
+	return _moon.base_transform() * Vector3(x, sqrt(r * r - x * x - z * z) - r + height, z)
+
+func _test_soft_landing_on_a_pad() -> int:
+	var pad: Transform3D = _moon.pad_transform(2)
+	var point: Vector3 = pad.origin + pad.basis.y.normalized() * (5.0 + VoidCruiserScript.HALF_HEIGHT)
+	_place(point)
+	await physics_frame
+	_ship.velocity = -_moon.up_at(_ship.global_position) * 1.0
+	_crashes = 0
+	for tick in range(600):
+		await physics_frame
+		if _ship.is_landed or _ship.is_crashed:
+			break
+	var above: float = (_ship.global_position - _moon.pad_transform(2).origin).dot(_moon.up_at(_ship.global_position))
+	var result := 0
+	if not _ship.is_landed or _crashes != 0 or absf(above - VoidCruiserScript.HALF_HEIGHT) > 0.1:
+		print("FAIL _test_soft_landing_on_a_pad: landed %s, crashes %d, centre %.3f m over the pad top" % [_ship.is_landed, _crashes, above])
+		result = 1
+	return result
+
+func _test_hitting_a_module_bounces() -> int:
+	# The first module of the east arm spans x 70..110, z -10..10, 10 m high:
+	# come at its south face at 20 m/s, level, low.
+	_place(_at_base(90.0, 45.0, 5.0))
+	await physics_frame
+	var north: Vector3 = (_at_base(90.0, 0.0, 5.0) - _ship.global_position).normalized()
+	_ship.velocity = north * 20.0
+	_crashes = 0
+	var bounced := false
+	for tick in range(120):
+		await physics_frame
+		if _ship.velocity.dot(north) < 0.0:
+			bounced = true
+			break
+	var result := 0
+	if not bounced or _ship.is_landed or _ship.is_crashed or _crashes != 0:
+		print("FAIL _test_hitting_a_module_bounces: bounced %s, landed %s, crashed %s" % [bounced, _ship.is_landed, _ship.is_crashed])
+		result = 1
+	return result
