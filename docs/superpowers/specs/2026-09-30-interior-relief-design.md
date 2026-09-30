@@ -110,11 +110,12 @@ strade, così le strade la vedono.
   vertici e stessa collisione condivisa.
 - **Blocco con rilievo:**
   - Ogni rettangolo del mosaico (campo, strada, selciato, acqua, RILIEVO) si
-    divide su **tutte le linee della griglia di quote** che lo attraversano, più
-    i suoi bordi. Lungo una linea di griglia l'interpolazione bilineare è una
-    linea spezzata con i vertici sulla griglia: due rettangoli vicini, con
-    queste divisioni, hanno esattamente lo stesso bordo. Niente crepe, anche fra
-    una strada di 6 m e un campo di 250 m.
+    divide su **tutte le linee della griglia di quote** che lo attraversano,
+    sui **bordi di ogni possibile fascia stradale del suo lotto** (4 e 6 m da
+    ogni lato del lotto), più i suoi bordi. Così due rettangoli che
+    condividono un lato hanno esattamente gli stessi vertici su quel lato,
+    nei due sensi. Niente crepe, anche fra una strada di 6 m e un campo di
+    250 m.
   - Vertice: `(R - h) * (cos a, sin a, 0) + z * Z`, con `a = x / R` e
     `h = height_at` in coordinate della sezione (`x` del blocco + inizio del
     blocco).
@@ -133,14 +134,15 @@ strade, così le strade la vedono.
   di tutte le sue superfici del terreno (acqua compresa). È propria del
   blocco e sparisce con lui. Gli edifici tengono i loro collisori.
 - **Budget di vestizione:** oggi 16 blocchi per frame (frame peggiore misurato
-  27 ms, limite del test 50 ms). Un blocco con rilievo conta come
-  `RELIEF_CHUNK_COST` blocchi nel budget. Il valore si decide misurando (vedi
-  il piano): il più piccolo che tiene il frame peggiore sotto i 50 ms con
-  margine.
+  27 ms, limite del test 50 ms). Quasi ogni blocco con campi avrà colline,
+  quindi non serve un costo diverso per i blocchi con rilievo: si misura il
+  frame peggiore e, se supera 35 ms, si abbassa `CHUNKS_DRESSED_PER_FRAME`
+  finché torna sotto, controllando che le sezioni siano ancora pronte in
+  volo.
 
 ### `scripts/interior_world.gd`
 
-- `_dress_chunks` applica il costo dei blocchi con rilievo.
+- Al massimo cambia `CHUNKS_DRESSED_PER_FRAME` (vedi sopra).
 - Tutto il resto non cambia: la forma condivisa resta la forma iniziale di ogni
   blocco, e il rivestimento la sostituisce solo dove serve.
 
@@ -167,9 +169,8 @@ strade, così le strade la vedono.
 - blocco con rilievo: ogni vertice sta a `R - height_at(x, z)` dall'asse;
 - blocco con rilievo: le normali puntano verso l'asse (prodotto scalare
   positivo) e su un pendio si inclinano verso la discesa;
-- nessuna crepa: ogni lato di triangolo sul bordo di un rettangolo è coperto
-  da lati uguali del rettangolo vicino (controllo sui punti di bordo: stessa
-  posizione da entrambe le parti);
+- nessuna crepa: ogni lato di triangolo usato da un solo triangolo sta sul
+  bordo del blocco;
 - l'area proiettata del blocco con rilievo sul cilindro resta quella del
   blocco (niente buchi né sovrapposizioni);
 - colore RILIEVO: prato in basso e in piano, roccia su un pendio ripido o in
@@ -184,17 +185,16 @@ strade, così le strade la vedono.
 - attracco sotto i 3 s (oggi circa 1 s).
 
 `tests/test_interior_streaming.gd`:
-- un passo di streaming rispetta il budget con il costo dei blocchi con
-  rilievo;
-- frame peggiore sotto i 50 ms in volo lungo la catena.
+- frame peggiore sotto i 50 ms in volo lungo la catena (misurato e annotato;
+  sopra 35 ms si abbassa il budget di blocchi per frame).
 
 `tests/test_interior_world_physics.gd` (o nuovo test di fisica):
 - la navetta interna non ha gravità: spinta verso un pendio con
   `move_and_collide`, si ferma sulla superficie (entro mezza altezza dello
   scafo dalla quota giusta) e non ci passa attraverso.
 
-Test esistenti da adattare: `_test_zone_shares` (i campi ora sono il 5% in
-meno, perché una parte diventa RELIEF).
+Test esistenti da adattare: solo quelli di `test_interior_world.gd` elencati
+sopra. `_test_zone_shares` conta solo acqua, paesi e città: non cambia.
 
 Verifica finale nel gioco dal vivo con la build a precisione doppia (non solo
 render di prova): colline visibili, montagne in zona RILIEVO, nessuna crepa,
