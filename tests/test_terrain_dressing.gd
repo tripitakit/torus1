@@ -24,6 +24,11 @@ func _init():
 	failures += _test_ground_built_on_a_worker_matches_one_built_in_place()
 	failures += _test_drawn_ground_lies_on_its_collision()
 	failures += _test_chunks_along_share_their_border_vertices()
+	failures += _test_trees_stand_on_raised_ground_below_the_treeline()
+	failures += _test_trees_keep_off_flat_lots_only()
+	failures += _test_forest_density()
+	failures += _test_trees_are_deterministic_and_built_on_workers()
+	failures += _test_tree_nodes()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -501,6 +506,160 @@ func _same_keys(a: Dictionary, b: Dictionary) -> bool:
 		if not b.has(key):
 			return false
 	return true
+
+# The chunk's trees as build_ground makes them: [conifers, broadleaves,
+# tallest], two MultiMesh buffers of 16 floats per tree.
+func _trees(key: Vector2i) -> Array:
+	return TerrainDressing.build_ground(_plan, key.x, key.y)[4]
+
+func _raised_lots(key: Vector2i, zone := -1) -> int:
+	var count := 0
+	for lot_x in range(3):
+		for lot_z in range(4):
+			var z: int = _plan.zone_at(key.x * 3 + lot_x, key.y * 4 + lot_z)
+			if (zone < 0 and SectionPlan.is_raised(z)) or z == zone:
+				count += 1
+	return count
+
+# The chunk with the most hill lots: gentle forest, under the treeline.
+func _forest_chunk() -> Vector2i:
+	var best := Vector2i.ZERO
+	for along in range(20):
+		for around in range(16):
+			if _raised_lots(Vector2i(around, along), SectionPlan.Zone.HILL) > _raised_lots(best, SectionPlan.Zone.HILL):
+				best = Vector2i(around, along)
+	return best
+
+# One tree of a buffer: origin, up column (its length is the tree's height).
+func _tree_origin(buffer: PackedFloat32Array, i: int) -> Vector3:
+	return Vector3(buffer[i * 16 + 3], buffer[i * 16 + 7], buffer[i * 16 + 11])
+
+func _tree_up(buffer: PackedFloat32Array, i: int) -> Vector3:
+	return Vector3(buffer[i * 16 + 1], buffer[i * 16 + 5], buffer[i * 16 + 9])
+
+func _test_trees_stand_on_raised_ground_below_the_treeline() -> int:
+	var checked := 0
+	for key in [_forest_chunk(), _raised_chunk()]:
+		var trees := _trees(key)
+		for kind in range(2):
+			var buffer: PackedFloat32Array = trees[kind]
+			for i in range(buffer.size() / 16):
+				var origin := _tree_origin(buffer, i)
+				var up := _tree_up(buffer, i)
+				var at := _section_xz(key, origin)
+				var lot := Vector2i(floori(at.x / _plan.lot_width), floori(at.y / _plan.lot_length))
+				var h: float = _plan.height_at(at.x, at.y)
+				var problem := ""
+				if not SectionPlan.is_raised(_plan.zone_at(lot.x, lot.y)):
+					problem = "on flat land"
+				elif absf(Vector2(origin.x, origin.y).length() - (RADIUS - h + TerrainDressing.TREE_SINK)) > 0.01:
+					problem = "off the ground"
+				elif h > 650.0:
+					problem = "above the treeline"
+				elif _plan.slope_at(at.x, at.y).length() > 1.2:
+					problem = "on a cliff"
+				elif kind == 1 and h > 450.0:
+					problem = "a broadleaf above 450 m"
+				elif up.length() < 10.0 - 0.001 or up.length() > 25.0 + 0.001 or up.dot(Vector3(-origin.x, -origin.y, 0.0)) <= 0.0:
+					problem = "wrong height or not upright"
+				if problem != "":
+					print("FAIL _test_trees_stand_on_raised_ground_below_the_treeline: chunk %s tree at %s (%.0f m) %s" % [key, at, h, problem])
+					return 1
+				checked += 1
+	print("  trees checked: %d" % checked)
+	if checked == 0:
+		print("FAIL _test_trees_stand_on_raised_ground_below_the_treeline: no tree")
+		return 1
+	return 0
+
+func _test_trees_keep_off_flat_lots_only() -> int:
+	# 5 m clear of flat land and the end walls; right up to an edge shared
+	# with another raised lot (no bare lanes inside a forest).
+	var key := _forest_chunk()
+	var trees := _trees(key)
+	var near_shared_edge := false
+	for kind in range(2):
+		var buffer: PackedFloat32Array = trees[kind]
+		for i in range(buffer.size() / 16):
+			var at := _section_xz(key, _tree_origin(buffer, i))
+			var lot := Vector2i(floori(at.x / _plan.lot_width), floori(at.y / _plan.lot_length))
+			var gaps := [at.x - lot.x * _plan.lot_width, (lot.x + 1) * _plan.lot_width - at.x, at.y - lot.y * _plan.lot_length, (lot.y + 1) * _plan.lot_length - at.y]
+			var across := [Vector2i(lot.x - 1, lot.y), Vector2i(lot.x + 1, lot.y), Vector2i(lot.x, lot.y - 1), Vector2i(lot.x, lot.y + 1)]
+			for e in range(4):
+				var neighbour: Vector2i = across[e]
+				var raised: bool = neighbour.y >= 0 and neighbour.y < 80 and SectionPlan.is_raised(_plan.zone_at(neighbour.x, neighbour.y))
+				if not raised and gaps[e] < TerrainDressing.TREE_EDGE_MARGIN - 0.01:
+					print("FAIL _test_trees_keep_off_flat_lots_only: tree %.2f m from flat land at %s" % [gaps[e], at])
+					return 1
+				if raised and gaps[e] < TerrainDressing.TREE_EDGE_MARGIN:
+					near_shared_edge = true
+	if not near_shared_edge:
+		print("FAIL _test_trees_keep_off_flat_lots_only: no tree near an edge between two raised lots in chunk %s" % key)
+		return 1
+	return 0
+
+func _test_forest_density() -> int:
+	# About one tree per 17 x 17 m of raised ground.
+	var key := _forest_chunk()
+	var trees := _trees(key)
+	var count: int = (trees[0].size() + trees[1].size()) / 16
+	var expected: float = _raised_lots(key) * _plan.lot_width * _plan.lot_length / (17.0 * 17.0)
+	print("  forest chunk %s: %d trees, %.0f expected" % [key, count, expected])
+	if count < 0.6 * expected or count > 1.1 * expected:
+		print("FAIL _test_forest_density: %d trees for %.0f expected" % [count, expected])
+		return 1
+	return 0
+
+var _worker_trees := []
+
+func _build_trees_on_worker(key: Vector2i) -> void:
+	_worker_trees = _trees(key)
+
+func _test_trees_are_deterministic_and_built_on_workers() -> int:
+	var key := _forest_chunk()
+	var first := _trees(key)
+	var second := _trees(key)
+	var task := WorkerThreadPool.add_task(_build_trees_on_worker.bind(key))
+	WorkerThreadPool.wait_for_task_completion(task)
+	for kind in range(2):
+		if first[kind] != second[kind] or first[kind] != _worker_trees[kind]:
+			print("FAIL _test_trees_are_deterministic_and_built_on_workers: buffer %d differs" % kind)
+			return 1
+	return 0
+
+func _test_tree_nodes() -> int:
+	var key := _forest_chunk()
+	var trees := _trees(key)
+	var chunk := _dress(key)
+	var result := 0
+	var group := chunk.get_node_or_null("Trees")
+	if group == null:
+		print("FAIL _test_tree_nodes: no Trees node on the forest chunk")
+		chunk.free()
+		return 1
+	var names := ["Conifers", "Broadleaves"]
+	for kind in range(2):
+		var node := group.get_node_or_null(names[kind]) as MultiMeshInstance3D
+		var buffer: PackedFloat32Array = trees[kind]
+		if buffer.is_empty():
+			continue
+		var angle: float = 1.5 * _plan.lot_width / RADIUS
+		var top: Vector3 = Vector3(cos(angle), sin(angle), 0.0) * (RADIUS - float(trees[2]) + 1.0) + Vector3(0.0, 0.0, 500.0)
+		if node == null or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_VISIBILITY_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
+			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % names[kind])
+			result = 1
+	chunk.free()
+	# A chunk with no raised lot has no trees.
+	for along in range(20):
+		for around in range(16):
+			if _raised_lots(Vector2i(around, along)) == 0:
+				var flat := _dress(Vector2i(around, along))
+				if flat.get_node_or_null("Trees") != null:
+					print("FAIL _test_tree_nodes: trees on flat chunk (%d, %d)" % [around, along])
+					result = 1
+				flat.free()
+				return result
+	return result
 
 var _worker_ground := []
 

@@ -9,6 +9,7 @@ extends RefCounted
 
 const SectionPlanScript = preload("res://scripts/section_plan.gd")
 const BuildingShapesScript = preload("res://scripts/building_shapes.gd")
+const TreeShapesScript = preload("res://scripts/tree_shapes.gd")
 
 const CROP_COLORS := [
 	Color(0.85, 0.72, 0.3),   # wheat
@@ -123,6 +124,45 @@ void fragment() {
 }
 """
 const BUILDING_VISIBILITY_END := 12000.0
+# Forests on hills and mountains: one tree per TREE_SPACING cell of a global
+# grid, jittered, TREE_EDGE_MARGIN clear of flat land, none above the
+# treeline (TREELINE give or take TREELINE_BAND) or on slopes past
+# TREE_MAX_SLOPE. Conifers are LOW_CONIFER_SHARE of the trees low down, all
+# of them from CONIFERS_ONLY up. Base TREE_SINK into the ground.
+const TREE_SPACING := 17.0
+const TREE_EDGE_MARGIN := 5.0
+const TREELINE := 600.0
+const TREELINE_BAND := 50.0
+const TREE_MAX_SLOPE := 1.2
+const TREE_HEIGHTS := Vector2(10.0, 25.0)
+const TREE_WIDTHS := Vector2(0.35, 0.5)
+const TREE_SINK := 0.5
+const LOW_CONIFER_SHARE := 0.4
+const CONIFERS_FROM := 300.0
+const CONIFERS_ONLY := 450.0
+const CONIFER_GREEN := Color(0.12, 0.3, 0.16)
+const BROADLEAF_GREEN := Color(0.24, 0.42, 0.14)
+# Past this the forest floor's colour stands in for the trees.
+const TREE_VISIBILITY_END := 3000.0
+# Floats per tree in a MultiMesh buffer: 12 of transform, 4 of custom data
+# (the crown's green).
+const TREE_FLOATS := 16
+const TREE_SHADER := """
+shader_type spatial;
+
+// Vertex colour: trunk brown with alpha 0, crown with alpha 1; each tree's
+// crown green comes in its instance custom data.
+varying vec3 crown;
+
+void vertex() {
+	crown = INSTANCE_CUSTOM.rgb;
+}
+
+void fragment() {
+	ALBEDO = mix(COLOR.rgb, crown, COLOR.a);
+	ROUGHNESS = 0.9;
+}
+"""
 
 # Vertex data for one mesh surface. Kept as a class so its packed arrays are
 # mutated in place (packed arrays are values).
@@ -355,6 +395,9 @@ var field_material: StandardMaterial3D
 var paved_material: StandardMaterial3D
 var water_material: StandardMaterial3D
 var building_material: ShaderMaterial
+var conifer_mesh: ArrayMesh
+var broadleaf_mesh: ArrayMesh
+var tree_material: ShaderMaterial
 # Convex colliders by (style, whole-metre size): equal buildings share one.
 # Each key counts the chunks using it; release_chunk drops shapes no chunk
 # uses any more, so the cache holds only what is loaded.
@@ -378,11 +421,17 @@ func _init() -> void:
 	building_material = ShaderMaterial.new()
 	building_material.shader = shader
 	building_material.set_shader_parameter("glow_energy", BUILDING_GLOW_ENERGY)
+	conifer_mesh = TreeShapesScript.conifer()
+	broadleaf_mesh = TreeShapesScript.broadleaf()
+	var tree_shader := Shader.new()
+	tree_shader.code = TREE_SHADER
+	tree_material = ShaderMaterial.new()
+	tree_material.shader = tree_shader
 
 # `ground` is build_ground's result for this chunk, when a worker thread made
 # it already; empty, it is built here.
 func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array, ground: Array = []) -> void:
-	_add_ground(chunk, ground if not ground.is_empty() else build_ground(plan, chunk_around, chunk_along))
+	_add_ground(chunk, ground if not ground.is_empty() else build_ground(plan, chunk_around, chunk_along), plan)
 	if not building_indices.is_empty():
 		_build_buildings(chunk, plan, chunk_around, chunk_along, building_indices)
 
@@ -398,9 +447,9 @@ static func cell_road(column: int, row: int, west: int, east: int, south: int, n
 		return column_road
 	return maxi(column_road, row_road)
 
-# The chunk's ground as vertex data: [fields, paved, water, collision],
-# three MeshArrays and, for a chunk with relief, its collision triangles
-# (empty when flat). Touches no node or resource: safe on a worker thread
+# The chunk's ground as vertex data: [fields, paved, water, collision,
+# trees], three MeshArrays, for a chunk with relief its collision triangles
+# (empty when flat), and its trees (tree_buffers). Touches no node or resource: safe on a worker thread
 # (the plan is only read).
 static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 	var fields := MeshArrays.new()
@@ -452,7 +501,9 @@ static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 					else:
 						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, TOWN_GROUND_COLOR if zone == SectionPlanScript.Zone.TOWN else CITY_GROUND_COLOR, true, false)
 	var raised: bool = plan.chunk_has_relief(chunk_around, chunk_along)
-	return [fields, paved, water, relief_collision_faces(plan, chunk_around, chunk_along) if raised else PackedVector3Array()]
+	var collision: PackedVector3Array = relief_collision_faces(plan, chunk_around, chunk_along) if raised else PackedVector3Array()
+	var trees: Array = tree_buffers(plan, chunk_around, chunk_along) if relief else [PackedFloat32Array(), PackedFloat32Array(), 0.0]
+	return [fields, paved, water, collision, trees]
 
 # A chunk with relief collides with the height grid's points (every one of
 # them is also a vertex of the drawn ground), two triangles per grid cell,
@@ -479,7 +530,7 @@ static func relief_collision_faces(plan, chunk_around: int, chunk_along: int) ->
 	return faces
 
 # Meshes and, with relief, the collision of a chunk's ground (build_ground).
-func _add_ground(chunk: StaticBody3D, ground: Array) -> void:
+func _add_ground(chunk: StaticBody3D, ground: Array, plan) -> void:
 	var fields: MeshArrays = ground[0]
 	var paved: MeshArrays = ground[1]
 	var water: MeshArrays = ground[2]
@@ -504,6 +555,101 @@ func _add_ground(chunk: StaticBody3D, ground: Array) -> void:
 		chunk.add_child(water_node)
 	if not (ground[3] as PackedVector3Array).is_empty():
 		_set_ground_collision(chunk, ground[3])
+	_add_trees(chunk, ground[4], plan)
+
+# Two MultiMeshes of the chunk's trees (build_ground made the buffers).
+@warning_ignore("integer_division")
+func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
+	var group := Node3D.new()
+	group.name = "Trees"
+	for part in [["Conifers", trees[0], conifer_mesh], ["Broadleaves", trees[1], broadleaf_mesh]]:
+		var buffer: PackedFloat32Array = part[1]
+		if buffer.is_empty():
+			continue
+		var multimesh := MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.use_custom_data = true
+		multimesh.mesh = part[2]
+		multimesh.instance_count = buffer.size() / TREE_FLOATS
+		multimesh.buffer = buffer
+		var node := MultiMeshInstance3D.new()
+		node.name = part[0]
+		node.multimesh = multimesh
+		node.material_override = tree_material
+		node.visibility_range_end = TREE_VISIBILITY_END
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		node.custom_aabb = _chunk_bounds(plan, trees[2])
+		group.add_child(node)
+	if group.get_child_count() > 0:
+		chunk.add_child(group)
+	else:
+		group.free()
+
+# A 64-bit hash of a tree cell: eight 7-bit random numbers per tree.
+static func _tree_hash(section_index: int, cx: int, cz: int) -> int:
+	var h: int = section_index * 0x1E3779B97F4A7C15 + cx * 0x3F58476D1CE4E5B9 + cz * 0x14D049BB133111EB
+	h = (h ^ (h >> 30)) * 0x3F58476D1CE4E5B9
+	h = (h ^ (h >> 27)) * 0x14D049BB133111EB
+	return h ^ (h >> 31)
+
+# The trees of a chunk, for two MultiMeshes ([conifers, broadleaves, height
+# of the tallest top above the wall]): one per TREE_SPACING cell of a global
+# grid (section metres), jittered inside it, kept where its point lies in a
+# hill or mountain lot, TREE_EDGE_MARGIN clear of flat land and the end
+# walls, under the treeline and not on a cliff. Pure: safe on a worker
+# thread.
+static func tree_buffers(plan, chunk_around: int, chunk_along: int) -> Array:
+	var conifers := PackedFloat32Array()
+	var broadleaves := PackedFloat32Array()
+	var tallest := 0.0
+	var chunk_start := Vector2(chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND * plan.lot_width, chunk_along * SectionPlanScript.CHUNK_LOTS_ALONG * plan.lot_length)
+	var radius: float = plan.radius
+	for lot_x in range(SectionPlanScript.CHUNK_LOTS_AROUND):
+		for lot_z in range(SectionPlanScript.CHUNK_LOTS_ALONG):
+			var around: int = chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND + lot_x
+			var along: int = chunk_along * SectionPlanScript.CHUNK_LOTS_ALONG + lot_z
+			if not SectionPlanScript.is_raised(plan.zone_at(around, along)):
+				continue
+			var x0: float = around * plan.lot_width
+			var x1: float = x0 + plan.lot_width
+			var z0: float = along * plan.lot_length
+			var z1: float = z0 + plan.lot_length
+			var west: float = 0.0 if SectionPlanScript.is_raised(plan.zone_at(around - 1, along)) else TREE_EDGE_MARGIN
+			var east: float = 0.0 if SectionPlanScript.is_raised(plan.zone_at(around + 1, along)) else TREE_EDGE_MARGIN
+			var south: float = TREE_EDGE_MARGIN if along == 0 or not SectionPlanScript.is_raised(plan.zone_at(around, along - 1)) else 0.0
+			var north: float = TREE_EDGE_MARGIN if along + 1 >= SectionPlanScript.LOTS_ALONG or not SectionPlanScript.is_raised(plan.zone_at(around, along + 1)) else 0.0
+			for cx in range(floori(x0 / TREE_SPACING), ceili(x1 / TREE_SPACING)):
+				for cz in range(floori(z0 / TREE_SPACING), ceili(z1 / TREE_SPACING)):
+					var bits := _tree_hash(plan.section_index, cx, cz)
+					var x: float = (cx + 0.15 + 0.7 * float(bits & 127) / 128.0) * TREE_SPACING
+					var z: float = (cz + 0.15 + 0.7 * float((bits >> 7) & 127) / 128.0) * TREE_SPACING
+					if x < x0 + west or x >= x1 - east or z < z0 + south or z >= z1 - north:
+						continue
+					var sample: Vector3 = plan.sample_at(x, z)
+					var h: float = sample.x
+					if h > TREELINE + TREELINE_BAND * (float((bits >> 14) & 127) / 64.0 - 1.0) or Vector2(sample.y, sample.z).length() > TREE_MAX_SLOPE:
+						continue
+					var conifer: bool = float((bits >> 21) & 127) / 128.0 < lerpf(LOW_CONIFER_SHARE, 1.0, smoothstep(CONIFERS_FROM, CONIFERS_ONLY, h))
+					var tree_height: float = lerpf(TREE_HEIGHTS.x, TREE_HEIGHTS.y, float((bits >> 28) & 127) / 128.0)
+					var width: float = tree_height * lerpf(TREE_WIDTHS.x, TREE_WIDTHS.y, float((bits >> 35) & 127) / 128.0)
+					var yaw: float = TAU * float((bits >> 42) & 127) / 128.0
+					var shade: float = lerpf(0.8, 1.15, float((bits >> 49) & 127) / 128.0)
+					var angle: float = (x - chunk_start.x) / radius
+					var up := Vector3(-cos(angle), -sin(angle), 0.0)
+					var side: Vector3 = Vector3(-sin(angle), cos(angle), 0.0) * cos(yaw) + Vector3(0.0, 0.0, sin(yaw))
+					var front: Vector3 = side.cross(up)
+					var bx: Vector3 = side * width
+					var by: Vector3 = up * tree_height
+					var bz: Vector3 = front * width
+					var origin: Vector3 = -up * (radius - h + TREE_SINK) + Vector3(0.0, 0.0, z - chunk_start.y)
+					var green: Color = (CONIFER_GREEN if conifer else BROADLEAF_GREEN) * shade
+					var data := PackedFloat32Array([bx.x, by.x, bz.x, origin.x, bx.y, by.y, bz.y, origin.y, bx.z, by.z, bz.z, origin.z, green.r, green.g, green.b, 1.0])
+					if conifer:
+						conifers.append_array(data)
+					else:
+						broadleaves.append_array(data)
+					tallest = maxf(tallest, h + tree_height)
+	return [conifers, broadleaves, tallest]
 
 # A chunk with relief collides with its own ground, not the shared level-0
 # shape.
