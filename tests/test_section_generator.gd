@@ -26,6 +26,11 @@ func _init():
 	failures += _test_same_index_same_heights()
 	failures += _test_flat_zones_and_ends_stay_at_zero()
 	failures += _test_heights_without_a_chain_stay_under_150()
+	failures += _test_about_a_third_of_sections_have_a_chain()
+	failures += _test_chain_reaches_1000_to_1500_m()
+	failures += _test_chain_stays_clear_of_ends_and_city()
+	failures += _test_chain_crest_varies_and_has_spires()
+	failures += _test_hills_stay_under_150_off_the_chain()
 	failures += _test_heights_join_where_the_way_round_closes()
 	failures += _test_buildings_stand_at_level_zero()
 	failures += _test_some_chunks_flat_some_raised()
@@ -228,16 +233,126 @@ func _test_no_road_touches_raised_land() -> int:
 
 func _test_heights_without_a_chain_stay_under_150() -> int:
 	# Hills only: every grid point between 0 and 150 m.
-	if _plan.has_chain:
-		print("FAIL _test_heights_without_a_chain_stay_under_150: section 42 has a chain; pick a section without one")
-		return 1
+	var plan = null
+	for i in range(30):
+		if not SectionGenerator.chain_wanted(i):
+			plan = SectionGenerator.generate(i, RADIUS, LENGTH)
+			break
 	var highest := 0.0
-	for h in _plan.heights:
+	for h in plan.heights:
 		highest = maxf(highest, h)
 		if h < 0.0 or h > 150.001:
 			print("FAIL _test_heights_without_a_chain_stay_under_150: %f m" % h)
 			return 1
 	print("  highest hill: %.0f m" % highest)
+	return 0
+
+var _chain_plan_cache = null
+
+# The first section (index 0..29) with a mountain chain.
+func _chain_plan():
+	if _chain_plan_cache == null:
+		for i in range(30):
+			if SectionGenerator.chain_wanted(i):
+				_chain_plan_cache = SectionGenerator.generate(i, RADIUS, LENGTH)
+				break
+	return _chain_plan_cache
+
+func _test_about_a_third_of_sections_have_a_chain() -> int:
+	var count := 0
+	for i in range(30):
+		if SectionGenerator.chain_wanted(i):
+			count += 1
+	print("  sections with a chain: %d of 30" % count)
+	if count < 5 or count > 16:
+		print("FAIL _test_about_a_third_of_sections_have_a_chain: %d of 30" % count)
+		return 1
+	var plan = _chain_plan()
+	if plan == null or not plan.has_chain or _plan.has_chain != SectionGenerator.chain_wanted(42):
+		print("FAIL _test_about_a_third_of_sections_have_a_chain: has_chain does not follow chain_wanted")
+		return 1
+	return 0
+
+func _test_chain_reaches_1000_to_1500_m() -> int:
+	var highest := 0.0
+	for h in _chain_plan().heights:
+		highest = maxf(highest, h)
+	print("  highest point of section %d: %.0f m" % [_chain_plan().section_index, highest])
+	if highest < 1000.0 or highest > 1500.001:
+		print("FAIL _test_chain_reaches_1000_to_1500_m: highest point %f m" % highest)
+		return 1
+	return 0
+
+func _test_chain_stays_clear_of_ends_and_city() -> int:
+	var plan = _chain_plan()
+	var mountains := 0
+	var city := 0
+	var near_city := 0
+	for along in range(80):
+		for around in range(48):
+			var center: Vector2 = plan.lot_center(around, along)
+			var zone: int = plan.zone_at(around, along)
+			if plan.surface_distance(center, plan.city_center) <= SectionGenerator.CITY_RADIUS:
+				near_city += 1
+			if zone == SectionPlan.Zone.CITY:
+				city += 1
+			if zone != SectionPlan.Zone.MOUNTAIN:
+				continue
+			mountains += 1
+			if center.y < 1500.0 or center.y > LENGTH - 1500.0 or plan.surface_distance(center, plan.city_center) < 3000.0:
+				print("FAIL _test_chain_stays_clear_of_ends_and_city: mountain lot (%d, %d) too close to an end or the city" % [around, along])
+				return 1
+	if mountains == 0 or city != near_city:
+		print("FAIL _test_chain_stays_clear_of_ends_and_city: %d mountain lots, %d city lots of %d" % [mountains, city, near_city])
+		return 1
+	return 0
+
+func _test_chain_crest_varies_and_has_spires() -> int:
+	var plan = _chain_plan()
+	var chain = SectionGenerator.chain_of(plan)
+	var step: Vector2 = plan.height_step()
+	# The crest: the highest grid point in each 500 m band along the chain.
+	var crests := []
+	var z: float = chain.z0 + 1500.0
+	while z + 500.0 <= chain.z1 - 1500.0:
+		var best := 0.0
+		for row in range(ceili(z / step.y), floori((z + 500.0) / step.y) + 1):
+			for column in range(240):
+				best = maxf(best, plan.grid_height(column, row))
+		crests.append(best)
+		z += 500.0
+	var result := 0
+	if crests.is_empty() or crests.max() - crests.min() < 400.0:
+		print("FAIL _test_chain_crest_varies_and_has_spires: crest from %s to %s m" % [crests.min(), crests.max()])
+		result = 1
+	# Spires: points 150 m above everything two grid steps away.
+	var spires := 0
+	for row in range(2, 399):
+		for column in range(240):
+			var h: float = plan.grid_height(column, row)
+			if h < 300.0:
+				continue
+			var around := 0.0
+			for d: Vector2i in [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2), Vector2i(2, 2), Vector2i(-2, 2), Vector2i(2, -2), Vector2i(-2, -2)]:
+				around = maxf(around, plan.grid_height(column + d.x, row + d.y))
+			if h - around >= 150.0:
+				spires += 1
+	print("  crest %.0f-%.0f m, %d spire points" % [crests.min(), crests.max(), spires])
+	if spires < 3:
+		print("FAIL _test_chain_crest_varies_and_has_spires: %d spire points" % spires)
+		result = 1
+	return result
+
+func _test_hills_stay_under_150_off_the_chain() -> int:
+	var plan = _chain_plan()
+	var chain = SectionGenerator.chain_of(plan)
+	var step: Vector2 = plan.height_step()
+	for row in range(401):
+		for column in range(240):
+			var h: float = plan.grid_height(column, row)
+			if h > 150.001 and chain.height(column * step.x, row * step.y) <= 0.0:
+				print("FAIL _test_hills_stay_under_150_off_the_chain: %f m at (%d, %d) away from the chain" % [h, column, row])
+				return 1
 	return 0
 
 const FLAT_ZONES := [SectionPlan.Zone.FIELD, SectionPlan.Zone.TOWN, SectionPlan.Zone.CITY, SectionPlan.Zone.WATER]
@@ -251,22 +366,28 @@ func _test_same_index_same_heights() -> int:
 	return 0
 
 func _test_flat_zones_and_ends_stay_at_zero() -> int:
-	# Every grid point inside or on the edge of a town, city or lake lot, and
-	# both end rows.
+	# Every grid point inside or on the edge of a field, town, city or lake
+	# lot, and both end rows, with and without a chain.
+	for plan in [_plan, _chain_plan()]:
+		if _flat_zones_and_ends_raised(plan):
+			return 1
+	return 0
+
+func _flat_zones_and_ends_raised(plan) -> bool:
 	for along in range(80):
 		for around in range(48):
-			if not (_plan.zone_at(around, along) in FLAT_ZONES):
+			if not (plan.zone_at(around, along) in FLAT_ZONES):
 				continue
 			for row in range(along * 5, along * 5 + 6):
 				for column in range(around * 5, around * 5 + 6):
-					if absf(_plan.grid_height(column, row)) > 0.001:
-						print("FAIL _test_flat_zones_and_ends_stay_at_zero: lot (%d, %d) point (%d, %d) at %f m" % [around, along, column, row, _plan.grid_height(column, row)])
-						return 1
+					if absf(plan.grid_height(column, row)) > 0.001:
+						print("FAIL _test_flat_zones_and_ends_stay_at_zero: lot (%d, %d) point (%d, %d) at %f m" % [around, along, column, row, plan.grid_height(column, row)])
+						return true
 	for column in range(240):
-		if absf(_plan.grid_height(column, 0)) > 0.001 or absf(_plan.grid_height(column, 400)) > 0.001:
+		if absf(plan.grid_height(column, 0)) > 0.001 or absf(plan.grid_height(column, 400)) > 0.001:
 			print("FAIL _test_flat_zones_and_ends_stay_at_zero: end row not flat at column %d" % column)
-			return 1
-	return 0
+			return true
+	return false
 
 func _test_heights_join_where_the_way_round_closes() -> int:
 	for k in range(40):
@@ -277,15 +398,21 @@ func _test_heights_join_where_the_way_round_closes() -> int:
 	return 0
 
 func _test_buildings_stand_at_level_zero() -> int:
-	for b in range(_plan.building_count()):
-		var size: Vector3 = _plan.building_size[b]
-		for corner in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
-			var x: float = _plan.building_x[b] + corner.x * size.x
-			var z: float = _plan.building_z[b] + corner.y * size.z
-			if absf(_plan.height_at(x, z)) > 0.001:
-				print("FAIL _test_buildings_stand_at_level_zero: building %d corner at %f m" % [b, _plan.height_at(x, z)])
-				return 1
+	for plan in [_plan, _chain_plan()]:
+		if _buildings_off_level_zero(plan):
+			return 1
 	return 0
+
+func _buildings_off_level_zero(plan) -> bool:
+	for b in range(plan.building_count()):
+		var size: Vector3 = plan.building_size[b]
+		for corner in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			var x: float = plan.building_x[b] + corner.x * size.x
+			var z: float = plan.building_z[b] + corner.y * size.z
+			if absf(plan.height_at(x, z)) > 0.001:
+				print("FAIL _test_buildings_stand_at_level_zero: building %d corner at %f m" % [b, plan.height_at(x, z)])
+				return true
+	return false
 
 func _test_some_chunks_flat_some_raised() -> int:
 	var raised := 0

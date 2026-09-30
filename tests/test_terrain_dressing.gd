@@ -375,10 +375,12 @@ func _collision_height(x: float, z: float) -> float:
 
 # Distance from chunk-local point `p` to the plane of the collision triangle
 # under it (built like TerrainDressing.relief_collision_faces).
-func _collision_plane_gap(key: Vector2i, p: Vector3) -> float:
+# `at` is p's place in section coordinates: the mean of its triangle's
+# corners', not the 3D centre's angle, which leans toward the corners
+# farther from the axis and on steep ground falls in the next cell.
+func _collision_plane_gap(key: Vector2i, p: Vector3, at: Vector2) -> float:
 	var step: Vector2 = _plan.height_step()
 	var start := _chunk_start(key)
-	var at := _section_xz(key, p)
 	var column := floori(at.x / step.x)
 	var row := clampi(floori(at.y / step.y), 0, 399)
 	var fx: float = at.x / step.x - column
@@ -391,6 +393,18 @@ func _collision_plane_gap(key: Vector2i, p: Vector3) -> float:
 		corners.append(Vector3(cos(angle) * r, sin(angle) * r, cell.y * step.y - start.y))
 	var normal: Vector3 = ((corners[1] - corners[0]) as Vector3).cross(corners[2] - corners[0]).normalized()
 	return absf(normal.dot(p - corners[0]))
+
+# Steepest rise between the triangle's corners: height difference over
+# distance along the wall, the largest over its three edges.
+func _triangle_slope(key: Vector2i, a: Vector3, b: Vector3, c: Vector3) -> float:
+	var steepest := 0.0
+	for pair in [[a, b], [b, c], [c, a]]:
+		var p: Vector3 = pair[0]
+		var q: Vector3 = pair[1]
+		var run: float = (_section_xz(key, p) - _section_xz(key, q)).length()
+		if run > 0.001:
+			steepest = maxf(steepest, absf(Vector2(p.x, p.y).length() - Vector2(q.x, q.y).length()) / run)
+	return steepest
 
 func _steepest_chunk() -> Vector2i:
 	var best := Vector2i.ZERO
@@ -415,6 +429,7 @@ func _test_drawn_ground_lies_on_its_collision() -> int:
 	var result := 0
 	var worst := 0.0
 	var worst_centre := 0.0
+	var worst_cliff := 0.0
 	for key in [_raised_chunk(), _steepest_chunk()]:
 		var chunk := _dress(key)
 		for mesh: Mesh in _ground_meshes(chunk):
@@ -427,11 +442,19 @@ func _test_drawn_ground_lies_on_its_collision() -> int:
 					worst = maxf(worst, absf(Vector2(v.x, v.y).length() - (RADIUS - _collision_height(at.x, at.y))))
 				for t in range(0, indices.size(), 3):
 					var c: Vector3 = (vertices[indices[t]] + vertices[indices[t + 1]] + vertices[indices[t + 2]]) / 3.0
-					worst_centre = maxf(worst_centre, _collision_plane_gap(key, c))
+					var at := (_section_xz(key, vertices[indices[t]]) + _section_xz(key, vertices[indices[t + 1]]) + _section_xz(key, vertices[indices[t + 2]])) / 3.0
+					var gap := _collision_plane_gap(key, c, at)
+					if _triangle_slope(key, vertices[indices[t]], vertices[indices[t + 1]], vertices[indices[t + 2]]) > 2.0:
+						worst_cliff = maxf(worst_cliff, gap)
+					else:
+						worst_centre = maxf(worst_centre, gap)
 		chunk.free()
-	print("  drawn ground off the collision surface: vertices %.3f m, triangle centres %.3f m" % [worst, worst_centre])
-	if worst > 0.01 or worst_centre > 0.35:
-		print("FAIL _test_drawn_ground_lies_on_its_collision: vertices %.3f m, triangle centres %.3f m off the collision surface" % [worst, worst_centre])
+	# On cliffs (slope over 2, spire faces up to ~8) lifting points along the
+	# curved wall's radius also shifts them sideways: the drawn plane bows
+	# away from the flat collision triangle by up to ~1 m.
+	print("  drawn ground off the collision surface: vertices %.3f m, triangle centres %.3f m, on cliffs %.3f m" % [worst, worst_centre, worst_cliff])
+	if worst > 0.01 or worst_centre > 0.35 or worst_cliff > 1.5:
+		print("FAIL _test_drawn_ground_lies_on_its_collision: vertices %.3f m, triangle centres %.3f m, on cliffs %.3f m off the collision surface" % [worst, worst_centre, worst_cliff])
 		result = 1
 	return result
 

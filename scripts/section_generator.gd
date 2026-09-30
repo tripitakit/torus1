@@ -18,6 +18,29 @@ const HILL_HEIGHTS := Vector2(50.0, 150.0)
 # Heights fade to 0 within this of flat land (field, town, city, lake) or an
 # end wall, inside the raised lots: flat land stays exactly flat.
 const RELIEF_BLEND := 250.0
+# The mountain chain, in about CHAIN_CHANCE of the sections: a ridge along
+# the section, CHAIN_LENGTHS long, CHAIN_END_MARGIN clear of both end walls,
+# its line wandering CHAIN_MEANDER either way. Along it one noise
+# (CHAIN_FEATURE_SIZE) sets both the crest and the half width: wide high
+# massifs, narrow low saddles. The ends taper over CHAIN_TAPER. Flanks get
+# spurs and valleys from a ridged noise (CHAIN_DETAIL_SIZE); spires stand on
+# the crest. Nothing above MOUNTAIN_HEIGHT. A lot whose centre the chain
+# raises past MOUNTAIN_LOT_MIN is MOUNTAIN.
+const CHAIN_CHANCE := 1.0 / 3.0
+const CHAIN_LENGTHS := Vector2(6000.0, 12000.0)
+const CHAIN_END_MARGIN := 2000.0
+const CHAIN_MEANDER := 400.0
+const CHAIN_CREST := Vector2(450.0, 1150.0)
+const CHAIN_HALF_WIDTH := Vector2(1000.0, 2000.0)
+const CHAIN_TAPER := 1500.0
+const CHAIN_FEATURE_SIZE := 3000.0
+const CHAIN_DETAIL_SIZE := 600.0
+const SPIRE_COUNT := Vector2i(3, 8)
+# At least 80 m: a narrower spire can fall between the 50 m grid's points.
+const SPIRE_RADIUS := Vector2(80.0, 125.0)
+const SPIRE_HEIGHT := Vector2(400.0, 700.0)
+const MOUNTAIN_HEIGHT := 1500.0
+const MOUNTAIN_LOT_MIN := 20.0
 const ZONE_FEATURE_SIZE := 2500.0
 const CITY_RADIUS := 700.0
 # Share of the length, from each end, the city centre keeps away from.
@@ -62,6 +85,9 @@ static func generate(section_index: int, radius: float, length: float):
 	plan.zones = _zones_from_noise(plan)
 	plan.city_center = _city_center(plan)
 	plan.zones = _with_city(plan, plan.zones)
+	var chain := chain_of(plan)
+	plan.has_chain = chain != null
+	plan.zones = _with_mountain(plan, plan.zones, chain)
 	plan.zones = _with_hills(plan, plan.zones)
 	plan.crops = _crops(plan)
 	plan.rows_along = _rows(plan)
@@ -69,7 +95,7 @@ static func generate(section_index: int, radius: float, length: float):
 	plan.road_west = roads[0]
 	plan.road_south = roads[1]
 	_place_buildings(plan)
-	plan.heights = _heights(plan, null)
+	plan.heights = _heights(plan, chain)
 	return plan
 
 # Noise sampled at the lot centre's 3D position on the cylinder, so zones join
@@ -126,6 +152,92 @@ static func _with_city(plan, zones: PackedByteArray) -> PackedByteArray:
 static func surface_point(plan, x: float, z: float) -> Vector3:
 	var angle: float = x / plan.radius
 	return Vector3(cos(angle) * plan.radius, sin(angle) * plan.radius, z)
+
+# A section's mountain chain: a ridge along the section. height() is read
+# for every lot centre and grid point, on the generator's worker thread.
+class Chain:
+	extends RefCounted
+	var circumference := 0.0
+	var radius := 0.0
+	var x0 := 0.0
+	var z0 := 0.0
+	var z1 := 0.0
+	var meander: FastNoiseLite
+	var massif: FastNoiseLite
+	var detail: FastNoiseLite
+	# Vector4(x, z, radius, height) per spire.
+	var spires: Array[Vector4] = []
+
+	func ridge_x(z: float) -> float:
+		return x0 + CHAIN_MEANDER * meander.get_noise_1d(z)
+
+	# Distance between two x the short way round.
+	func _gap(a: float, b: float) -> float:
+		return absf(fposmod(a - b + circumference * 0.5, circumference) - circumference * 0.5)
+
+	func height(x: float, z: float) -> float:
+		if z <= z0 or z >= z1:
+			return 0.0
+		var dx: float = _gap(x, ridge_x(z))
+		if dx >= CHAIN_HALF_WIDTH.y:
+			return 0.0
+		var bulk: float = clampf((massif.get_noise_1d(z) + 1.0) * 0.5, 0.0, 1.0)
+		var taper: float = smoothstep(0.0, CHAIN_TAPER, z - z0) * smoothstep(0.0, CHAIN_TAPER, z1 - z)
+		var p: float = clampf(1.0 - dx / lerpf(CHAIN_HALF_WIDTH.x, CHAIN_HALF_WIDTH.y, bulk), 0.0, 1.0)
+		var h := 0.0
+		if p > 0.0:
+			# Ridged noise on the flanks: spurs, and the valleys between them.
+			var angle: float = x / radius
+			var ridged: float = 1.0 - absf(detail.get_noise_3d(cos(angle) * radius, sin(angle) * radius, z))
+			h = taper * lerpf(CHAIN_CREST.x, CHAIN_CREST.y, bulk) * pow(p, 1.4) * (0.7 + 0.45 * ridged)
+		for spire in spires:
+			var d: float = Vector2(_gap(x, spire.x), z - spire.y).length()
+			if d < spire.z:
+				h += spire.w * pow(1.0 - d / spire.z, 1.2)
+		return minf(h, MOUNTAIN_HEIGHT)
+
+static func _chain_rng(section_index: int) -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([section_index, "chain"])
+	return rng
+
+static func chain_wanted(section_index: int) -> bool:
+	return _chain_rng(section_index).randf() < CHAIN_CHANCE
+
+# The section's chain, or null: opposite the city round the section (give or
+# take an eighth of a turn), CHAIN_END_MARGIN clear of both end walls.
+static func chain_of(plan) -> Chain:
+	var rng := _chain_rng(plan.section_index)
+	if rng.randf() >= CHAIN_CHANCE:
+		return null
+	var chain := Chain.new()
+	chain.circumference = plan.circumference()
+	chain.radius = plan.radius
+	var chain_length: float = minf(rng.randf_range(CHAIN_LENGTHS.x, CHAIN_LENGTHS.y), plan.length - 2.0 * CHAIN_END_MARGIN)
+	chain.z0 = rng.randf_range(CHAIN_END_MARGIN, plan.length - CHAIN_END_MARGIN - chain_length)
+	chain.z1 = chain.z0 + chain_length
+	chain.x0 = fposmod(plan.city_center.x + chain.circumference * rng.randf_range(0.375, 0.625), chain.circumference)
+	chain.meander = _noise(hash([plan.section_index, "meander"]), CHAIN_FEATURE_SIZE, 2)
+	chain.massif = _noise(hash([plan.section_index, "massif"]), CHAIN_FEATURE_SIZE, 3)
+	chain.detail = _noise(hash([plan.section_index, "detail"]), CHAIN_DETAIL_SIZE, 3)
+	for k in range(rng.randi_range(SPIRE_COUNT.x, SPIRE_COUNT.y)):
+		var z: float = rng.randf_range(chain.z0 + CHAIN_TAPER, chain.z1 - CHAIN_TAPER)
+		var x: float = fposmod(chain.ridge_x(z) + rng.randf_range(-150.0, 150.0), chain.circumference)
+		chain.spires.append(Vector4(x, z, rng.randf_range(SPIRE_RADIUS.x, SPIRE_RADIUS.y), rng.randf_range(SPIRE_HEIGHT.x, SPIRE_HEIGHT.y)))
+	return chain
+
+# Every lot but the city's whose centre the chain raises past
+# MOUNTAIN_LOT_MIN becomes MOUNTAIN, lakes and towns included.
+static func _with_mountain(plan, zones: PackedByteArray, chain: Chain) -> PackedByteArray:
+	if chain == null:
+		return zones
+	for along in range(SectionPlanScript.LOTS_ALONG):
+		for around in range(SectionPlanScript.LOTS_AROUND):
+			var i: int = plan.lot_index(around, along)
+			var center: Vector2 = plan.lot_center(around, along)
+			if zones[i] != SectionPlanScript.Zone.CITY and chain.height(center.x, center.y) > MOUNTAIN_LOT_MIN:
+				zones[i] = SectionPlanScript.Zone.MOUNTAIN
+	return zones
 
 static func _noise(seed_value: int, feature_size: float, octaves: int) -> FastNoiseLite:
 	var noise := FastNoiseLite.new()
