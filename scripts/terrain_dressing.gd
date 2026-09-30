@@ -340,6 +340,23 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 		water_node.mesh = water_mesh
 		water_node.material_override = water_material
 		chunk.add_child(water_node)
+	if relief:
+		_set_ground_collision(chunk, [fields, paved, water])
+
+# A chunk with relief collides with its own drawn ground, not the shared
+# level-0 shape: same triangles as the mesh.
+func _set_ground_collision(chunk: StaticBody3D, parts: Array) -> void:
+	var faces := PackedVector3Array()
+	for arrays: MeshArrays in parts:
+		faces.append_array(arrays.faces())
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(faces)
+	var collision := chunk.get_node_or_null("Collision") as CollisionShape3D
+	if collision == null:
+		collision = CollisionShape3D.new()
+		collision.name = "Collision"
+		chunk.add_child(collision)
+	collision.shape = shape
 
 # One patch: split and lifted to the plan's heights in a chunk with relief,
 # the old level-0 patch otherwise.

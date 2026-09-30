@@ -20,6 +20,7 @@ func _init():
 	failures += _test_relief_normals_lean_downhill()
 	failures += _test_relief_chunk_has_no_cracks()
 	failures += _test_relief_colours()
+	failures += _test_relief_chunk_owns_a_collision_matching_its_mesh()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -281,6 +282,42 @@ func _test_relief_colours() -> int:
 		print("FAIL _test_relief_colours: no RELIEF vertex found in chunk %s" % key)
 		result = 1
 	chunk.free()
+	return result
+
+# A chunk as InteriorWorld builds it: a Collision node with the shared shape.
+func _chunk_with_shared_shape(shared: Shape3D) -> StaticBody3D:
+	var chunk := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	collision.name = "Collision"
+	collision.shape = shared
+	chunk.add_child(collision)
+	return chunk
+
+func _test_relief_chunk_owns_a_collision_matching_its_mesh() -> int:
+	var shared := ConcavePolygonShape3D.new()
+	var key := _raised_chunk()
+	var raised := _chunk_with_shared_shape(shared)
+	_dressing.dress_chunk(raised, _plan, key.x, key.y, _groups.get(key, []))
+	var result := 0
+	var shape: Shape3D = (raised.get_node("Collision") as CollisionShape3D).shape
+	var corners := 0
+	for mesh: Mesh in _ground_meshes(raised):
+		for s in range(mesh.get_surface_count()):
+			corners += (mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+	var faces := 0 if not (shape is ConcavePolygonShape3D) else (shape as ConcavePolygonShape3D).get_faces().size()
+	if shape == shared or faces != corners:
+		print("FAIL _test_relief_chunk_owns_a_collision_matching_its_mesh: relief chunk shape %s, %d face corners for %d mesh corners" % [shape, faces, corners])
+		result = 1
+	# The same chunk from a plan with no heights keeps the shared shape.
+	var flat = SectionGenerator.generate(42, RADIUS, 20000.0)
+	flat.heights = PackedFloat32Array()
+	var level := _chunk_with_shared_shape(shared)
+	_dressing.dress_chunk(level, flat, key.x, key.y, _groups.get(key, []))
+	if (level.get_node("Collision") as CollisionShape3D).shape != shared:
+		print("FAIL _test_relief_chunk_owns_a_collision_matching_its_mesh: a flat chunk lost the shared shape")
+		result = 1
+	raised.free()
+	level.free()
 	return result
 
 func _test_water_only_where_the_plan_has_lakes() -> int:
