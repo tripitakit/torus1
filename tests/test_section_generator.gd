@@ -21,6 +21,8 @@ func _init():
 	failures += _test_surface_distance_wraps_around()
 	failures += _test_no_road_touches_water()
 	failures += _test_road_kinds()
+	failures += _test_relief_lots_are_the_highest_five_percent_of_fields()
+	failures += _test_no_road_touches_relief()
 	failures += _test_buildings_only_in_towns_and_city()
 	failures += _test_buildings_stay_inside_their_lot_clear_of_roads()
 	failures += _test_building_sizes_match_their_zone()
@@ -95,10 +97,16 @@ func _test_one_city_centre_in_the_middle() -> int:
 				return 1
 	return result
 
+# RELIEF is carved out of fields by a second noise: it counts as field here,
+# where the zone noise's own seam is under test.
+func _land_use(around: int, along: int) -> int:
+	var zone: int = _plan.zone_at(around, along)
+	return SectionPlan.Zone.FIELD if zone == SectionPlan.Zone.RELIEF else zone
+
 func _agreement(around_a: int, around_b: int) -> float:
 	var same := 0
 	for along in range(80):
-		if _plan.zone_at(around_a, along) == _plan.zone_at(around_b, along):
+		if _land_use(around_a, along) == _land_use(around_b, along):
 			same += 1
 	return same / 80.0
 
@@ -149,8 +157,9 @@ func _test_no_road_touches_water() -> int:
 	return 0
 
 func _expected_road(zone_a: int, zone_b: int, on_chunk_border: bool) -> int:
-	if zone_a == SectionPlan.Zone.WATER or zone_b == SectionPlan.Zone.WATER:
-		return SectionPlan.Road.NONE
+	for zone in [zone_a, zone_b]:
+		if zone == SectionPlan.Zone.WATER or zone == SectionPlan.Zone.RELIEF:
+			return SectionPlan.Road.NONE
 	if on_chunk_border:
 		return SectionPlan.Road.MAIN
 	if _is_built(zone_a) or _is_built(zone_b):
@@ -166,6 +175,43 @@ func _test_road_kinds() -> int:
 			var south := SectionPlan.Road.NONE if along == 0 else _expected_road(zone, _plan.zone_at(around, along - 1), along % 4 == 0)
 			if _plan.road_on_west(around, along) != west or _plan.road_on_south(around, along) != south:
 				print("FAIL _test_road_kinds: lot (%d, %d) west %d (expected %d) south %d (expected %d)" % [around, along, _plan.road_on_west(around, along), west, _plan.road_on_south(around, along), south])
+				return 1
+	return 0
+
+func _test_relief_lots_are_the_highest_five_percent_of_fields() -> int:
+	# 5% of all 3840 lots, taken from fields only: every RELIEF lot's centre
+	# is at or above the threshold, every field's below it.
+	var noise: FastNoiseLite = SectionGenerator.mountain_noise(_plan.section_index)
+	var relief := 0
+	var result := 0
+	for along in range(80):
+		for around in range(48):
+			var zone: int = _plan.zone_at(around, along)
+			var center: Vector2 = _plan.lot_center(around, along)
+			var value: float = noise.get_noise_3dv(SectionGenerator.surface_point(_plan, center.x, center.y))
+			if zone == SectionPlan.Zone.RELIEF:
+				relief += 1
+				if value < _plan.relief_threshold or _plan.surface_distance(center, _plan.city_center) <= SectionGenerator.CITY_RADIUS:
+					print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: RELIEF lot (%d, %d) below the threshold or in the city" % [around, along])
+					result = 1
+			elif zone == SectionPlan.Zone.FIELD and value >= _plan.relief_threshold:
+				print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: field lot (%d, %d) above the threshold" % [around, along])
+				result = 1
+	if relief != 192:
+		print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: %d RELIEF lots, expected 192" % relief)
+		result = 1
+	if _plan.relief_peak < _plan.relief_threshold:
+		print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: peak %f below threshold %f" % [_plan.relief_peak, _plan.relief_threshold])
+		result = 1
+	return result
+
+func _test_no_road_touches_relief() -> int:
+	for along in range(80):
+		for around in range(48):
+			if _plan.zone_at(around, along) != SectionPlan.Zone.RELIEF:
+				continue
+			if _plan.road_on_west(around, along) + _plan.road_on_east(around, along) + _plan.road_on_south(around, along) + _plan.road_on_north(around, along) != 0:
+				print("FAIL _test_no_road_touches_relief: RELIEF lot (%d, %d) has a road on an edge" % [around, along])
 				return 1
 	return 0
 

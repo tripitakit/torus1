@@ -8,6 +8,10 @@ const SectionPlanScript = preload("res://scripts/section_plan.gd")
 
 const WATER_SHARE := 0.10
 const TOWN_SHARE := 0.15
+# The field lots with the highest mountain noise become RELIEF: this share of
+# all lots (see _with_relief).
+const RELIEF_SHARE := 0.05
+const MOUNTAIN_FEATURE_SIZE := 1500.0
 const ZONE_FEATURE_SIZE := 2500.0
 const CITY_RADIUS := 700.0
 # Share of the length, from each end, the city centre keeps away from.
@@ -52,6 +56,7 @@ static func generate(section_index: int, radius: float, length: float):
 	plan.zones = _zones_from_noise(plan)
 	plan.city_center = _city_center(plan)
 	plan.zones = _with_city(plan, plan.zones)
+	plan.zones = _with_relief(plan, plan.zones)
 	plan.crops = _crops(plan)
 	plan.rows_along = _rows(plan)
 	var roads: Array = _roads(plan)
@@ -109,6 +114,45 @@ static func _with_city(plan, zones: PackedByteArray) -> PackedByteArray:
 				zones[plan.lot_index(around, along)] = SectionPlanScript.Zone.CITY
 	return zones
 
+static func mountain_noise(section_index: int) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.seed = hash([section_index, "relief"])
+	noise.frequency = 1.0 / MOUNTAIN_FEATURE_SIZE
+	noise.fractal_octaves = 4
+	return noise
+
+# A point of the unrolled surface on the cylinder in 3D, where the noises are
+# sampled: the way round closes with no seam.
+static func surface_point(plan, x: float, z: float) -> Vector3:
+	var angle: float = x / plan.radius
+	return Vector3(cos(angle) * plan.radius, sin(angle) * plan.radius, z)
+
+# The field lots with the highest mountain noise at their centre, RELIEF_SHARE
+# of all lots, become RELIEF. Keeps the threshold and the highest centre value
+# for the heights.
+static func _with_relief(plan, zones: PackedByteArray) -> PackedByteArray:
+	var noise := mountain_noise(plan.section_index)
+	var values := PackedFloat64Array()
+	var field_values := PackedFloat64Array()
+	var peak := -INF
+	for along in range(SectionPlanScript.LOTS_ALONG):
+		for around in range(SectionPlanScript.LOTS_AROUND):
+			var center: Vector2 = plan.lot_center(around, along)
+			var value: float = noise.get_noise_3dv(surface_point(plan, center.x, center.y))
+			values.append(value)
+			peak = maxf(peak, value)
+			if zones[plan.lot_index(around, along)] == SectionPlanScript.Zone.FIELD:
+				field_values.append(value)
+	field_values.sort()
+	var count: int = mini(int(values.size() * RELIEF_SHARE), field_values.size())
+	var threshold: float = field_values[field_values.size() - count]
+	for i in range(values.size()):
+		if zones[i] == SectionPlanScript.Zone.FIELD and values[i] >= threshold:
+			zones[i] = SectionPlanScript.Zone.RELIEF
+	plan.relief_threshold = threshold
+	plan.relief_peak = peak
+	return zones
+
 # Crops come in patches: one seed per block of CHUNK lots, jittered inside
 # it with a random crop; every lot takes the crop of its nearest seed. The
 # patches are irregular, about a dozen lots each, and join up where the way
@@ -162,11 +206,12 @@ static func _rows(plan) -> PackedByteArray:
 static func _is_built(zone: int) -> bool:
 	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY
 
-# No road next to a lake; a main road on every chunk border; a street next to
-# a town or the city; nothing between two fields.
+# No road next to a lake or a RELIEF lot; a main road on every chunk border; a
+# street next to a town or the city; nothing between two fields.
 static func _edge_road(zone_a: int, zone_b: int, on_chunk_border: bool) -> int:
-	if zone_a == SectionPlanScript.Zone.WATER or zone_b == SectionPlanScript.Zone.WATER:
-		return SectionPlanScript.Road.NONE
+	for zone in [zone_a, zone_b]:
+		if zone == SectionPlanScript.Zone.WATER or zone == SectionPlanScript.Zone.RELIEF:
+			return SectionPlanScript.Road.NONE
 	if on_chunk_border:
 		return SectionPlanScript.Road.MAIN
 	if _is_built(zone_a) or _is_built(zone_b):
