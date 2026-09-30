@@ -9,7 +9,7 @@ extends RefCounted
 # Lot (around, along) covers x in [around, around + 1] * lot_width and
 # z in [along, along + 1] * lot_length.
 
-enum Zone { FIELD, TOWN, CITY, WATER, RELIEF }
+enum Zone { FIELD, TOWN, CITY, WATER, HILL, MOUNTAIN }
 enum Crop { WHEAT, CORN, SUNFLOWER, LAVENDER, RICE, PASTURE }
 enum Road { NONE, STREET, MAIN }
 # How a building looks (see building_shapes.gd and the building shader).
@@ -66,10 +66,12 @@ var heights := PackedFloat32Array():
 		_update_slopes()
 var _slopes_x := PackedFloat32Array()
 var _slopes_z := PackedFloat32Array()
-# Mountain-noise level above which lot centres became RELIEF, and the
-# highest lot-centre value (see section_generator.gd).
-var relief_threshold := 0.0
-var relief_peak := 0.0
+# Whether the section has a mountain chain (section_generator.gd).
+var has_chain := false
+
+# Hills and mountains: the zones with relief (and trees).
+static func is_raised(zone: int) -> bool:
+	return zone == Zone.HILL or zone == Zone.MOUNTAIN
 
 static func road_width(road: int) -> float:
 	if road == Road.MAIN:

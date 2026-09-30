@@ -42,8 +42,8 @@ func _test_grid_size_and_step() -> int:
 	if SectionPlan.RELIEF_COLUMNS != 240 or SectionPlan.RELIEF_ROWS != 401 or not is_equal_approx(step.x * 240.0, TAU * RADIUS) or not is_equal_approx(step.y, 50.0):
 		print("FAIL _test_grid_size_and_step: %d x %d, step %s" % [SectionPlan.RELIEF_COLUMNS, SectionPlan.RELIEF_ROWS, step])
 		return 1
-	if SectionPlan.Zone.RELIEF != 4:
-		print("FAIL _test_grid_size_and_step: RELIEF is %d, expected 4 (appended)" % SectionPlan.Zone.RELIEF)
+	if SectionPlan.Zone.HILL != 4 or SectionPlan.Zone.MOUNTAIN != 5 or not SectionPlan.is_raised(SectionPlan.Zone.HILL) or not SectionPlan.is_raised(SectionPlan.Zone.MOUNTAIN) or SectionPlan.is_raised(SectionPlan.Zone.FIELD):
+		print("FAIL _test_grid_size_and_step: HILL %d, MOUNTAIN %d (expected 4, 5), or is_raised wrong" % [SectionPlan.Zone.HILL, SectionPlan.Zone.MOUNTAIN])
 		return 1
 	return 0
 

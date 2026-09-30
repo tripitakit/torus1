@@ -19,7 +19,7 @@ func _init():
 	failures += _test_flat_plan_keeps_the_level_zero_mosaic()
 	failures += _test_relief_normals_lean_downhill()
 	failures += _test_relief_chunk_has_no_cracks()
-	failures += _test_relief_colours()
+	failures += _test_raised_ground_colours()
 	failures += _test_relief_chunk_collides_on_its_height_grid()
 	failures += _test_ground_built_on_a_worker_matches_one_built_in_place()
 	failures += _test_drawn_ground_lies_on_its_collision()
@@ -255,13 +255,14 @@ func _test_relief_chunk_has_no_cracks() -> int:
 	chunk.free()
 	return result
 
-func _test_relief_colours() -> int:
+func _test_raised_ground_colours() -> int:
 	var result := 0
-	if not TerrainDressing.relief_color(10.0, 0.1).is_equal_approx(TerrainDressing.GRASS_COLOR) or not TerrainDressing.relief_color(320.0, 0.1).is_equal_approx(TerrainDressing.ROCK_COLOR) or not TerrainDressing.relief_color(10.0, 1.0).is_equal_approx(TerrainDressing.ROCK_COLOR):
-		print("FAIL _test_relief_colours: grass low and flat, rock high or steep")
+	if not TerrainDressing.relief_color(10.0, 0.1).is_equal_approx(TerrainDressing.FOREST_COLOR) or not TerrainDressing.relief_color(700.0, 0.1).is_equal_approx(TerrainDressing.ROCK_COLOR) or not TerrainDressing.relief_color(10.0, 1.4).is_equal_approx(TerrainDressing.ROCK_COLOR):
+		print("FAIL _test_raised_ground_colours: forest low and gentle, rock high or steep")
 		result = 1
-	# Inside a RELIEF lot, each vertex takes the colour of its height and slope.
-	var key := _find_chunk(SectionPlan.Zone.RELIEF, true)
+	# Inside a hill or mountain lot, each vertex takes the colour of its
+	# height and slope.
+	var key := _find_chunk(SectionPlan.Zone.HILL, true)
 	var chunk := _dress(key)
 	var surface: Mesh = (chunk.get_node("Surface") as MeshInstance3D).mesh
 	var checked := 0
@@ -273,16 +274,16 @@ func _test_relief_colours() -> int:
 			var at := _section_xz(key, vertices[i])
 			var lot := Vector2i(floori(at.x / _plan.lot_width), floori(at.y / _plan.lot_length))
 			var inside: bool = fposmod(at.x, _plan.lot_width) > 1.0 and fposmod(at.x, _plan.lot_width) < _plan.lot_width - 1.0 and fposmod(at.y, _plan.lot_length) > 1.0 and fposmod(at.y, _plan.lot_length) < _plan.lot_length - 1.0
-			if not inside or _plan.zone_at(lot.x, lot.y) != SectionPlan.Zone.RELIEF:
+			if not inside or not SectionPlan.is_raised(_plan.zone_at(lot.x, lot.y)):
 				continue
 			var expected: Color = TerrainDressing.relief_color(_plan.height_at(at.x, at.y), _plan.slope_at(at.x, at.y).length())
 			if absf(colors[i].r - expected.r) > 1.0 / 255.0 or absf(colors[i].g - expected.g) > 1.0 / 255.0 or absf(colors[i].b - expected.b) > 1.0 / 255.0:
-				print("FAIL _test_relief_colours: vertex %s coloured %s, expected %s" % [vertices[i], colors[i], expected])
+				print("FAIL _test_raised_ground_colours: vertex %s coloured %s, expected %s" % [vertices[i], colors[i], expected])
 				result = 1
 				break
 			checked += 1
 	if checked == 0:
-		print("FAIL _test_relief_colours: no RELIEF vertex found in chunk %s" % key)
+		print("FAIL _test_raised_ground_colours: no raised vertex found in chunk %s" % key)
 		result = 1
 	chunk.free()
 	return result

@@ -23,8 +23,9 @@ const CITY_GROUND_COLOR := Color(0.5, 0.5, 0.52)
 const MAIN_ROAD_COLOR := Color(0.2, 0.2, 0.22)
 const STREET_COLOR := Color(0.32, 0.32, 0.34)
 const WATER_COLOR := Color(0.12, 0.32, 0.5)
-# RELIEF lots: grass low and gentle, rock on steep slopes and high up.
-const GRASS_COLOR := Color(0.36, 0.5, 0.26)
+# Hill and mountain ground: forest floor up to the treeline, rock above it
+# and on steep slopes.
+const FOREST_COLOR := Color(0.2, 0.34, 0.15)
 const ROCK_COLOR := Color(0.46, 0.44, 0.41)
 # Two breaks closer than this are one (float rounding at lot edges).
 const BREAK_TOLERANCE := 0.01
@@ -177,7 +178,7 @@ class MeshArrays:
 	# chunk metres. Split on every height-grid line and road-band edge
 	# (relief_breaks below) so neighbours share every edge vertex, and each
 	# piece crossing a grid cell's fold cut along it (_add_quad_on_folds), so
-	# every triangle lies on the collision's plane. RELIEF lots take their
+	# every triangle lies on the collision's plane. Hill and mountain lots take their
 	# colour from height and slope.
 	func add_relief_patch(plan, chunk_start: Vector2, lot_start: Vector2, x0: float, x1: float, z0: float, z1: float, color: Color, rows_along: bool, relief_lot: bool) -> void:
 		var step: Vector2 = plan.height_step()
@@ -314,8 +315,8 @@ class MeshArrays:
 		return absf(_heights[i00] + _heights[i10 + columns] - _heights[i10] - _heights[i00 + columns]) < 0.0001
 
 	static func relief_color(height: float, slope: float) -> Color:
-		var rock := maxf(smoothstep(0.5, 0.9, slope), smoothstep(180.0, 300.0, height))
-		return GRASS_COLOR.lerp(ROCK_COLOR, rock)
+		var rock := maxf(smoothstep(0.9, 1.3, slope), smoothstep(550.0, 650.0, height))
+		return FOREST_COLOR.lerp(ROCK_COLOR, rock)
 
 	# Where a relief patch from a to b (chunk metres, one axis) is split: its
 	# two ends, every height-grid line inside it (grid lines sit at whole
@@ -420,10 +421,10 @@ static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 			var z1: float = z0 + plan.lot_length
 			var lot_start := Vector2(x0, z0)
 			var zone: int = plan.zone_at(around, along)
-			if zone == SectionPlanScript.Zone.WATER or zone == SectionPlanScript.Zone.RELIEF:
-				# Whole lot, no roads (none border a lake or a RELIEF lot).
+			if zone == SectionPlanScript.Zone.WATER or SectionPlanScript.is_raised(zone):
+				# Whole lot, no roads (none border a lake, a hill or a mountain).
 				var wet: bool = zone == SectionPlanScript.Zone.WATER
-				_add(water if wet else paved, relief, plan, chunk_start, lot_start, x0, x1, z0, z1, WATER_COLOR if wet else GRASS_COLOR, true, not wet)
+				_add(water if wet else paved, relief, plan, chunk_start, lot_start, x0, x1, z0, z1, WATER_COLOR if wet else FOREST_COLOR, true, not wet)
 				continue
 			var west: int = plan.road_on_west(around, along)
 			var east: int = plan.road_on_east(around, along)

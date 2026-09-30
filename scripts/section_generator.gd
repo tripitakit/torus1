@@ -8,17 +8,15 @@ const SectionPlanScript = preload("res://scripts/section_plan.gd")
 
 const WATER_SHARE := 0.10
 const TOWN_SHARE := 0.15
-# The field lots with the highest mountain noise become RELIEF: this share of
-# all lots (see _with_relief).
-const RELIEF_SHARE := 0.05
-const MOUNTAIN_FEATURE_SIZE := 1500.0
-# Hills roll up to HILL_HEIGHT everywhere on open land; mountains add up to
-# MOUNTAIN_HEIGHT in total where the mountain noise passes the RELIEF
-# threshold. Both fade to 0 within RELIEF_BLEND of a town, the city, a lake
-# or an end wall.
-const HILL_FEATURE_SIZE := 800.0
-const HILL_HEIGHT := 100.0
-const MOUNTAIN_HEIGHT := 350.0
+# Hills: HILL_SHARE of all lots, taken from fields where a patch noise is
+# highest; patches of fewer than HILL_MIN_LOTS lots go back to field.
+const HILL_SHARE := 0.12
+const HILL_MIN_LOTS := 4
+const HILL_PATCH_SIZE := 2000.0
+const HILL_FEATURE_SIZE := 700.0
+const HILL_HEIGHTS := Vector2(50.0, 150.0)
+# Heights fade to 0 within this of flat land (field, town, city, lake) or an
+# end wall, inside the raised lots: flat land stays exactly flat.
 const RELIEF_BLEND := 250.0
 const ZONE_FEATURE_SIZE := 2500.0
 const CITY_RADIUS := 700.0
@@ -64,14 +62,14 @@ static func generate(section_index: int, radius: float, length: float):
 	plan.zones = _zones_from_noise(plan)
 	plan.city_center = _city_center(plan)
 	plan.zones = _with_city(plan, plan.zones)
-	plan.zones = _with_relief(plan, plan.zones)
+	plan.zones = _with_hills(plan, plan.zones)
 	plan.crops = _crops(plan)
 	plan.rows_along = _rows(plan)
 	var roads: Array = _roads(plan)
 	plan.road_west = roads[0]
 	plan.road_south = roads[1]
 	_place_buildings(plan)
-	plan.heights = _heights(plan)
+	plan.heights = _heights(plan, null)
 	return plan
 
 # Noise sampled at the lot centre's 3D position on the cylinder, so zones join
@@ -123,53 +121,71 @@ static func _with_city(plan, zones: PackedByteArray) -> PackedByteArray:
 				zones[plan.lot_index(around, along)] = SectionPlanScript.Zone.CITY
 	return zones
 
-static func mountain_noise(section_index: int) -> FastNoiseLite:
-	var noise := FastNoiseLite.new()
-	noise.seed = hash([section_index, "relief"])
-	noise.frequency = 1.0 / MOUNTAIN_FEATURE_SIZE
-	noise.fractal_octaves = 4
-	return noise
-
 # A point of the unrolled surface on the cylinder in 3D, where the noises are
 # sampled: the way round closes with no seam.
 static func surface_point(plan, x: float, z: float) -> Vector3:
 	var angle: float = x / plan.radius
 	return Vector3(cos(angle) * plan.radius, sin(angle) * plan.radius, z)
 
-# The field lots with the highest mountain noise at their centre, RELIEF_SHARE
-# of all lots, become RELIEF. Keeps the threshold and the highest centre value
-# for the heights.
-static func _with_relief(plan, zones: PackedByteArray) -> PackedByteArray:
-	var noise := mountain_noise(plan.section_index)
-	var values := PackedFloat64Array()
+static func _noise(seed_value: int, feature_size: float, octaves: int) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.seed = seed_value
+	noise.frequency = 1.0 / feature_size
+	noise.fractal_octaves = octaves
+	return noise
+
+# The field lots where a patch noise is highest, HILL_SHARE of all lots,
+# become HILL; patches too small to read as hills go back to field.
+static func _with_hills(plan, zones: PackedByteArray) -> PackedByteArray:
+	var values := _sample_lots(plan, _noise(hash([plan.section_index, "hill patches"]), HILL_PATCH_SIZE, 2))
 	var field_values := PackedFloat64Array()
-	var peak := -INF
-	for along in range(SectionPlanScript.LOTS_ALONG):
-		for around in range(SectionPlanScript.LOTS_AROUND):
-			var center: Vector2 = plan.lot_center(around, along)
-			var value: float = noise.get_noise_3dv(surface_point(plan, center.x, center.y))
-			values.append(value)
-			peak = maxf(peak, value)
-			if zones[plan.lot_index(around, along)] == SectionPlanScript.Zone.FIELD:
-				field_values.append(value)
+	for i in range(values.size()):
+		if zones[i] == SectionPlanScript.Zone.FIELD:
+			field_values.append(values[i])
+	var count: int = mini(int(values.size() * HILL_SHARE), field_values.size())
+	if count == 0:
+		return zones
 	field_values.sort()
-	var count: int = mini(int(values.size() * RELIEF_SHARE), field_values.size())
 	var threshold: float = field_values[field_values.size() - count]
 	for i in range(values.size()):
 		if zones[i] == SectionPlanScript.Zone.FIELD and values[i] >= threshold:
-			zones[i] = SectionPlanScript.Zone.RELIEF
-	plan.relief_threshold = threshold
-	plan.relief_peak = peak
+			zones[i] = SectionPlanScript.Zone.HILL
+	return _without_small_hills(plan, zones)
+
+# Hill patches (lots sharing an edge; the way round closes) of fewer than
+# HILL_MIN_LOTS lots go back to field.
+@warning_ignore("integer_division")
+static func _without_small_hills(plan, zones: PackedByteArray) -> PackedByteArray:
+	var seen := PackedByteArray()
+	seen.resize(zones.size())
+	for start in range(zones.size()):
+		if zones[start] != SectionPlanScript.Zone.HILL or seen[start] == 1:
+			continue
+		seen[start] = 1
+		var patch := [start]
+		var k := 0
+		while k < patch.size():
+			var i: int = patch[k]
+			k += 1
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var along: int = i / SectionPlanScript.LOTS_AROUND + step.y
+				if along < 0 or along >= SectionPlanScript.LOTS_ALONG:
+					continue
+				var j: int = plan.lot_index(i % SectionPlanScript.LOTS_AROUND + step.x, along)
+				if zones[j] == SectionPlanScript.Zone.HILL and seen[j] == 0:
+					seen[j] = 1
+					patch.append(j)
+		if patch.size() < HILL_MIN_LOTS:
+			for i: int in patch:
+				zones[i] = SectionPlanScript.Zone.FIELD
 	return zones
 
-static func _is_flat(zone: int) -> bool:
-	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY or zone == SectionPlanScript.Zone.WATER
-
-# For each lot, the rectangles (x0, z0, x1, z1) of the flat lots among it and
-# its 8 neighbours. RELIEF_BLEND is under one lot, so no farther lot can be
-# nearer than it. Lots next to the seam get the neighbour across it at its
-# unrolled position (x below 0 or past the circumference).
-static func _flat_rects_by_lot(plan) -> Array:
+# For each lot, the rectangles (x0, z0, x1, z1) of the lots among it and its
+# 8 neighbours whose zone `wanted` accepts. RELIEF_BLEND is under one lot, so
+# no farther lot can be nearer than it. Lots next to the seam get the
+# neighbour across it at its unrolled position (x below 0 or past the
+# circumference).
+static func _rects_by_lot(plan, wanted: Callable) -> Array:
 	var by_lot := []
 	for along in range(SectionPlanScript.LOTS_ALONG):
 		for around in range(SectionPlanScript.LOTS_AROUND):
@@ -180,14 +196,14 @@ static func _flat_rects_by_lot(plan) -> Array:
 					continue
 				for dx in range(-1, 2):
 					var lot_x: int = around + dx
-					if _is_flat(plan.zone_at(lot_x, lot_z)):
+					if wanted.call(plan.zone_at(lot_x, lot_z)):
 						rects.append(Rect2(lot_x * plan.lot_width, lot_z * plan.lot_length, plan.lot_width, plan.lot_length))
 			by_lot.append(rects)
 	return by_lot
 
 # Distance from (x, z) to the nearest of `rects` or to an end wall. A point
-# inside or on the edge of a flat lot is at 0.
-static func _flat_distance(plan, x: float, z: float, rects: Array) -> float:
+# inside or on the edge of one of them is at 0.
+static func _rect_distance(plan, x: float, z: float, rects: Array) -> float:
 	var nearest: float = minf(z, plan.length - z)
 	for rect: Rect2 in rects:
 		var gap_x: float = maxf(0.0, maxf(rect.position.x - x, x - rect.end.x))
@@ -195,14 +211,14 @@ static func _flat_distance(plan, x: float, z: float, rects: Array) -> float:
 		nearest = minf(nearest, Vector2(gap_x, gap_z).length())
 	return nearest
 
+# Heights only inside raised lots, fading to 0 within RELIEF_BLEND of flat
+# land or an end wall: the chain's and, in hill lots, the hills', whichever
+# is higher.
 @warning_ignore("integer_division")
-static func _heights(plan) -> PackedFloat32Array:
-	var mountains := mountain_noise(plan.section_index)
-	var hills := FastNoiseLite.new()
-	hills.seed = hash([plan.section_index, "hills"])
-	hills.frequency = 1.0 / HILL_FEATURE_SIZE
-	hills.fractal_octaves = 2
-	var flat_rects := _flat_rects_by_lot(plan)
+static func _heights(plan, chain) -> PackedFloat32Array:
+	var hills := _noise(hash([plan.section_index, "hills"]), HILL_FEATURE_SIZE, 2)
+	var flat_rects := _rects_by_lot(plan, func(zone: int) -> bool: return not SectionPlanScript.is_raised(zone))
+	var open_rects := _rects_by_lot(plan, func(zone: int) -> bool: return zone != SectionPlanScript.Zone.HILL)
 	var step: Vector2 = plan.height_step()
 	var heights := PackedFloat32Array()
 	heights.resize(SectionPlanScript.RELIEF_COLUMNS * SectionPlanScript.RELIEF_ROWS)
@@ -211,14 +227,18 @@ static func _heights(plan) -> PackedFloat32Array:
 		var along: int = mini(row / SectionPlanScript.RELIEF_POINTS_PER_LOT, SectionPlanScript.LOTS_ALONG - 1)
 		for column in range(SectionPlanScript.RELIEF_COLUMNS):
 			var x: float = column * step.x
-			var around: int = column / SectionPlanScript.RELIEF_POINTS_PER_LOT
-			var distance := _flat_distance(plan, x, z, flat_rects[along * SectionPlanScript.LOTS_AROUND + around])
-			if distance <= 0.0:
+			var lot: int = along * SectionPlanScript.LOTS_AROUND + column / SectionPlanScript.RELIEF_POINTS_PER_LOT
+			var flat := _rect_distance(plan, x, z, flat_rects[lot])
+			if flat <= 0.0:
 				continue  # resize() filled it with 0
-			var p := surface_point(plan, x, z)
-			var hill: float = HILL_HEIGHT * clampf((hills.get_noise_3dv(p) + 1.0) * 0.5, 0.0, 1.0)
-			var mountain: float = (MOUNTAIN_HEIGHT - HILL_HEIGHT) * smoothstep(plan.relief_threshold, plan.relief_peak, mountains.get_noise_3dv(p))
-			heights[row * SectionPlanScript.RELIEF_COLUMNS + column] = minf(hill + mountain, MOUNTAIN_HEIGHT) * smoothstep(0.0, RELIEF_BLEND, distance)
+			var h := 0.0
+			if chain != null:
+				h = chain.height(x, z) * smoothstep(0.0, RELIEF_BLEND, flat)
+			var open := _rect_distance(plan, x, z, open_rects[lot])
+			if open > 0.0:
+				var bump: float = clampf((hills.get_noise_3dv(surface_point(plan, x, z)) + 1.0) * 0.5, 0.0, 1.0)
+				h = maxf(h, lerpf(HILL_HEIGHTS.x, HILL_HEIGHTS.y, bump) * smoothstep(0.0, RELIEF_BLEND, open))
+			heights[row * SectionPlanScript.RELIEF_COLUMNS + column] = h
 	return heights
 
 # Crops come in patches: one seed per block of CHUNK lots, jittered inside
@@ -274,11 +294,11 @@ static func _rows(plan) -> PackedByteArray:
 static func _is_built(zone: int) -> bool:
 	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY
 
-# No road next to a lake or a RELIEF lot; a main road on every chunk border; a
-# street next to a town or the city; nothing between two fields.
+# No road next to a lake, a hill or a mountain; a main road on every chunk
+# border; a street next to a town or the city; nothing between two fields.
 static func _edge_road(zone_a: int, zone_b: int, on_chunk_border: bool) -> int:
 	for zone in [zone_a, zone_b]:
-		if zone == SectionPlanScript.Zone.WATER or zone == SectionPlanScript.Zone.RELIEF:
+		if zone == SectionPlanScript.Zone.WATER or SectionPlanScript.is_raised(zone):
 			return SectionPlanScript.Road.NONE
 	if on_chunk_border:
 		return SectionPlanScript.Road.MAIN

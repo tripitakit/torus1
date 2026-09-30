@@ -21,11 +21,11 @@ func _init():
 	failures += _test_surface_distance_wraps_around()
 	failures += _test_no_road_touches_water()
 	failures += _test_road_kinds()
-	failures += _test_relief_lots_are_the_highest_five_percent_of_fields()
-	failures += _test_no_road_touches_relief()
+	failures += _test_hills_are_patches_of_several_lots()
+	failures += _test_no_road_touches_raised_land()
 	failures += _test_same_index_same_heights()
 	failures += _test_flat_zones_and_ends_stay_at_zero()
-	failures += _test_heights_in_range_and_mountains_only_above_the_threshold()
+	failures += _test_heights_without_a_chain_stay_under_150()
 	failures += _test_heights_join_where_the_way_round_closes()
 	failures += _test_buildings_stand_at_level_zero()
 	failures += _test_some_chunks_flat_some_raised()
@@ -84,8 +84,10 @@ func _test_zone_shares() -> int:
 	if city < 15 or city > 35:
 		print("FAIL _test_zone_shares: %d city lots, expected about 23 (700 m radius)" % city)
 		result = 1
-	if water > 384 or water < 384 - city or town > 576 or town < 576 - city:
-		print("FAIL _test_zone_shares: water %d (expected 384 minus city), town %d (expected 576 minus city)" % [water, town])
+	# A mountain chain covers lakes and towns too.
+	var mountain := _count_zone(_plan, SectionPlan.Zone.MOUNTAIN)
+	if water > 384 or water < 384 - city - mountain or town > 576 or town < 576 - city - mountain:
+		print("FAIL _test_zone_shares: water %d (expected 384 minus city and mountain), town %d (expected 576 minus city and mountain)" % [water, town])
 		result = 1
 	return result
 
@@ -103,11 +105,11 @@ func _test_one_city_centre_in_the_middle() -> int:
 				return 1
 	return result
 
-# RELIEF is carved out of fields by a second noise: it counts as field here,
+# Hills and mountains come from their own noises: they count as field here,
 # where the zone noise's own seam is under test.
 func _land_use(around: int, along: int) -> int:
 	var zone: int = _plan.zone_at(around, along)
-	return SectionPlan.Zone.FIELD if zone == SectionPlan.Zone.RELIEF else zone
+	return SectionPlan.Zone.FIELD if SectionPlan.is_raised(zone) else zone
 
 func _agreement(around_a: int, around_b: int) -> float:
 	var same := 0
@@ -164,7 +166,7 @@ func _test_no_road_touches_water() -> int:
 
 func _expected_road(zone_a: int, zone_b: int, on_chunk_border: bool) -> int:
 	for zone in [zone_a, zone_b]:
-		if zone == SectionPlan.Zone.WATER or zone == SectionPlan.Zone.RELIEF:
+		if zone == SectionPlan.Zone.WATER or SectionPlan.is_raised(zone):
 			return SectionPlan.Road.NONE
 	if on_chunk_border:
 		return SectionPlan.Road.MAIN
@@ -184,44 +186,61 @@ func _test_road_kinds() -> int:
 				return 1
 	return 0
 
-func _test_relief_lots_are_the_highest_five_percent_of_fields() -> int:
-	# 5% of all 3840 lots, taken from fields only: every RELIEF lot's centre
-	# is at or above the threshold, every field's below it.
-	var noise: FastNoiseLite = SectionGenerator.mountain_noise(_plan.section_index)
-	var relief := 0
-	var result := 0
-	for along in range(80):
-		for around in range(48):
-			var zone: int = _plan.zone_at(around, along)
-			var center: Vector2 = _plan.lot_center(around, along)
-			var value: float = noise.get_noise_3dv(SectionGenerator.surface_point(_plan, center.x, center.y))
-			if zone == SectionPlan.Zone.RELIEF:
-				relief += 1
-				if value < _plan.relief_threshold or _plan.surface_distance(center, _plan.city_center) <= SectionGenerator.CITY_RADIUS:
-					print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: RELIEF lot (%d, %d) below the threshold or in the city" % [around, along])
-					result = 1
-			elif zone == SectionPlan.Zone.FIELD and value >= _plan.relief_threshold:
-				print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: field lot (%d, %d) above the threshold" % [around, along])
-				result = 1
-	if relief != 192:
-		print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: %d RELIEF lots, expected 192" % relief)
-		result = 1
-	if _plan.relief_peak < _plan.relief_threshold:
-		print("FAIL _test_relief_lots_are_the_highest_five_percent_of_fields: peak %f below threshold %f" % [_plan.relief_peak, _plan.relief_threshold])
-		result = 1
-	return result
+func _test_hills_are_patches_of_several_lots() -> int:
+	# About 12% of the lots, in patches (lots sharing an edge; the way round
+	# closes) of at least 4.
+	var hills := _count_zone(_plan, SectionPlan.Zone.HILL)
+	if hills < int(0.08 * 3840) or hills > int(0.13 * 3840):
+		print("FAIL _test_hills_are_patches_of_several_lots: %d hill lots, expected 8-13%% of 3840" % hills)
+		return 1
+	var seen := {}
+	for start in range(3840):
+		if _plan.zones[start] != SectionPlan.Zone.HILL or seen.has(start):
+			continue
+		seen[start] = true
+		var patch := [start]
+		var k := 0
+		while k < patch.size():
+			var i: int = patch[k]
+			k += 1
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var along: int = i / 48 + step.y
+				if along < 0 or along >= 80:
+					continue
+				var j: int = _plan.lot_index(i % 48 + step.x, along)
+				if _plan.zones[j] == SectionPlan.Zone.HILL and not seen.has(j):
+					seen[j] = true
+					patch.append(j)
+		if patch.size() < 4:
+			print("FAIL _test_hills_are_patches_of_several_lots: a hill patch of %d lots at lot %d" % [patch.size(), start])
+			return 1
+	return 0
 
-func _test_no_road_touches_relief() -> int:
+func _test_no_road_touches_raised_land() -> int:
 	for along in range(80):
 		for around in range(48):
-			if _plan.zone_at(around, along) != SectionPlan.Zone.RELIEF:
+			if not SectionPlan.is_raised(_plan.zone_at(around, along)):
 				continue
 			if _plan.road_on_west(around, along) + _plan.road_on_east(around, along) + _plan.road_on_south(around, along) + _plan.road_on_north(around, along) != 0:
-				print("FAIL _test_no_road_touches_relief: RELIEF lot (%d, %d) has a road on an edge" % [around, along])
+				print("FAIL _test_no_road_touches_raised_land: raised lot (%d, %d) has a road on an edge" % [around, along])
 				return 1
 	return 0
 
-const FLAT_ZONES := [SectionPlan.Zone.TOWN, SectionPlan.Zone.CITY, SectionPlan.Zone.WATER]
+func _test_heights_without_a_chain_stay_under_150() -> int:
+	# Hills only: every grid point between 0 and 150 m.
+	if _plan.has_chain:
+		print("FAIL _test_heights_without_a_chain_stay_under_150: section 42 has a chain; pick a section without one")
+		return 1
+	var highest := 0.0
+	for h in _plan.heights:
+		highest = maxf(highest, h)
+		if h < 0.0 or h > 150.001:
+			print("FAIL _test_heights_without_a_chain_stay_under_150: %f m" % h)
+			return 1
+	print("  highest hill: %.0f m" % highest)
+	return 0
+
+const FLAT_ZONES := [SectionPlan.Zone.FIELD, SectionPlan.Zone.TOWN, SectionPlan.Zone.CITY, SectionPlan.Zone.WATER]
 
 func _test_same_index_same_heights() -> int:
 	var again = SectionGenerator.generate(42, RADIUS, LENGTH)
@@ -247,28 +266,6 @@ func _test_flat_zones_and_ends_stay_at_zero() -> int:
 		if absf(_plan.grid_height(column, 0)) > 0.001 or absf(_plan.grid_height(column, 400)) > 0.001:
 			print("FAIL _test_flat_zones_and_ends_stay_at_zero: end row not flat at column %d" % column)
 			return 1
-	return 0
-
-func _test_heights_in_range_and_mountains_only_above_the_threshold() -> int:
-	var noise: FastNoiseLite = SectionGenerator.mountain_noise(_plan.section_index)
-	var step: Vector2 = _plan.height_step()
-	var highest := 0.0
-	for row in range(401):
-		for column in range(240):
-			var h: float = _plan.grid_height(column, row)
-			highest = maxf(highest, h)
-			if h < 0.0 or h > SectionGenerator.MOUNTAIN_HEIGHT + 0.001:
-				print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: %f m at (%d, %d)" % [h, column, row])
-				return 1
-			if h > SectionGenerator.HILL_HEIGHT + 0.001:
-				var value: float = noise.get_noise_3dv(SectionGenerator.surface_point(_plan, column * step.x, row * step.y))
-				if value <= _plan.relief_threshold:
-					print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: %f m at (%d, %d) with mountain noise below the threshold" % [h, column, row])
-					return 1
-	if highest < 200.0:
-		print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: highest point %f m, expected a mountain over 200 m" % highest)
-		return 1
-	print("  highest point: %.0f m" % highest)
 	return 0
 
 func _test_heights_join_where_the_way_round_closes() -> int:
