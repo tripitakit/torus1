@@ -11,6 +11,7 @@ func _init():
 	failures += _test_restart_action_is_bound_to_r()
 	failures += _test_world_environment_builds_the_sky()
 	failures += _test_void_cruiser_orbits_with_the_station()
+	failures += _test_moon_orbits_beside_the_planet()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -187,3 +188,14 @@ func _test_restart_action_is_bound_to_r() -> int:
 		print("FAIL _test_restart_action_is_bound_to_r: no 'restart' action on the R key")
 		return 1
 	return 0
+
+func _test_moon_orbits_beside_the_planet() -> int:
+	# Under PlanetSystem, beside the planet: the origin shift moves it too.
+	var scene: Node3D = (load("res://scenes/torus1_system.tscn") as PackedScene).instantiate()
+	var moon := scene.get_node_or_null("PlanetSystem/Moon")
+	var result := 0
+	if moon == null or moon.get_script() != load("res://scripts/moon.gd") or moon.planet_path != NodePath("../Planet"):
+		print("FAIL _test_moon_orbits_beside_the_planet: no moon under PlanetSystem, or not wired to the planet")
+		result = 1
+	scene.free()
+	return result

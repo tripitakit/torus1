@@ -1,0 +1,109 @@
+extends SceneTree
+
+# The moon node: its orbit seen from the ring, its tidal lock, its surface
+# mesh and its base site.
+
+const MoonScript = preload("res://scripts/moon.gd")
+const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+
+var _failures := 0
+var _system: Node3D
+var _planet: Node3D
+var _moon: Node3D
+
+func _initialize():
+	_system = Node3D.new()
+	_system.name = "PlanetSystem"
+	_system.position = Vector3(0.0, -4000.0, -6959600.0)
+	root.add_child(_system)
+	_planet = Node3D.new()
+	_planet.name = "Planet"
+	_system.add_child(_planet)
+	_moon = MoonScript.new()
+	_moon.name = "Moon"
+	var start := Time.get_ticks_msec()
+	_system.add_child(_moon)
+	print("  moon built in %d ms" % (Time.get_ticks_msec() - start))
+	_moon.set_physics_process(false)
+	await process_frame
+
+	_failures += _test_advances_at_the_relative_rate()
+	_failures += _test_base_faces_the_planet()
+	_failures += _test_base_transform_on_the_surface()
+	_failures += _test_surface_mesh()
+	_failures += _test_altitude()
+
+	if _failures == 0:
+		print("ALL TESTS PASSED")
+	else:
+		print("%d TEST(S) FAILED" % _failures)
+	quit()
+
+func _test_advances_at_the_relative_rate() -> int:
+	var before: float = _moon.angle
+	_moon.advance(10.0)
+	var offset: Vector3 = _moon.global_position - _planet.global_position
+	var result := 0
+	if not is_equal_approx(_moon.angle - before, 10.0 * _moon.relative_rate()) or absf(offset.length() - MoonOrbit.ORBIT_RADIUS) > 0.01 or absf(offset.y) > 0.01:
+		print("FAIL _test_advances_at_the_relative_rate: angle moved %e, offset %s" % [_moon.angle - before, offset])
+		result = 1
+	return result
+
+func _test_base_faces_the_planet() -> int:
+	# 30 degrees off the point right under the planet, at any orbit angle.
+	for angle in [0.0, 1.3, -2.0]:
+		_moon.angle = angle
+		_moon.advance(0.0)
+		var site: Vector3 = _moon.base_transform().origin
+		var to_planet: Vector3 = (_planet.global_position - _moon.global_position).normalized()
+		var off: float = rad_to_deg(acos(clampf((site - _moon.global_position).normalized().dot(to_planet), -1.0, 1.0)))
+		if absf(off - 30.0) > 0.01:
+			print("FAIL _test_base_faces_the_planet: base %.3f degrees off the planet's direction" % off)
+			return 1
+	return 0
+
+func _test_base_transform_on_the_surface() -> int:
+	var site: Transform3D = _moon.base_transform()
+	var up: Vector3 = (site.origin - _moon.global_position).normalized()
+	if absf(site.origin.distance_to(_moon.global_position) - MoonOrbit.RADIUS) > 0.01 or site.basis.y.normalized().dot(up) < 0.999999 or absf(site.basis.determinant() - 1.0) > 1e-6:
+		print("FAIL _test_base_transform_on_the_surface: %s" % site)
+		return 1
+	return 0
+
+func _test_surface_mesh() -> int:
+	var mesh: Mesh = (_moon.get_node("Surface") as MeshInstance3D).mesh
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	if vertices.size() < 150000 or vertices.size() > 300000:
+		print("FAIL _test_surface_mesh: %d vertices" % vertices.size())
+		return 1
+	for v in vertices:
+		# Mesh positions are 32-bit floats: ~2 cm at 250 km.
+		if absf(v.length() - MoonOrbit.RADIUS) > 0.05:
+			print("FAIL _test_surface_mesh: vertex %s off the sphere" % v)
+			return 1
+	# Front faces out (the winding of the rest of the project).
+	for t in range(0, indices.size(), 3):
+		var a: Vector3 = vertices[indices[t]]
+		var b: Vector3 = vertices[indices[t + 1]]
+		var c: Vector3 = vertices[indices[t + 2]]
+		if (c - a).cross(b - a).dot(a + b + c) <= 0.0:
+			print("FAIL _test_surface_mesh: triangle %d faces in" % (t / 3))
+			return 1
+	# Dense rings round the base: the first 20 rings at most 20.5 m apart.
+	var arcs: PackedFloat64Array = MoonScript.ring_arcs()
+	for k in range(20):
+		if arcs[k + 1] - arcs[k] > 20.5:
+			print("FAIL _test_surface_mesh: ring %d is %f m from the next" % [k, arcs[k + 1] - arcs[k]])
+			return 1
+	print("  moon mesh: %d vertices, %d rings" % [vertices.size(), arcs.size()])
+	return 0
+
+func _test_altitude() -> int:
+	var up := Vector3(0.3, 0.8, -0.2).normalized()
+	var point: Vector3 = _moon.global_position + up * (MoonOrbit.RADIUS + 100.0)
+	if absf(_moon.altitude(point) - 100.0) > 0.01 or _moon.up_at(point).dot(up) < 0.999999:
+		print("FAIL _test_altitude: %f" % _moon.altitude(point))
+		return 1
+	return 0

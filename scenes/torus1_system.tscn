@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/world_origin_rebase.gd" id="4_rebase"]
 [ext_resource type="Script" path="res://scripts/game_mode.gd" id="5_game_mode"]
 [ext_resource type="Script" path="res://scripts/space_sky.gd" id="6_sky"]
+[ext_resource type="Script" path="res://scripts/moon.gd" id="7_moon"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -29,6 +30,9 @@ script = ExtResource("1_planet")
 [node name="TorusStation" type="Node3D" parent="PlanetSystem" unique_id=1706718276]
 script = ExtResource("2_station")
 planet_node = NodePath("../Planet")
+
+[node name="Moon" type="Node3D" parent="PlanetSystem"]
+script = ExtResource("7_moon")
 
 [node name="TopDownCamera" type="Camera3D" parent="PlanetSystem" unique_id=716806475]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 20848800, 0)
