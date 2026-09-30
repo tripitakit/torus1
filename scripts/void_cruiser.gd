@@ -51,6 +51,13 @@ const SENSOR_DIRECTIONS := {
 }
 # The pilot's eye, inside the hull box, 7 m behind the bow face.
 const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
+# Landing on the moon (ground, pads, flat roofs): slower than these, and
+# level (the ship's up within LANDING_TILT of the local vertical, the nose
+# any way). Otherwise a crash.
+const LANDING_VERTICAL_SPEED := 5.0
+const LANDING_HORIZONTAL_SPEED := 2.0
+const LANDING_TILT := 0.4363323  # 25 degrees
+const HALF_HEIGHT := 3.75  # HULL_SIZE.y / 2
 # The wreck comes to rest this far above the planet's surface.
 const PLANET_CLEARANCE := 10.0
 
@@ -157,6 +164,15 @@ func _fly(delta: float) -> void:
 		_forward_hold_time = 0.0
 		return
 	var thrust_input := _read_thrust_input()
+	if is_landed:
+		# Only lifting off counts: the ship rests, carried with the moon.
+		if thrust_input.y <= 0.0:
+			_mouse_delta = Vector2.ZERO
+			_forward_hold_time = 0.0
+			velocity = Vector3.ZERO
+			angular_velocity = Vector3.ZERO
+			return
+		is_landed = false
 	_update_forward_hold_time(thrust_input.z, delta)
 	var dock := _nearest_dock()
 	thrust_scale = 1.0 if dock.is_empty() else DockingAssist.precision_factor(dock.distance)
@@ -168,6 +184,19 @@ func _fly(delta: float) -> void:
 # Any touch of the planet is a crash, no bounce: the move is swept against
 # the planet's sphere (PLANET_CLEARANCE up) before it is made.
 func _move(delta: float) -> void:
+	var moon := moon_node()
+	if in_moon_frame and moon != null:
+		# The moon's ground: a sphere HALF_HEIGHT under the ship's centre.
+		# Only moving down into it counts (lifting off starts on it).
+		var start := _world_position()
+		var up: Vector3 = moon.up_at(start)
+		if velocity.dot(up) < 0.0:
+			var entry := VoidCruiserPhysics.sphere_entry(start, start + velocity * delta, moon.centre(), MoonOrbit.RADIUS + HALF_HEIGHT)
+			if entry >= 0.0:
+				var point: Vector3 = start + velocity * delta * entry
+				var ground_up: Vector3 = moon.up_at(point)
+				touch_down(point, ground_up, moon.centre() + ground_up * (MoonOrbit.RADIUS + HALF_HEIGHT))
+				return
 	if has_planet:
 		var from := _world_position()
 		var entry := VoidCruiserPhysics.sphere_entry(from, from + velocity * delta, planet_center, planet_radius + PLANET_CLEARANCE)
@@ -175,6 +204,42 @@ func _move(delta: float) -> void:
 			_crash_at(from + velocity * delta * entry)
 			return
 	super(delta)
+
+static func landing_ok(motion: Vector3, up: Vector3, ship_up: Vector3) -> bool:
+	var along: float = motion.dot(up)
+	var across: float = (motion - up * along).length()
+	return -along < LANDING_VERTICAL_SPEED and across < LANDING_HORIZONTAL_SPEED and ship_up.normalized().dot(up) >= cos(LANDING_TILT)
+
+# Touching level ground at `point` (local up `up`): landed if slow and level,
+# otherwise a crash. On the moon's ground `rest` is where the ship's centre
+# comes to rest.
+func touch_down(point: Vector3, up: Vector3, rest: Vector3) -> void:
+	if not landing_ok(velocity, up, _world_basis().y):
+		crashed_on_moon = true
+		_crash_at(point)
+		return
+	if is_inside_tree():
+		global_position = rest
+	else:
+		position = rest
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	brake_engaged = false
+	cruise_locked = false
+	is_landed = true
+
+# Put down, landed, at `where` (GameMode's restart on a pad).
+func land_at(where: Transform3D) -> void:
+	global_transform = where
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	brake_engaged = false
+	cruise_locked = false
+	is_landed = true
+	in_moon_frame = true
+	var moon := moon_node()
+	if moon != null:
+		_moon_angle_seen = moon.angle
 
 func _crash_at(where: Vector3) -> void:
 	if is_inside_tree():
@@ -191,6 +256,8 @@ func _crash_at(where: Vector3) -> void:
 # Flying again after a crash (GameMode has placed the ship).
 func restart_after_crash() -> void:
 	is_crashed = false
+	crashed_on_moon = false
+	is_landed = false
 	velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_mouse_delta = Vector2.ZERO
@@ -432,20 +499,18 @@ func moon_node() -> Node3D:
 	var moon := get_node_or_null(moon_path) as Node3D
 	return moon if moon != null and moon.is_inside_tree() else null
 
-# In the moon's frame the ship turns with the moon about the planet's axis
-# (by however far the moon turned since the ship last looked); then it
-# joins the frame below ATTACH_ALTITUDE and leaves it above DETACH_ALTITUDE,
-# its velocity converted so the true motion does not jump.
+# The ship joins the moon's frame below ATTACH_ALTITUDE and leaves it above
+# DETACH_ALTITUDE, its velocity converted so the true motion does not jump;
+# then, in the frame, it turns with the moon about the planet's axis by
+# however far the moon turned since the ship last looked. Frame first, turn
+# second: the moon has already moved this tick, so a ship joining now is
+# carried this tick, and one leaving now is not (its ring-frame velocity
+# moves it instead).
 func _follow_moon() -> void:
 	var moon := moon_node()
 	if moon == null:
 		in_moon_frame = false
 		return
-	if in_moon_frame:
-		var turn: Transform3D = MoonOrbit.spin(moon.axis(), moon.angle - _moon_angle_seen, moon.planet_centre())
-		global_transform = turn * global_transform
-		velocity = turn.basis * velocity
-	_moon_angle_seen = moon.angle
 	var distance: float = global_position.distance_to(moon.centre())
 	var offset: Vector3 = global_position - moon.planet_centre()
 	if not in_moon_frame and distance < MoonOrbit.RADIUS + MoonOrbit.ATTACH_ALTITUDE:
@@ -454,6 +519,11 @@ func _follow_moon() -> void:
 	elif in_moon_frame and distance > MoonOrbit.RADIUS + MoonOrbit.DETACH_ALTITUDE:
 		velocity = MoonOrbit.to_ring_velocity(velocity, offset, moon.axis(), moon.relative_rate())
 		in_moon_frame = false
+	if in_moon_frame:
+		var turn: Transform3D = MoonOrbit.spin(moon.axis(), moon.angle - _moon_angle_seen, moon.planet_centre())
+		global_transform = turn * global_transform
+		velocity = turn.basis * velocity
+	_moon_angle_seen = moon.angle
 
 # The ship's velocity in the ring's frame, whichever frame it flies in.
 func ring_velocity() -> Vector3:

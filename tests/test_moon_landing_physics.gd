@@ -40,6 +40,13 @@ func _initialize():
 	_failures += await _test_attach_and_detach_keep_the_true_velocity()
 	_failures += await _test_carried_with_the_moon()
 	_failures += await _test_moon_gravity_pulls_down()
+	_failures += _test_landing_ok_limits()
+	_failures += await _test_soft_level_touch_lands()
+	_failures += await _test_landed_ship_stays_put_for_many_ticks()
+	_failures += await _test_up_thrust_takes_off()
+	_failures += await _test_fast_touch_crashes()
+	_failures += await _test_sideways_touch_crashes()
+	_failures += await _test_tilted_touch_crashes()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -75,20 +82,27 @@ func _test_attach_and_detach_keep_the_true_velocity() -> int:
 	var was: bool = _ship.in_moon_frame
 	var previous: Vector3 = _ship.ring_velocity()
 	var worst := 0.0
+	# Position too: each tick's step (from the planet's centre, which the
+	# origin shift moves with the ship) matches the true velocity.
+	var place: Vector3 = _ship.global_position - _moon.planet_centre()
+	var worst_step := 0.0
 	# Down past 30 km, then back up past 32 km.
 	for tick in range(800):
 		if tick == 240:
 			_ship.velocity = _moon.up_at(_ship.global_position) * 400.0
 		await physics_frame
 		var now: Vector3 = _ship.ring_velocity()
+		var here: Vector3 = _ship.global_position - _moon.planet_centre()
 		if tick != 240 and tick != 241:
 			worst = maxf(worst, now.distance_to(previous))
+			worst_step = maxf(worst_step, (here - place).distance_to(now / 60.0))
+		place = here
 		previous = now
 		if _ship.in_moon_frame != was:
 			switches += 1
 			was = _ship.in_moon_frame
-	if switches != 2 or _ship.in_moon_frame or worst > 0.1:
-		print("FAIL _test_attach_and_detach_keep_the_true_velocity: %d frame switches, attached at the end %s, largest jump %.3f m/s" % [switches, _ship.in_moon_frame, worst])
+	if switches != 2 or _ship.in_moon_frame or worst > 0.1 or worst_step > 0.5:
+		print("FAIL _test_attach_and_detach_keep_the_true_velocity: %d frame switches, attached at the end %s, largest jump %.3f m/s, step off by %.2f m" % [switches, _ship.in_moon_frame, worst, worst_step])
 		result = 1
 	return result
 
@@ -122,3 +136,102 @@ func _test_moon_gravity_pulls_down() -> int:
 		print("FAIL _test_moon_gravity_pulls_down: attached %s, falling %.3f m/s, across %.3f m/s after 1 s" % [_ship.in_moon_frame, down, across])
 		result = 1
 	return result
+
+var _crashes := 0
+
+func _on_crashed() -> void:
+	_crashes += 1
+
+func _test_landing_ok_limits() -> int:
+	var up := Vector3(0.0, 1.0, 0.0)
+	var level := Vector3(0.0, 1.0, 0.0)
+	var tilted_24 := Basis(Vector3(1.0, 0.0, 0.0), deg_to_rad(24.0)) * level
+	var tilted_26 := Basis(Vector3(0.0, 0.0, 1.0), deg_to_rad(26.0)) * level
+	var cases := [
+		[Vector3(1.9, -4.9, 0.0), tilted_24, true],
+		[Vector3(0.0, -5.1, 0.0), level, false],
+		[Vector3(2.1, -1.0, 0.0), level, false],
+		[Vector3(0.0, -1.0, 0.0), tilted_26, false],
+		[Vector3(0.0, -1.0, 1.0), level, true],
+	]
+	for c in cases:
+		if VoidCruiserScript.landing_ok(c[0], up, c[1]) != c[2]:
+			print("FAIL _test_landing_ok_limits: velocity %s, ship up %s gave %s" % [c[0], c[1], not c[2]])
+			return 1
+	return 0
+
+# The ship `height` metres (bottom of the hull) above the ground, moving at
+# `velocity` in the moon's frame, level or tilted by `tilt` degrees; waits
+# up to 20 s for it to land or crash.
+# `velocity`: x across (the ship's side), y up.
+func _drop(direction: Vector3, height: float, velocity: Vector2, tilt := 0.0) -> void:
+	var point := _above(direction, height + VoidCruiserScript.HALF_HEIGHT)
+	_place(point)
+	await physics_frame
+	var up: Vector3 = _moon.up_at(_ship.global_position)
+	var level: Basis = _ship.global_transform.basis
+	_ship.global_transform.basis = Basis(level.x.normalized(), deg_to_rad(tilt)) * level
+	var side: Vector3 = level.x.normalized()
+	_ship.velocity = up * velocity.y + side * velocity.x
+	if not _ship.crashed.is_connected(_on_crashed):
+		_ship.crashed.connect(_on_crashed)
+	_crashes = 0
+	for tick in range(1200):
+		await physics_frame
+		if _ship.is_landed or _ship.is_crashed:
+			return
+
+func _test_soft_level_touch_lands() -> int:
+	var direction := Vector3(0.1, 0.8, -0.6)
+	await _drop(direction, 5.0, Vector2(0.0, -1.0))
+	var height: float = _moon.altitude(_ship.global_position)
+	if not _ship.is_landed or _crashes != 0 or absf(height - VoidCruiserScript.HALF_HEIGHT) > 0.05 or _ship.velocity != Vector3.ZERO:
+		print("FAIL _test_soft_level_touch_lands: landed %s, crashes %d, centre %.3f m up, velocity %s" % [_ship.is_landed, _crashes, height, _ship.velocity])
+		return 1
+	return 0
+
+func _test_landed_ship_stays_put_for_many_ticks() -> int:
+	# Ten seconds: the moon carries the ship ~19 km, so the world origin
+	# shifts several times under it.
+	var start := _moon_local()
+	var system: Node3D = _world.get_node("PlanetSystem")
+	var system_start := system.position
+	for tick in range(600):
+		await physics_frame
+	var drift: float = _moon_local().distance_to(start)
+	if not _ship.is_landed or drift > 0.01 or system.position.distance_to(system_start) < 5000.0:
+		print("FAIL _test_landed_ship_stays_put_for_many_ticks: landed %s, drifted %.4f m, world shifted %.0f m" % [_ship.is_landed, drift, system.position.distance_to(system_start)])
+		return 1
+	return 0
+
+func _test_up_thrust_takes_off() -> int:
+	Input.action_press("move_up")
+	for tick in range(60):
+		await physics_frame
+	Input.action_release("move_up")
+	await physics_frame
+	var height: float = _moon.altitude(_ship.global_position)
+	if _ship.is_landed or height < 10.0:
+		print("FAIL _test_up_thrust_takes_off: landed %s, %.1f m up" % [_ship.is_landed, height])
+		return 1
+	return 0
+
+func _crash_check(test_name: String) -> int:
+	var crashed: bool = _ship.is_crashed and _ship.crashed_on_moon and _crashes == 1
+	_ship.restart_after_crash()
+	if not crashed or _ship.is_landed:
+		print("FAIL %s: crashed %s on the moon %s (%d signals), landed %s" % [test_name, _ship.is_crashed, _ship.crashed_on_moon, _crashes, _ship.is_landed])
+		return 1
+	return 0
+
+func _test_fast_touch_crashes() -> int:
+	await _drop(Vector3(-0.4, 0.8, 0.1), 5.0, Vector2(0.0, -8.0))
+	return _crash_check("_test_fast_touch_crashes")
+
+func _test_sideways_touch_crashes() -> int:
+	await _drop(Vector3(0.3, 0.9, 0.3), 5.0, Vector2(4.0, -1.0))
+	return _crash_check("_test_sideways_touch_crashes")
+
+func _test_tilted_touch_crashes() -> int:
+	await _drop(Vector3(-0.2, 0.9, -0.4), 5.0, Vector2(0.0, -1.0), 30.0)
+	return _crash_check("_test_tilted_touch_crashes")
