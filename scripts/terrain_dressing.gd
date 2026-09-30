@@ -2,9 +2,10 @@ extends RefCounted
 
 # Turns a section plan into geometry, one interior terrain chunk at a time,
 # in the chunk's own frame (InteriorWorld turns each chunk about Z and shifts
-# it along Z). The ground is a mosaic at level 0 with no overlapping layers:
-# with the interior camera (near 0.2 m, far 60 km) the depth buffer cannot
-# separate surfaces less than a metre apart at 2 km, so layers would flicker.
+# it along Z). The ground is a mosaic with no overlapping layers, at level 0
+# or following the plan's heights: with the interior camera (near 0.2 m, far
+# 60 km) the depth buffer cannot separate surfaces less than a metre apart at
+# 2 km, so layers would flicker.
 
 const SectionPlanScript = preload("res://scripts/section_plan.gd")
 const BuildingShapesScript = preload("res://scripts/building_shapes.gd")
@@ -22,6 +23,11 @@ const CITY_GROUND_COLOR := Color(0.5, 0.5, 0.52)
 const MAIN_ROAD_COLOR := Color(0.2, 0.2, 0.22)
 const STREET_COLOR := Color(0.32, 0.32, 0.34)
 const WATER_COLOR := Color(0.12, 0.32, 0.5)
+# RELIEF lots: grass low and gentle, rock on steep slopes and high up.
+const GRASS_COLOR := Color(0.36, 0.5, 0.26)
+const ROCK_COLOR := Color(0.46, 0.44, 0.41)
+# Two breaks closer than this are one (float rounding at lot edges).
+const BREAK_TOLERANCE := 0.01
 # One shader for every building (see BUILDING_SHADER): facades only on walls,
 # driven by each instance's colour and custom data (building_custom).
 const BUILDING_GLOW_ENERGY := 1.2
@@ -150,6 +156,70 @@ class MeshArrays:
 			var p00: int = base + s * 2
 			indices.append_array(PackedInt32Array([p00, p00 + 2, p00 + 1, p00 + 2, p00 + 3, p00 + 1]))
 
+	# The same rectangle following the plan's heights. chunk_start is the
+	# chunk's (x, z) origin in section metres, lot_start the lot's (x, z) in
+	# chunk metres. Split on every height-grid line and road-band edge
+	# (relief_breaks below) so neighbours share every edge vertex. RELIEF
+	# lots take their colour from height and slope.
+	func add_relief_patch(plan, chunk_start: Vector2, lot_start: Vector2, x0: float, x1: float, z0: float, z1: float, color: Color, rows_along: bool, relief_lot: bool) -> void:
+		var step: Vector2 = plan.height_step()
+		var xs := relief_breaks(x0, x1, chunk_start.x, step.x, lot_start.x, plan.lot_width)
+		var zs := relief_breaks(z0, z1, chunk_start.y, step.y, lot_start.y, plan.lot_length)
+		var radius: float = plan.radius
+		var base: int = vertices.size()
+		for x: float in xs:
+			var angle: float = x / radius
+			var outward := Vector3(cos(angle), sin(angle), 0.0)
+			var around := Vector3(-sin(angle), cos(angle), 0.0)
+			for z: float in zs:
+				var h: float = plan.height_at(chunk_start.x + x, chunk_start.y + z)
+				var slope: Vector2 = plan.slope_at(chunk_start.x + x, chunk_start.y + z)
+				var k: float = (radius - h) / radius
+				vertices.append(outward * (radius - h) + Vector3(0.0, 0.0, z))
+				normals.append((-outward * k - around * slope.x - Vector3(0.0, 0.0, k * slope.y)).normalized())
+				colors.append(relief_color(h, slope.length()) if relief_lot else color)
+				uvs.append(Vector2(x, z) / ROW_SPACING if rows_along else Vector2(z, x) / ROW_SPACING)
+		# Same winding as add_patch: (x_i, z_j) is base + i * zs.size() + j.
+		var nz: int = zs.size()
+		for i in range(xs.size() - 1):
+			for j in range(nz - 1):
+				var p00: int = base + i * nz + j
+				indices.append_array(PackedInt32Array([p00, p00 + nz, p00 + 1, p00 + nz, p00 + nz + 1, p00 + 1]))
+
+	# Triangle corners in draw order, for a collision shape.
+	func faces() -> PackedVector3Array:
+		var out := PackedVector3Array()
+		for i in indices:
+			out.append(vertices[i])
+		return out
+
+	static func relief_color(height: float, slope: float) -> Color:
+		var rock := maxf(smoothstep(0.5, 0.9, slope), smoothstep(180.0, 300.0, height))
+		return GRASS_COLOR.lerp(ROCK_COLOR, rock)
+
+	# Where a relief patch from a to b (chunk metres, one axis) is split: its
+	# two ends, every height-grid line inside it (grid lines sit at whole
+	# steps of section metres, chunk_start being the chunk's origin), and
+	# every edge a road band of its lot could have (half a street or main
+	# road in from either lot edge). Two patches sharing an edge thus share
+	# every vertex on it.
+	static func relief_breaks(a: float, b: float, chunk_start: float, step: float, lot_start: float, lot_size: float) -> PackedFloat64Array:
+		var street: float = SectionPlanScript.road_width(SectionPlanScript.Road.STREET) * 0.5
+		var main: float = SectionPlanScript.road_width(SectionPlanScript.Road.MAIN) * 0.5
+		var lot_end: float = lot_start + lot_size
+		var cuts: Array[float] = [lot_start + street, lot_start + main, lot_end - main, lot_end - street]
+		var k := ceili((chunk_start + a) / step)
+		while k * step - chunk_start < b:
+			cuts.append(k * step - chunk_start)
+			k += 1
+		cuts.sort()
+		var out := PackedFloat64Array([a])
+		for cut in cuts:
+			if cut > out[out.size() - 1] + BREAK_TOLERANCE and cut < b - BREAK_TOLERANCE:
+				out.append(cut)
+		out.append(b)
+		return out
+
 	func to_arrays() -> Array:
 		var arrays := []
 		arrays.resize(Mesh.ARRAY_MAX)
@@ -209,6 +279,8 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 	var fields := MeshArrays.new()
 	var paved := MeshArrays.new()
 	var water := MeshArrays.new()
+	var relief: bool = plan.chunk_has_relief(chunk_around, chunk_along)
+	var chunk_start := Vector2(chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND * plan.lot_width, chunk_along * SectionPlanScript.CHUNK_LOTS_ALONG * plan.lot_length)
 	for lot_x in range(SectionPlanScript.CHUNK_LOTS_AROUND):
 		for lot_z in range(SectionPlanScript.CHUNK_LOTS_ALONG):
 			var around: int = chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND + lot_x
@@ -217,9 +289,12 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 			var x1: float = x0 + plan.lot_width
 			var z0: float = lot_z * plan.lot_length
 			var z1: float = z0 + plan.lot_length
+			var lot_start := Vector2(x0, z0)
 			var zone: int = plan.zone_at(around, along)
-			if zone == SectionPlanScript.Zone.WATER:
-				water.add_patch(plan.radius, x0, x1, z0, z1, WATER_COLOR, true)
+			if zone == SectionPlanScript.Zone.WATER or zone == SectionPlanScript.Zone.RELIEF:
+				# Whole lot, no roads (none border a lake or a RELIEF lot).
+				var wet: bool = zone == SectionPlanScript.Zone.WATER
+				_add(water if wet else paved, relief, plan, chunk_start, lot_start, x0, x1, z0, z1, WATER_COLOR if wet else GRASS_COLOR, true, not wet)
 				continue
 			var west: int = plan.road_on_west(around, along)
 			var east: int = plan.road_on_east(around, along)
@@ -239,13 +314,13 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 						continue
 					var road := cell_road(column, row, west, east, south, north)
 					if road == SectionPlanScript.Road.MAIN:
-						paved.add_patch(plan.radius, cx0, cx1, cz0, cz1, MAIN_ROAD_COLOR, true)
+						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, MAIN_ROAD_COLOR, true, false)
 					elif road == SectionPlanScript.Road.STREET:
-						paved.add_patch(plan.radius, cx0, cx1, cz0, cz1, STREET_COLOR, true)
+						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, STREET_COLOR, true, false)
 					elif zone == SectionPlanScript.Zone.FIELD:
-						fields.add_patch(plan.radius, cx0, cx1, cz0, cz1, CROP_COLORS[plan.crops[lot]], plan.rows_along[lot] == 1)
+						_add(fields, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, CROP_COLORS[plan.crops[lot]], plan.rows_along[lot] == 1, false)
 					else:
-						paved.add_patch(plan.radius, cx0, cx1, cz0, cz1, TOWN_GROUND_COLOR if zone == SectionPlanScript.Zone.TOWN else CITY_GROUND_COLOR, true)
+						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, TOWN_GROUND_COLOR if zone == SectionPlanScript.Zone.TOWN else CITY_GROUND_COLOR, true, false)
 	var surface_mesh := ArrayMesh.new()
 	for part in [[fields, field_material], [paved, paved_material]]:
 		var arrays: MeshArrays = part[0]
@@ -266,6 +341,14 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 		water_node.material_override = water_material
 		chunk.add_child(water_node)
 
+# One patch: split and lifted to the plan's heights in a chunk with relief,
+# the old level-0 patch otherwise.
+static func _add(arrays: MeshArrays, relief: bool, plan, chunk_start: Vector2, lot_start: Vector2, x0: float, x1: float, z0: float, z1: float, color: Color, rows_along: bool, relief_lot: bool) -> void:
+	if relief:
+		arrays.add_relief_patch(plan, chunk_start, lot_start, x0, x1, z0, z1, color, rows_along, relief_lot)
+	else:
+		arrays.add_patch(plan.radius, x0, x1, z0, z1, color, rows_along)
+
 # One filare per repeat: a lighter band and a darker furrow.
 static func _stripe_texture() -> ImageTexture:
 	var image := Image.create(16, 16, false, Image.FORMAT_RGB8)
@@ -275,6 +358,12 @@ static func _stripe_texture() -> ImageTexture:
 			image.set_pixel(x, y, Color(shade, shade, shade))
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
+
+static func relief_color(height: float, slope: float) -> Color:
+	return MeshArrays.relief_color(height, slope)
+
+static func relief_breaks(a: float, b: float, chunk_start: float, step: float, lot_start: float, lot_size: float) -> PackedFloat64Array:
+	return MeshArrays.relief_breaks(a, b, chunk_start, step, lot_start, lot_size)
 
 # A unit box scaled to size (width around, height, depth along), its base
 # centred on the wall at (x, z) and its "up" toward the axis.

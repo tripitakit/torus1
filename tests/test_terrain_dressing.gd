@@ -14,8 +14,12 @@ var _groups: Dictionary = _plan.group_buildings_by_chunk()
 func _init():
 	var failures := 0
 	failures += _test_cell_road_picks_edges_and_crossings()
-	failures += _test_ground_vertices_at_level_zero_facing_the_axis()
+	failures += _test_ground_vertices_at_their_height_facing_the_axis()
 	failures += _test_ground_area_is_the_chunk_area()
+	failures += _test_flat_plan_keeps_the_level_zero_mosaic()
+	failures += _test_relief_normals_lean_downhill()
+	failures += _test_relief_chunk_has_no_cracks()
+	failures += _test_relief_colours()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -79,9 +83,27 @@ func _test_cell_road_picks_edges_and_crossings() -> int:
 			return 1
 	return 0
 
-func _test_ground_vertices_at_level_zero_facing_the_axis() -> int:
-	var chunk := _dress(_find_chunk(SectionPlan.Zone.WATER, true))
-	var result := 0
+func _chunk_start(key: Vector2i) -> Vector2:
+	return Vector2(key.x * 3 * _plan.lot_width, key.y * 4 * _plan.lot_length)
+
+# Section coordinates of a chunk-local vertex.
+func _section_xz(key: Vector2i, v: Vector3) -> Vector2:
+	return _chunk_start(key) + Vector2(atan2(v.y, v.x) * RADIUS, v.z)
+
+func _raised_chunk() -> Vector2i:
+	# The chunk with the highest grid point: surely dressed with relief.
+	var best := Vector2i.ZERO
+	var highest := 0.0
+	for along in range(20):
+		for around in range(16):
+			for row in range(along * 20, along * 20 + 21, 5):
+				for column in range(around * 15, around * 15 + 16, 5):
+					if _plan.grid_height(column, row) > highest:
+						highest = _plan.grid_height(column, row)
+						best = Vector2i(around, along)
+	return best
+
+func _check_ground_heights(test_name: String, plan, key: Vector2i, chunk: Node) -> int:
 	for mesh: Mesh in _ground_meshes(chunk):
 		for s in range(mesh.get_surface_count()):
 			var arrays: Array = mesh.surface_get_arrays(s)
@@ -89,38 +111,176 @@ func _test_ground_vertices_at_level_zero_facing_the_axis() -> int:
 			var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 			for i in range(vertices.size()):
 				var v: Vector3 = vertices[i]
-				if absf(Vector2(v.x, v.y).length() - RADIUS) > 0.001 or normals[i].dot(Vector3(-v.x, -v.y, 0.0)) <= 0.0:
-					print("FAIL _test_ground_vertices_at_level_zero_facing_the_axis: vertex %s normal %s" % [v, normals[i]])
-					chunk.free()
+				var at := Vector2(key.x * 3 * plan.lot_width, key.y * 4 * plan.lot_length) + Vector2(atan2(v.y, v.x) * RADIUS, v.z)
+				var expected: float = RADIUS - plan.height_at(at.x, at.y)
+				if absf(Vector2(v.x, v.y).length() - expected) > 0.001 or normals[i].dot(Vector3(-v.x, -v.y, 0.0)) <= 0.0:
+					print("FAIL %s: vertex %s is %.3f from the axis (expected %.3f), normal %s" % [test_name, v, Vector2(v.x, v.y).length(), expected, normals[i]])
 					return 1
-	chunk.free()
+	return 0
+
+func _test_ground_vertices_at_their_height_facing_the_axis() -> int:
+	var result := 0
+	for key in [_find_chunk(SectionPlan.Zone.WATER, true), _raised_chunk()]:
+		var chunk := _dress(key)
+		result = maxi(result, _check_ground_heights("_test_ground_vertices_at_their_height_facing_the_axis", _plan, key, chunk))
+		chunk.free()
 	return result
 
-func _triangle_area(mesh: Mesh) -> float:
+# Area of the mesh pushed back onto the cylinder: the relief lifts vertices
+# toward the axis, but the patches still tile the chunk once.
+func _projected_area(mesh: Mesh) -> float:
 	var area := 0.0
 	for s in range(mesh.get_surface_count()):
 		var arrays: Array = mesh.surface_get_arrays(s)
 		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+		var flat := PackedVector3Array()
+		for v in vertices:
+			var r := Vector2(v.x, v.y).length()
+			flat.append(Vector3(v.x * RADIUS / r, v.y * RADIUS / r, v.z))
 		for t in range(0, indices.size(), 3):
-			var a: Vector3 = vertices[indices[t]]
-			area += (vertices[indices[t + 1]] - a).cross(vertices[indices[t + 2]] - a).length() * 0.5
+			var a: Vector3 = flat[indices[t]]
+			area += (flat[indices[t + 1]] - a).cross(flat[indices[t + 2]] - a).length() * 0.5
 	return area
 
 func _test_ground_area_is_the_chunk_area() -> int:
 	# A mosaic with no gaps and no overlaps covers exactly the chunk (chords
 	# are ~0.01% shorter than arcs). An overlap adds area; a gap removes it.
 	var result := 0
-	for key in [_find_chunk(SectionPlan.Zone.WATER, true), _find_chunk(SectionPlan.Zone.TOWN, true), _find_chunk(SectionPlan.Zone.CITY, true)]:
+	for key in [_find_chunk(SectionPlan.Zone.WATER, true), _find_chunk(SectionPlan.Zone.TOWN, true), _find_chunk(SectionPlan.Zone.CITY, true), _raised_chunk()]:
 		var chunk := _dress(key)
 		var area := 0.0
 		for mesh: Mesh in _ground_meshes(chunk):
-			area += _triangle_area(mesh)
+			area += _projected_area(mesh)
 		var expected: float = 3.0 * _plan.lot_width * 4.0 * _plan.lot_length
 		if absf(area - expected) > expected * 0.001:
 			print("FAIL _test_ground_area_is_the_chunk_area: chunk %s covers %.1f m2, expected %.1f" % [key, area, expected])
 			result = 1
 		chunk.free()
+	return result
+
+func _test_flat_plan_keeps_the_level_zero_mosaic() -> int:
+	# The same plan with no heights: the old path, every vertex at the radius,
+	# fewer vertices than the same chunk dressed with relief.
+	var flat = SectionGenerator.generate(42, RADIUS, 20000.0)
+	flat.heights = PackedFloat32Array()
+	var key := _raised_chunk()
+	var chunk := StaticBody3D.new()
+	_dressing.dress_chunk(chunk, flat, key.x, key.y, _groups.get(key, []))
+	var result := _check_ground_heights("_test_flat_plan_keeps_the_level_zero_mosaic", flat, key, chunk)
+	var raised := _dress(key)
+	var flat_vertices := 0
+	var raised_vertices := 0
+	for mesh: Mesh in _ground_meshes(chunk):
+		for s in range(mesh.get_surface_count()):
+			flat_vertices += (mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	for mesh: Mesh in _ground_meshes(raised):
+		for s in range(mesh.get_surface_count()):
+			raised_vertices += (mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	print("  chunk %s: %d vertices flat, %d with relief" % [key, flat_vertices, raised_vertices])
+	if raised_vertices <= flat_vertices:
+		print("FAIL _test_flat_plan_keeps_the_level_zero_mosaic: the relief chunk is not split finer than the flat one")
+		result = 1
+	chunk.free()
+	raised.free()
+	return result
+
+func _test_relief_normals_lean_downhill() -> int:
+	var key := _raised_chunk()
+	var chunk := _dress(key)
+	var result := 0
+	var checked := 0
+	var surface: Mesh = (chunk.get_node("Surface") as MeshInstance3D).mesh
+	for s in range(surface.get_surface_count()):
+		var arrays: Array = surface.surface_get_arrays(s)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		for i in range(vertices.size()):
+			var v: Vector3 = vertices[i]
+			var at := _section_xz(key, v)
+			var slope: Vector2 = _plan.slope_at(at.x, at.y)
+			var angle := atan2(v.y, v.x)
+			var around := Vector3(-sin(angle), cos(angle), 0.0)
+			# Uphill toward +x: the face turns toward -x (and likewise for z).
+			if (slope.x > 0.1 and normals[i].dot(around) >= 0.0) or (slope.x < -0.1 and normals[i].dot(around) <= 0.0) or (slope.y > 0.1 and normals[i].z >= 0.0) or (slope.y < -0.1 and normals[i].z <= 0.0):
+				print("FAIL _test_relief_normals_lean_downhill: normal %s at %s with slope %s" % [normals[i], v, slope])
+				result = 1
+				break
+			if slope.length() > 0.1:
+				checked += 1
+	if checked == 0:
+		print("FAIL _test_relief_normals_lean_downhill: no sloped vertex in chunk %s" % key)
+		result = 1
+	chunk.free()
+	return result
+
+func _test_relief_chunk_has_no_cracks() -> int:
+	# Every triangle edge used by only one triangle must lie on the chunk's
+	# border: inside, every edge is shared by exactly two triangles, even
+	# between a 6 m road band and a 250 m field.
+	var key := _raised_chunk()
+	var chunk := _dress(key)
+	var edges := {}
+	for mesh: Mesh in _ground_meshes(chunk):
+		for s in range(mesh.get_surface_count()):
+			var arrays: Array = mesh.surface_get_arrays(s)
+			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			for t in range(0, indices.size(), 3):
+				for e in range(3):
+					var a: Vector3 = vertices[indices[t + e]].snappedf(0.001)
+					var b: Vector3 = vertices[indices[t + (e + 1) % 3]].snappedf(0.001)
+					var edge_key := [a, b] if str(a) < str(b) else [b, a]
+					edges[edge_key] = edges.get(edge_key, 0) + 1
+	var chunk_width: float = 3.0 * _plan.lot_width
+	var chunk_length: float = 4.0 * _plan.lot_length
+	var result := 0
+	for edge_key in edges:
+		if edges[edge_key] != 1:
+			continue
+		var on_border := true
+		for p: Vector3 in edge_key:
+			var x: float = atan2(p.y, p.x) * RADIUS
+			var at_side: bool = absf(x) < 0.01 or absf(x - chunk_width) < 0.01
+			var at_end: bool = absf(p.z) < 0.01 or absf(p.z - chunk_length) < 0.01
+			on_border = on_border and (at_side or at_end)
+		if not on_border:
+			print("FAIL _test_relief_chunk_has_no_cracks: open edge %s inside chunk %s" % [edge_key, key])
+			result = 1
+			break
+	chunk.free()
+	return result
+
+func _test_relief_colours() -> int:
+	var result := 0
+	if not TerrainDressing.relief_color(10.0, 0.1).is_equal_approx(TerrainDressing.GRASS_COLOR) or not TerrainDressing.relief_color(320.0, 0.1).is_equal_approx(TerrainDressing.ROCK_COLOR) or not TerrainDressing.relief_color(10.0, 1.0).is_equal_approx(TerrainDressing.ROCK_COLOR):
+		print("FAIL _test_relief_colours: grass low and flat, rock high or steep")
+		result = 1
+	# Inside a RELIEF lot, each vertex takes the colour of its height and slope.
+	var key := _find_chunk(SectionPlan.Zone.RELIEF, true)
+	var chunk := _dress(key)
+	var surface: Mesh = (chunk.get_node("Surface") as MeshInstance3D).mesh
+	var checked := 0
+	for s in range(surface.get_surface_count()):
+		var arrays: Array = surface.surface_get_arrays(s)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+		for i in range(vertices.size()):
+			var at := _section_xz(key, vertices[i])
+			var lot := Vector2i(floori(at.x / _plan.lot_width), floori(at.y / _plan.lot_length))
+			var inside: bool = fposmod(at.x, _plan.lot_width) > 1.0 and fposmod(at.x, _plan.lot_width) < _plan.lot_width - 1.0 and fposmod(at.y, _plan.lot_length) > 1.0 and fposmod(at.y, _plan.lot_length) < _plan.lot_length - 1.0
+			if not inside or _plan.zone_at(lot.x, lot.y) != SectionPlan.Zone.RELIEF:
+				continue
+			var expected: Color = TerrainDressing.relief_color(_plan.height_at(at.x, at.y), _plan.slope_at(at.x, at.y).length())
+			if absf(colors[i].r - expected.r) > 1.0 / 255.0 or absf(colors[i].g - expected.g) > 1.0 / 255.0 or absf(colors[i].b - expected.b) > 1.0 / 255.0:
+				print("FAIL _test_relief_colours: vertex %s coloured %s, expected %s" % [vertices[i], colors[i], expected])
+				result = 1
+				break
+			checked += 1
+	if checked == 0:
+		print("FAIL _test_relief_colours: no RELIEF vertex found in chunk %s" % key)
+		result = 1
+	chunk.free()
 	return result
 
 func _test_water_only_where_the_plan_has_lakes() -> int:
