@@ -313,7 +313,10 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 			chunks.append(Vector2i(around, along))
 			grounds.append(GroundSlot.new())
 	state.grounds = grounds
-	state.ground_task = WorkerThreadPool.add_group_task(state.build_ground, grounds.size())
+	# High priority: a low-priority group gets about a third of the pool (3.6x
+	# measured on 16 threads, against 9x). Two threads stay free for the main
+	# and render threads.
+	state.ground_task = WorkerThreadPool.add_group_task(state.build_ground, grounds.size(), maxi(1, OS.get_processor_count() - 2), true)
 	chunks.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return absf(start_z + (a.y + 0.5) * CHUNK_LENGTH - focus_z) < absf(start_z + (b.y + 0.5) * CHUNK_LENGTH - focus_z))
 	state.pending_chunks = chunks

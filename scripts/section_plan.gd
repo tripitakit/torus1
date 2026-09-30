@@ -111,9 +111,12 @@ func slope_at(x: float, z: float) -> Vector2:
 	var sample := sample_at(x, z)
 	return Vector2(sample.y, sample.z)
 
-# (height, dh/dx, dh/dz) at (x, z), each bilinear between the four grid
-# points around it; x wraps around. One cell lookup for all three: the
-# terrain dressing calls it for every vertex.
+# (height, dh/dx, dh/dz) at (x, z); x wraps around. The height follows the
+# grid cell's two triangles, split along its (x1, z0)-(x0, z1) diagonal like
+# the relief collision (TerrainDressing.relief_collision_faces), so what is
+# drawn lies on what collides. The slope is bilinear between the grid
+# points' central differences: smooth shading across the triangles. One
+# cell lookup for all three: the terrain dressing inlines it per vertex.
 func sample_at(x: float, z: float) -> Vector3:
 	if heights.is_empty():
 		return Vector3.ZERO
@@ -131,8 +134,13 @@ func sample_at(x: float, z: float) -> Vector3:
 	var w10: float = fx * (1.0 - fz)
 	var w01: float = (1.0 - fx) * fz
 	var w11: float = fx * fz
+	var h: float
+	if fx + fz <= 1.0:
+		h = heights[i00] + fx * (heights[i10] - heights[i00]) + fz * (heights[i01] - heights[i00])
+	else:
+		h = heights[i11] + (1.0 - fx) * (heights[i01] - heights[i11]) + (1.0 - fz) * (heights[i10] - heights[i11])
 	return Vector3(
-		heights[i00] * w00 + heights[i10] * w10 + heights[i01] * w01 + heights[i11] * w11,
+		h,
 		_slopes_x[i00] * w00 + _slopes_x[i10] * w10 + _slopes_x[i01] * w01 + _slopes_x[i11] * w11,
 		_slopes_z[i00] * w00 + _slopes_z[i10] * w10 + _slopes_z[i01] * w01 + _slopes_z[i11] * w11)
 

@@ -28,6 +28,8 @@ const GRASS_COLOR := Color(0.36, 0.5, 0.26)
 const ROCK_COLOR := Color(0.46, 0.44, 0.41)
 # Two breaks closer than this are one (float rounding at lot edges).
 const BREAK_TOLERANCE := 0.01
+# A quad corner this close to a cell's fold (in grid cells) counts as on it.
+const FOLD_TOLERANCE := 0.000001
 # One shader for every building (see BUILDING_SHADER): facades only on walls,
 # driven by each instance's colour and custom data (building_custom).
 const BUILDING_GLOW_ENERGY := 1.2
@@ -156,58 +158,160 @@ class MeshArrays:
 			var p00: int = base + s * 2
 			indices.append_array(PackedInt32Array([p00, p00 + 2, p00 + 1, p00 + 2, p00 + 3, p00 + 1]))
 
+	# Sampling context of the patch being added (add_relief_patch sets it,
+	# _relief_vertex reads it). Plain copies of the plan's numbers: reading
+	# the shared plan object per vertex serialises the worker threads.
+	var _radius := 0.0
+	var _lot_width := 0.0
+	var _lot_length := 0.0
+	var _heights := PackedFloat32Array()
+	var _slopes_x := PackedFloat32Array()
+	var _slopes_z := PackedFloat32Array()
+	var _chunk_start := Vector2.ZERO
+	var _color := Color()
+	var _rows_along := false
+	var _relief_lot := false
+
 	# The same rectangle following the plan's heights. chunk_start is the
 	# chunk's (x, z) origin in section metres, lot_start the lot's (x, z) in
 	# chunk metres. Split on every height-grid line and road-band edge
-	# (relief_breaks below) so neighbours share every edge vertex. RELIEF
-	# lots take their colour from height and slope.
+	# (relief_breaks below) so neighbours share every edge vertex, and each
+	# piece crossing a grid cell's fold cut along it (_add_quad_on_folds), so
+	# every triangle lies on the collision's plane. RELIEF lots take their
+	# colour from height and slope.
 	func add_relief_patch(plan, chunk_start: Vector2, lot_start: Vector2, x0: float, x1: float, z0: float, z1: float, color: Color, rows_along: bool, relief_lot: bool) -> void:
 		var step: Vector2 = plan.height_step()
 		var xs := relief_breaks(x0, x1, chunk_start.x, step.x, lot_start.x, plan.lot_width)
 		var zs := relief_breaks(z0, z1, chunk_start.y, step.y, lot_start.y, plan.lot_length)
-		var radius: float = plan.radius
+		_radius = plan.radius
+		_lot_width = plan.lot_width
+		_lot_length = plan.lot_length
+		_heights = plan.heights
+		_slopes_x = plan._slopes_x
+		_slopes_z = plan._slopes_z
+		_chunk_start = chunk_start
+		_color = color
+		_rows_along = rows_along
+		_relief_lot = relief_lot
 		var base: int = vertices.size()
-		# SectionPlan.sample_at inlined (a call per vertex costs more than the
-		# sum): the grid cell and weights, then height and slope.
-		var heights: PackedFloat32Array = plan.heights
-		var slopes_x: PackedFloat32Array = plan._slopes_x
-		var slopes_z: PackedFloat32Array = plan._slopes_z
-		var columns := SectionPlanScript.RELIEF_COLUMNS
-		var per_lot := float(SectionPlanScript.RELIEF_POINTS_PER_LOT)
 		for x: float in xs:
-			var angle: float = x / radius
-			var outward := Vector3(cos(angle), sin(angle), 0.0)
-			var around := Vector3(-sin(angle), cos(angle), 0.0)
-			var gx: float = fposmod((chunk_start.x + x) / plan.lot_width, SectionPlanScript.LOTS_AROUND) * per_lot
-			var column := floori(gx)
-			var fx: float = gx - column
-			var east: int = (column + 1) % columns
 			for z: float in zs:
-				var gz: float = clampf((chunk_start.y + z) / plan.lot_length * per_lot, 0.0, SectionPlanScript.RELIEF_ROWS - 1)
-				var row := mini(floori(gz), SectionPlanScript.RELIEF_ROWS - 2)
-				var fz: float = gz - row
-				var i00: int = row * columns + column
-				var i10: int = row * columns + east
-				var i01: int = i00 + columns
-				var i11: int = i10 + columns
-				var w00: float = (1.0 - fx) * (1.0 - fz)
-				var w10: float = fx * (1.0 - fz)
-				var w01: float = (1.0 - fx) * fz
-				var w11: float = fx * fz
-				var h: float = heights[i00] * w00 + heights[i10] * w10 + heights[i01] * w01 + heights[i11] * w11
-				var sx: float = slopes_x[i00] * w00 + slopes_x[i10] * w10 + slopes_x[i01] * w01 + slopes_x[i11] * w11
-				var sz: float = slopes_z[i00] * w00 + slopes_z[i10] * w10 + slopes_z[i01] * w01 + slopes_z[i11] * w11
-				var k: float = (radius - h) / radius
-				vertices.append(outward * (radius - h) + Vector3(0.0, 0.0, z))
-				normals.append((-outward * k - around * sx - Vector3(0.0, 0.0, k * sz)).normalized())
-				colors.append(relief_color(h, sqrt(sx * sx + sz * sz)) if relief_lot else color)
-				uvs.append(Vector2(x, z) / ROW_SPACING if rows_along else Vector2(z, x) / ROW_SPACING)
-		# Same winding as add_patch: (x_i, z_j) is base + i * zs.size() + j.
+				_relief_vertex(x, z)
+		# Breaks in grid cells (section frame), for the folds.
+		var gxs := PackedFloat64Array()
+		for x: float in xs:
+			gxs.append((chunk_start.x + x) / step.x)
+		var gzs := PackedFloat64Array()
+		for z: float in zs:
+			gzs.append((chunk_start.y + z) / step.y)
+		# (x_i, z_j) is base + i * zs.size() + j. Each quad lies in one grid
+		# cell, whose height is two planes meeting on its fold fx + fz = 1:
+		# a quad on one side is two triangles, one across it is cut there.
 		var nz: int = zs.size()
 		for i in range(xs.size() - 1):
+			var column := floori((gxs[i] + gxs[i + 1]) * 0.5)
+			var fx0: float = gxs[i] - column
+			var fx1: float = gxs[i + 1] - column
 			for j in range(nz - 1):
+				var row := floori((gzs[j] + gzs[j + 1]) * 0.5)
+				var fz0: float = gzs[j] - row - 1.0
+				var fz1: float = gzs[j + 1] - row - 1.0
 				var p00: int = base + i * nz + j
-				indices.append_array(PackedInt32Array([p00, p00 + nz, p00 + 1, p00 + nz, p00 + nz + 1, p00 + 1]))
+				var lowest: float = fx0 + fz0
+				var highest: float = fx1 + fz1
+				# The two usual triangles already meet on the (x1,z0)-(x0,z1)
+				# diagonal: when the fold runs along it (a whole cell), no cut.
+				var on_diagonal: bool = absf(fx1 + fz0) <= FOLD_TOLERANCE and absf(fx0 + fz1) <= FOLD_TOLERANCE
+				if lowest < -FOLD_TOLERANCE and highest > FOLD_TOLERANCE and not on_diagonal and not _cell_is_flat(column, row):
+					_cut_quad_on_fold(p00, nz, xs[i], xs[i + 1], zs[j], zs[j + 1], fx0, fx1, fz0, fz1)
+				else:
+					indices.append_array(PackedInt32Array([p00, p00 + nz, p00 + 1, p00 + nz, p00 + nz + 1, p00 + 1]))
+
+	# Appends the vertex at chunk (x, z) of the current patch; returns its
+	# index. SectionPlan.sample_at inlined (a call per vertex into the plan
+	# costs more than the sum): the grid cell, the height on the cell's two
+	# triangles, the bilinear slope.
+	func _relief_vertex(x: float, z: float) -> int:
+		var radius: float = _radius
+		var columns := SectionPlanScript.RELIEF_COLUMNS
+		var per_lot := float(SectionPlanScript.RELIEF_POINTS_PER_LOT)
+		var gx: float = fposmod((_chunk_start.x + x) / _lot_width, SectionPlanScript.LOTS_AROUND) * per_lot
+		var column := floori(gx)
+		var fx: float = gx - column
+		var gz: float = clampf((_chunk_start.y + z) / _lot_length * per_lot, 0.0, SectionPlanScript.RELIEF_ROWS - 1)
+		var row := mini(floori(gz), SectionPlanScript.RELIEF_ROWS - 2)
+		var fz: float = gz - row
+		var i00: int = row * columns + column
+		var i10: int = row * columns + (column + 1) % columns
+		var i01: int = i00 + columns
+		var i11: int = i10 + columns
+		var h: float
+		if fx + fz <= 1.0:
+			h = _heights[i00] + fx * (_heights[i10] - _heights[i00]) + fz * (_heights[i01] - _heights[i00])
+		else:
+			h = _heights[i11] + (1.0 - fx) * (_heights[i01] - _heights[i11]) + (1.0 - fz) * (_heights[i10] - _heights[i11])
+		var w00: float = (1.0 - fx) * (1.0 - fz)
+		var w10: float = fx * (1.0 - fz)
+		var w01: float = (1.0 - fx) * fz
+		var w11: float = fx * fz
+		var sx: float = _slopes_x[i00] * w00 + _slopes_x[i10] * w10 + _slopes_x[i01] * w01 + _slopes_x[i11] * w11
+		var sz: float = _slopes_z[i00] * w00 + _slopes_z[i10] * w10 + _slopes_z[i01] * w01 + _slopes_z[i11] * w11
+		var angle: float = x / radius
+		var outward := Vector3(cos(angle), sin(angle), 0.0)
+		var around := Vector3(-sin(angle), cos(angle), 0.0)
+		var k: float = (radius - h) / radius
+		vertices.append(outward * (radius - h) + Vector3(0.0, 0.0, z))
+		normals.append((-outward * k - around * sx - Vector3(0.0, 0.0, k * sz)).normalized())
+		colors.append(relief_color(h, sqrt(sx * sx + sz * sz)) if _relief_lot else _color)
+		uvs.append(Vector2(x, z) / ROW_SPACING if _rows_along else Vector2(z, x) / ROW_SPACING)
+		return vertices.size() - 1
+
+	# A quad across its cell's fold: corner (x_i, z_j) is vertex
+	# p00 + i * nz + j, and fx + fz - 1 its fold value (fx0..fx1 across,
+	# fz0..fz1 already minus 1). Cut into two fans along the fold, corners in
+	# ring order (x0,z0), (x1,z0), (x1,z1), (x0,z1) (which keeps the winding
+	# facing the axis). Each crossing is computed from its edge's lower end,
+	# so the quad on the other side of that edge gets the very same point.
+	# Plain numbers and packed arrays only: this runs for every quad near a
+	# road cut, and Variant arrays made it the dressing's main cost.
+	func _cut_quad_on_fold(p00: int, nz: int, x0: float, x1: float, z0: float, z1: float, fx0: float, fx1: float, fz0: float, fz1: float) -> void:
+		var ring := PackedInt32Array([p00, p00 + nz, p00 + nz + 1, p00 + 1])
+		var ring_x := PackedFloat64Array([x0, x1, x1, x0])
+		var ring_z := PackedFloat64Array([z0, z0, z1, z1])
+		var folds := PackedFloat64Array([fx0 + fz0, fx1 + fz0, fx1 + fz1, fx0 + fz1])
+		var low := PackedInt32Array()
+		var high := PackedInt32Array()
+		for k in range(4):
+			var next: int = (k + 1) % 4
+			var f0: float = folds[k]
+			var f1: float = folds[next]
+			if f0 <= FOLD_TOLERANCE:
+				low.append(ring[k])
+			if f0 >= -FOLD_TOLERANCE:
+				high.append(ring[k])
+			if (f0 < -FOLD_TOLERANCE and f1 > FOLD_TOLERANCE) or (f0 > FOLD_TOLERANCE and f1 < -FOLD_TOLERANCE):
+				# Every ring edge runs along x or along z: its lower end is
+				# the one with the smaller x or z.
+				var first: int = k if ring_x[k] + ring_z[k] < ring_x[next] + ring_z[next] else next
+				var second: int = next if first == k else k
+				var t: float = folds[first] / (folds[first] - folds[second])
+				var v := _relief_vertex(lerpf(ring_x[first], ring_x[second], t), lerpf(ring_z[first], ring_z[second], t))
+				low.append(v)
+				high.append(v)
+		for polygon: PackedInt32Array in [low, high]:
+			for k in range(1, polygon.size() - 1):
+				indices.append(polygon[0])
+				indices.append(polygon[k])
+				indices.append(polygon[k + 1])
+
+	# A cell whose four heights lie on one plane has no fold to cut along.
+	func _cell_is_flat(column: int, row: int) -> bool:
+		var columns := SectionPlanScript.RELIEF_COLUMNS
+		var c: int = posmod(column, columns)
+		var r: int = clampi(row, 0, SectionPlanScript.RELIEF_ROWS - 2)
+		var i00: int = r * columns + c
+		var i10: int = r * columns + (c + 1) % columns
+		return absf(_heights[i00] + _heights[i10 + columns] - _heights[i10] - _heights[i00 + columns]) < 0.0001
 
 	static func relief_color(height: float, slope: float) -> Color:
 		var rock := maxf(smoothstep(0.5, 0.9, slope), smoothstep(180.0, 300.0, height))
@@ -301,7 +405,10 @@ static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 	var fields := MeshArrays.new()
 	var paved := MeshArrays.new()
 	var water := MeshArrays.new()
-	var relief: bool = plan.chunk_has_relief(chunk_around, chunk_along)
+	# Every chunk of a plan with heights takes the fine split, flat ones too:
+	# a flat chunk's long chords next to a raised chunk's short ones opened
+	# slits up to 0.44 m along their shared border.
+	var relief: bool = not plan.heights.is_empty()
 	var chunk_start := Vector2(chunk_around * SectionPlanScript.CHUNK_LOTS_AROUND * plan.lot_width, chunk_along * SectionPlanScript.CHUNK_LOTS_ALONG * plan.lot_length)
 	for lot_x in range(SectionPlanScript.CHUNK_LOTS_AROUND):
 		for lot_z in range(SectionPlanScript.CHUNK_LOTS_ALONG):
@@ -343,7 +450,8 @@ static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 						_add(fields, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, CROP_COLORS[plan.crops[lot]], plan.rows_along[lot] == 1, false)
 					else:
 						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, TOWN_GROUND_COLOR if zone == SectionPlanScript.Zone.TOWN else CITY_GROUND_COLOR, true, false)
-	return [fields, paved, water, relief_collision_faces(plan, chunk_around, chunk_along) if relief else PackedVector3Array()]
+	var raised: bool = plan.chunk_has_relief(chunk_around, chunk_along)
+	return [fields, paved, water, relief_collision_faces(plan, chunk_around, chunk_along) if raised else PackedVector3Array()]
 
 # A chunk with relief collides with the height grid's points (every one of
 # them is also a vertex of the drawn ground), two triangles per grid cell,

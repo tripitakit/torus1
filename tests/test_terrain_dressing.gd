@@ -22,6 +22,8 @@ func _init():
 	failures += _test_relief_colours()
 	failures += _test_relief_chunk_collides_on_its_height_grid()
 	failures += _test_ground_built_on_a_worker_matches_one_built_in_place()
+	failures += _test_drawn_ground_lies_on_its_collision()
+	failures += _test_chunks_along_share_their_border_vertices()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -351,6 +353,130 @@ func _test_relief_chunk_collides_on_its_height_grid() -> int:
 	raised.free()
 	level.free()
 	return result
+
+# Height of the collision surface at section (x, z): the grid cell's two
+# triangles, split along its (x1, z0)-(x0, z1) diagonal as the collision is.
+func _collision_height(x: float, z: float) -> float:
+	var step: Vector2 = _plan.height_step()
+	var gx: float = fposmod(x, _plan.circumference()) / step.x
+	var gz: float = clampf(z / step.y, 0.0, 400.0)
+	var column := mini(floori(gx), 239)
+	var row := mini(floori(gz), 399)
+	var fx: float = gx - column
+	var fz: float = gz - row
+	var h00: float = _plan.grid_height(column, row)
+	var h10: float = _plan.grid_height(column + 1, row)
+	var h01: float = _plan.grid_height(column, row + 1)
+	var h11: float = _plan.grid_height(column + 1, row + 1)
+	if fx + fz <= 1.0:
+		return h00 + fx * (h10 - h00) + fz * (h01 - h00)
+	return h11 + (1.0 - fx) * (h01 - h11) + (1.0 - fz) * (h10 - h11)
+
+# Distance from chunk-local point `p` to the plane of the collision triangle
+# under it (built like TerrainDressing.relief_collision_faces).
+func _collision_plane_gap(key: Vector2i, p: Vector3) -> float:
+	var step: Vector2 = _plan.height_step()
+	var start := _chunk_start(key)
+	var at := _section_xz(key, p)
+	var column := floori(at.x / step.x)
+	var row := clampi(floori(at.y / step.y), 0, 399)
+	var fx: float = at.x / step.x - column
+	var fz: float = at.y / step.y - row
+	var cells: Array = [Vector2i(column, row), Vector2i(column + 1, row), Vector2i(column, row + 1)] if fx + fz <= 1.0 else [Vector2i(column + 1, row), Vector2i(column + 1, row + 1), Vector2i(column, row + 1)]
+	var corners := []
+	for cell: Vector2i in cells:
+		var angle: float = (cell.x * step.x - start.x) / RADIUS
+		var r: float = RADIUS - _plan.grid_height(cell.x, cell.y)
+		corners.append(Vector3(cos(angle) * r, sin(angle) * r, cell.y * step.y - start.y))
+	var normal: Vector3 = ((corners[1] - corners[0]) as Vector3).cross(corners[2] - corners[0]).normalized()
+	return absf(normal.dot(p - corners[0]))
+
+func _steepest_chunk() -> Vector2i:
+	var best := Vector2i.ZERO
+	var steepest := 0.0
+	var step: Vector2 = _plan.height_step()
+	for row in range(401):
+		for column in range(240):
+			var slope: float = _plan.slope_at(column * step.x, row * step.y).length()
+			if slope > steepest:
+				steepest = slope
+				best = Vector2i(mini(column / 15, 15), mini(row / 20, 19))
+	return best
+
+func _test_drawn_ground_lies_on_its_collision() -> int:
+	# The craft stops on the collision: every drawn vertex must sit on it,
+	# on the steepest ground too (bilinear vertices strayed up to 7 m from
+	# the cell's two collision triangles).
+	# Triangle centres too, against the plane of the collision triangle
+	# under them: a drawn quad across a cell's fold strayed up to 5.5 m. The
+	# collision is flat between grid points 52 m apart round the curve, so
+	# drawn points between them sit up to its chord's sag (~0.3 m) above it.
+	var result := 0
+	var worst := 0.0
+	var worst_centre := 0.0
+	for key in [_raised_chunk(), _steepest_chunk()]:
+		var chunk := _dress(key)
+		for mesh: Mesh in _ground_meshes(chunk):
+			for s in range(mesh.get_surface_count()):
+				var arrays: Array = mesh.surface_get_arrays(s)
+				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+				for v: Vector3 in vertices:
+					var at := _section_xz(key, v)
+					worst = maxf(worst, absf(Vector2(v.x, v.y).length() - (RADIUS - _collision_height(at.x, at.y))))
+				for t in range(0, indices.size(), 3):
+					var c: Vector3 = (vertices[indices[t]] + vertices[indices[t + 1]] + vertices[indices[t + 2]]) / 3.0
+					worst_centre = maxf(worst_centre, _collision_plane_gap(key, c))
+		chunk.free()
+	print("  drawn ground off the collision surface: vertices %.3f m, triangle centres %.3f m" % [worst, worst_centre])
+	if worst > 0.01 or worst_centre > 0.35:
+		print("FAIL _test_drawn_ground_lies_on_its_collision: vertices %.3f m, triangle centres %.3f m off the collision surface" % [worst, worst_centre])
+		result = 1
+	return result
+
+# Section (x, radius) of a chunk's vertices at chunk-local z, snapped.
+func _border_points(key: Vector2i, chunk: Node, z: float) -> Dictionary:
+	var points := {}
+	for mesh: Mesh in _ground_meshes(chunk):
+		for s in range(mesh.get_surface_count()):
+			for v: Vector3 in mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				if absf(v.z - z) < 0.001:
+					points[Vector2(_section_xz(key, v).x, Vector2(v.x, v.y).length()).snappedf(0.01)] = true
+	return points
+
+func _test_chunks_along_share_their_border_vertices() -> int:
+	# A flat chunk next to one with relief: the same vertices on the border
+	# they share, or a slit opens between their edges (chords of up to 87 m
+	# on the flat side against ~50 m on the other left 0.44 m gaps).
+	var flat_key := Vector2i(-1, -1)
+	for along in range(19):
+		for around in range(16):
+			if not _plan.chunk_has_relief(around, along) and _plan.chunk_has_relief(around, along + 1):
+				flat_key = Vector2i(around, along)
+	if flat_key.x < 0:
+		print("FAIL _test_chunks_along_share_their_border_vertices: no flat chunk next to a raised one in section 42")
+		return 1
+	var next := flat_key + Vector2i(0, 1)
+	var a := _dress(flat_key)
+	var b := _dress(next)
+	var chunk_length: float = 4.0 * _plan.lot_length
+	var mine := _border_points(flat_key, a, chunk_length)
+	var theirs := _border_points(next, b, 0.0)
+	var result := 0
+	if mine.keys() != theirs.keys() and not _same_keys(mine, theirs):
+		print("FAIL _test_chunks_along_share_their_border_vertices: chunks %s and %s have %d and %d distinct border vertices" % [flat_key, next, mine.size(), theirs.size()])
+		result = 1
+	a.free()
+	b.free()
+	return result
+
+func _same_keys(a: Dictionary, b: Dictionary) -> bool:
+	if a.size() != b.size():
+		return false
+	for key in a:
+		if not b.has(key):
+			return false
+	return true
 
 var _worker_ground := []
 
