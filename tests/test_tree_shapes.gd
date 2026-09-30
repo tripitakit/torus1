@@ -13,6 +13,12 @@ func _init():
 		failures += _test_faces_point_outward(entry[0], entry[1])
 		failures += _test_trunk_and_crown_colours(entry[0], entry[1])
 
+	# The far versions: the same tree, a handful of triangles.
+	for entry in [["far conifer", TreeShapes.far_conifer(), TreeShapes.CONIFER_WIDTH], ["far broadleaf", TreeShapes.far_broadleaf(), TreeShapes.BROADLEAF_WIDTH]]:
+		failures += _test_far_shape(entry[0], entry[1])
+		failures += _test_crown_width(entry[0], entry[1], entry[2])
+		failures += _test_faces_point_outward(entry[0], entry[1])
+
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -35,6 +41,20 @@ func _test_unit_size(tree_name: String, mesh: ArrayMesh) -> int:
 	var triangles: int = vertices.size() / 3
 	if not is_equal_approx(low, 0.0) or not is_equal_approx(high, 1.0) or widest > 0.4 or triangles < 20 or triangles > 80:
 		print("FAIL _test_unit_size (%s): y %f..%f, radius %f, %d triangles" % [tree_name, low, high, widest, triangles])
+		return 1
+	return 0
+
+func _test_far_shape(tree_name: String, mesh: ArrayMesh) -> int:
+	var vertices: PackedVector3Array = _arrays(mesh)[Mesh.ARRAY_VERTEX]
+	var low := INF
+	var high := -INF
+	for v in vertices:
+		low = minf(low, v.y)
+		high = maxf(high, v.y)
+	@warning_ignore("integer_division")
+	var triangles: int = vertices.size() / 3
+	if triangles > 8 or not is_equal_approx(high, 1.0) or low > 0.35:
+		print("FAIL _test_far_shape (%s): %d triangles, y %f..%f" % [tree_name, triangles, low, high])
 		return 1
 	return 0
 

@@ -29,18 +29,32 @@ static func broadleaf() -> ArrayMesh:
 	_lathe(st, [Vector2(0.3, 0.0), Vector2(0.48, 0.3), Vector2(0.75, 0.36), Vector2(0.92, 0.22), Vector2(1.0, 0.0)], CROWN_COLOR)
 	return st.commit()
 
+# Far versions, a few triangles each (three sides): drawn past the near
+# trees' range, where a tree is a few pixels. Crown colour all over.
+static func far_conifer() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_lathe(st, [Vector2(0.1, 0.0), Vector2(0.1, 0.3), Vector2(1.0, 0.0)], CROWN_COLOR, 3)
+	return st.commit()
+
+static func far_broadleaf() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_lathe(st, [Vector2(0.3, 0.0), Vector2(0.62, 0.36), Vector2(1.0, 0.0)], CROWN_COLOR, 3)
+	return st.commit()
+
 # Turns a profile of Vector2(height, radius) points, bottom to top, round
 # the y axis in SIDES flat faces. A radius of 0 closes the shape at that
 # height: an apex, or the centre of a bottom disc.
-static func _lathe(st: SurfaceTool, profile: Array, color: Color) -> void:
+static func _lathe(st: SurfaceTool, profile: Array, color: Color, sides := SIDES) -> void:
 	for k in range(profile.size() - 1):
 		var a: Vector2 = profile[k]
 		var b: Vector2 = profile[k + 1]
 		# Outward normal of the profile segment, as (radial, vertical).
 		var out := Vector2(b.x - a.x, -(b.y - a.y))
-		for i in range(SIDES):
-			var t0: float = TAU * i / SIDES
-			var t1: float = TAU * (i + 1) / SIDES
+		for i in range(sides):
+			var t0: float = TAU * i / sides
+			var t1: float = TAU * (i + 1) / sides
 			var p00 := Vector3(cos(t0) * a.y, a.x, sin(t0) * a.y)
 			var p10 := Vector3(cos(t1) * a.y, a.x, sin(t1) * a.y)
 			var p01 := Vector3(cos(t0) * b.y, b.x, sin(t0) * b.y)

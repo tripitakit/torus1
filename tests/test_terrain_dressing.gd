@@ -657,8 +657,19 @@ func _test_tree_nodes() -> int:
 		var top: Vector3 = Vector3(cos(angle), sin(angle), 0.0) * (RADIUS - float(trees[2]) + 1.0) + Vector3(0.0, 0.0, 500.0)
 		# Instance colours carry the crown green (custom data showed red and
 		# blue crowns in the compatibility renderer).
-		if node == null or not node.multimesh.use_colors or node.multimesh.use_custom_data or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_VISIBILITY_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
+		if node == null or not node.multimesh.use_colors or node.multimesh.use_custom_data or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_NEAR_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
 			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % names[kind])
+			result = 1
+	# Far versions of the same trees, drawn from where the near ones stop,
+	# with no far limit: no tree ever appears out of nothing.
+	var far_names := ["ConifersFar", "BroadleavesFar"]
+	for kind in range(2):
+		var buffer: PackedFloat32Array = trees[kind]
+		if buffer.is_empty():
+			continue
+		var far := group.get_node_or_null(far_names[kind]) as MultiMeshInstance3D
+		if far == null or far.multimesh.instance_count != buffer.size() / 16 or far.visibility_range_begin != TerrainDressing.TREE_NEAR_END or far.visibility_range_end != 0.0 or far.multimesh.mesh.get_faces().size() > 8 * 3 or not far.multimesh.use_colors:
+			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % far_names[kind])
 			result = 1
 	chunk.free()
 	# A chunk with no raised lot has no trees.

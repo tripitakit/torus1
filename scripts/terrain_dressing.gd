@@ -142,8 +142,9 @@ const CONIFERS_FROM := 300.0
 const CONIFERS_ONLY := 450.0
 const CONIFER_GREEN := Color(0.12, 0.3, 0.16)
 const BROADLEAF_GREEN := Color(0.24, 0.42, 0.14)
-# Past this the forest floor's colour stands in for the trees.
-const TREE_VISIBILITY_END := 3000.0
+# Near trees stop here; from here on the same trees are drawn in their far
+# versions, with no far limit: no tree ever appears out of nothing.
+const TREE_NEAR_END := 3000.0
 # Floats per tree in a MultiMesh buffer: 12 of transform, 4 of colour (the
 # crown's green). Instance colour, not custom data: the compatibility
 # renderer showed custom data as red, blue and magenta crowns.
@@ -395,6 +396,8 @@ var water_material: StandardMaterial3D
 var building_material: ShaderMaterial
 var conifer_mesh: ArrayMesh
 var broadleaf_mesh: ArrayMesh
+var far_conifer_mesh: ArrayMesh
+var far_broadleaf_mesh: ArrayMesh
 var tree_material: ShaderMaterial
 # Convex colliders by (style, whole-metre size): equal buildings share one.
 # Each key counts the chunks using it; release_chunk drops shapes no chunk
@@ -421,6 +424,8 @@ func _init() -> void:
 	building_material.set_shader_parameter("glow_energy", BUILDING_GLOW_ENERGY)
 	conifer_mesh = TreeShapesScript.conifer()
 	broadleaf_mesh = TreeShapesScript.broadleaf()
+	far_conifer_mesh = TreeShapesScript.far_conifer()
+	far_broadleaf_mesh = TreeShapesScript.far_broadleaf()
 	var tree_shader := Shader.new()
 	tree_shader.code = TREE_SHADER
 	tree_material = ShaderMaterial.new()
@@ -556,33 +561,43 @@ func _add_ground(chunk: StaticBody3D, ground: Array, plan) -> void:
 		_set_ground_collision(chunk, ground[3])
 	_add_trees(chunk, ground[4], plan)
 
-# Two MultiMeshes of the chunk's trees (build_ground made the buffers).
+# The chunk's trees (build_ground made the buffers): per kind a near
+# MultiMesh up to TREE_NEAR_END and a far one, same buffer, from there on.
 @warning_ignore("integer_division")
 func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
 	var group := Node3D.new()
 	group.name = "Trees"
-	for part in [["Conifers", trees[0], conifer_mesh], ["Broadleaves", trees[1], broadleaf_mesh]]:
+	var bounds := _chunk_bounds(plan, trees[2])
+	for part in [["Conifers", trees[0], conifer_mesh, far_conifer_mesh], ["Broadleaves", trees[1], broadleaf_mesh, far_broadleaf_mesh]]:
 		var buffer: PackedFloat32Array = part[1]
 		if buffer.is_empty():
 			continue
-		var multimesh := MultiMesh.new()
-		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.use_colors = true
-		multimesh.mesh = part[2]
-		multimesh.instance_count = buffer.size() / TREE_FLOATS
-		multimesh.buffer = buffer
-		var node := MultiMeshInstance3D.new()
-		node.name = part[0]
-		node.multimesh = multimesh
-		node.material_override = tree_material
-		node.visibility_range_end = TREE_VISIBILITY_END
-		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		node.custom_aabb = _chunk_bounds(plan, trees[2])
-		group.add_child(node)
+		var near := _tree_instance(part[0], part[2], buffer, bounds)
+		near.visibility_range_end = TREE_NEAR_END
+		group.add_child(near)
+		var far := _tree_instance(part[0] + "Far", part[3], buffer, bounds)
+		far.visibility_range_begin = TREE_NEAR_END
+		group.add_child(far)
 	if group.get_child_count() > 0:
 		chunk.add_child(group)
 	else:
 		group.free()
+
+@warning_ignore("integer_division")
+func _tree_instance(node_name: String, mesh: ArrayMesh, buffer: PackedFloat32Array, bounds: AABB) -> MultiMeshInstance3D:
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_colors = true
+	multimesh.mesh = mesh
+	multimesh.instance_count = buffer.size() / TREE_FLOATS
+	multimesh.buffer = buffer
+	var node := MultiMeshInstance3D.new()
+	node.name = node_name
+	node.multimesh = multimesh
+	node.material_override = tree_material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.custom_aabb = bounds
+	return node
 
 # A 64-bit hash of a tree cell: eight 7-bit random numbers per tree.
 static func _tree_hash(section_index: int, cx: int, cz: int) -> int:
