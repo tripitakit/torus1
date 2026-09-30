@@ -7,8 +7,9 @@ const TreeShapes = preload("res://scripts/tree_shapes.gd")
 
 func _init():
 	var failures := 0
-	for entry in [["conifer", TreeShapes.conifer()], ["broadleaf", TreeShapes.broadleaf()]]:
+	for entry in [["conifer", TreeShapes.conifer(), TreeShapes.CONIFER_WIDTH], ["broadleaf", TreeShapes.broadleaf(), TreeShapes.BROADLEAF_WIDTH]]:
 		failures += _test_unit_size(entry[0], entry[1])
+		failures += _test_crown_width(entry[0], entry[1], entry[2])
 		failures += _test_faces_point_outward(entry[0], entry[1])
 		failures += _test_trunk_and_crown_colours(entry[0], entry[1])
 
@@ -34,6 +35,17 @@ func _test_unit_size(tree_name: String, mesh: ArrayMesh) -> int:
 	var triangles: int = vertices.size() / 3
 	if not is_equal_approx(low, 0.0) or not is_equal_approx(high, 1.0) or widest > 0.4 or triangles < 20 or triangles > 80:
 		print("FAIL _test_unit_size (%s): y %f..%f, radius %f, %d triangles" % [tree_name, low, high, widest, triangles])
+		return 1
+	return 0
+
+func _test_crown_width(tree_name: String, mesh: ArrayMesh, width: float) -> int:
+	# The widest the crown gets, across: the dressing divides by it so a
+	# tree's crown is its planned share of the height.
+	var widest := 0.0
+	for v in (_arrays(mesh)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+		widest = maxf(widest, 2.0 * Vector2(v.x, v.z).length())
+	if absf(widest - width) > 0.001:
+		print("FAIL _test_crown_width (%s): crown %f across, constant says %f" % [tree_name, widest, width])
 		return 1
 	return 0
 

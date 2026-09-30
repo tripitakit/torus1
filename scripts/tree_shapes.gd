@@ -8,6 +8,9 @@ extends RefCounted
 const TRUNK_COLOR := Color(0.36, 0.25, 0.16, 0.0)
 const CROWN_COLOR := Color(1.0, 1.0, 1.0, 1.0)
 const SIDES := 7
+# Widest the crowns get, across (twice the lathes' largest radius).
+const CONIFER_WIDTH := 0.6
+const BROADLEAF_WIDTH := 0.72
 
 # Two stacked cones on a short trunk.
 static func conifer() -> ArrayMesh:

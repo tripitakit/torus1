@@ -4,6 +4,7 @@ const SectionGenerator = preload("res://scripts/section_generator.gd")
 const SectionPlan = preload("res://scripts/section_plan.gd")
 const TerrainDressing = preload("res://scripts/terrain_dressing.gd")
 const BuildingShapes = preload("res://scripts/building_shapes.gd")
+const TreeShapes = preload("res://scripts/tree_shapes.gd")
 
 const RADIUS := 2000.0
 
@@ -537,6 +538,13 @@ func _tree_origin(buffer: PackedFloat32Array, i: int) -> Vector3:
 func _tree_up(buffer: PackedFloat32Array, i: int) -> Vector3:
 	return Vector3(buffer[i * 16 + 1], buffer[i * 16 + 5], buffer[i * 16 + 9])
 
+# How wide a tree's crown really is, as a share of its height: the side
+# column's scale times the mesh's own crown width.
+func _crown_share(buffer: PackedFloat32Array, i: int, kind: int) -> float:
+	var side := Vector3(buffer[i * 16], buffer[i * 16 + 4], buffer[i * 16 + 8])
+	var mesh_width: float = TreeShapes.CONIFER_WIDTH if kind == 0 else TreeShapes.BROADLEAF_WIDTH
+	return side.length() * mesh_width / _tree_up(buffer, i).length()
+
 func _test_trees_stand_on_raised_ground_below_the_treeline() -> int:
 	var checked := 0
 	for key in [_forest_chunk(), _raised_chunk()]:
@@ -562,6 +570,8 @@ func _test_trees_stand_on_raised_ground_below_the_treeline() -> int:
 					problem = "a broadleaf above 450 m"
 				elif up.length() < 10.0 - 0.001 or up.length() > 25.0 + 0.001 or up.dot(Vector3(-origin.x, -origin.y, 0.0)) <= 0.0:
 					problem = "wrong height or not upright"
+				elif _crown_share(buffer, i, kind) < 0.35 - 0.001 or _crown_share(buffer, i, kind) > 0.5 + 0.001:
+					problem = "crown %.2f of its height across" % _crown_share(buffer, i, kind)
 				if problem != "":
 					print("FAIL _test_trees_stand_on_raised_ground_below_the_treeline: chunk %s tree at %s (%.0f m) %s" % [key, at, h, problem])
 					return 1

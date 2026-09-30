@@ -637,9 +637,12 @@ static func tree_buffers(plan, chunk_around: int, chunk_along: int) -> Array:
 					var up := Vector3(-cos(angle), -sin(angle), 0.0)
 					var side: Vector3 = Vector3(-sin(angle), cos(angle), 0.0) * cos(yaw) + Vector3(0.0, 0.0, sin(yaw))
 					var front: Vector3 = side.cross(up)
-					var bx: Vector3 = side * width
+					# The unit meshes' crowns are narrower than 1 across: scale so
+					# the crown really is `width` wide.
+					var across: float = width / (TreeShapesScript.CONIFER_WIDTH if conifer else TreeShapesScript.BROADLEAF_WIDTH)
+					var bx: Vector3 = side * across
 					var by: Vector3 = up * tree_height
-					var bz: Vector3 = front * width
+					var bz: Vector3 = front * across
 					var origin: Vector3 = -up * (radius - h + TREE_SINK) + Vector3(0.0, 0.0, z - chunk_start.y)
 					var green: Color = (CONIFER_GREEN if conifer else BROADLEAF_GREEN) * shade
 					var data := PackedFloat32Array([bx.x, by.x, bz.x, origin.x, bx.y, by.y, bz.y, origin.y, bx.z, by.z, bz.z, origin.z, green.r, green.g, green.b, 1.0])
