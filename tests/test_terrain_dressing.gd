@@ -20,7 +20,8 @@ func _init():
 	failures += _test_relief_normals_lean_downhill()
 	failures += _test_relief_chunk_has_no_cracks()
 	failures += _test_relief_colours()
-	failures += _test_relief_chunk_owns_a_collision_matching_its_mesh()
+	failures += _test_relief_chunk_collides_on_its_height_grid()
+	failures += _test_ground_built_on_a_worker_matches_one_built_in_place()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -293,31 +294,95 @@ func _chunk_with_shared_shape(shared: Shape3D) -> StaticBody3D:
 	chunk.add_child(collision)
 	return chunk
 
-func _test_relief_chunk_owns_a_collision_matching_its_mesh() -> int:
+# Winding sign of a triangle: positive when its front (Godot's clockwise
+# order, as the ground mesh uses) faces the axis.
+func _faces_axis(a: Vector3, b: Vector3, c: Vector3) -> float:
+	return (c - a).cross(b - a).dot(Vector3(-a.x, -a.y, 0.0))
+
+func _test_relief_chunk_collides_on_its_height_grid() -> int:
+	# Its own trimesh on the height grid's points (15 x 20 cells, two
+	# triangles each): every corner on the ground, wound like the mesh, and
+	# covering the chunk once. The shared level-0 shape stays for flat chunks.
 	var shared := ConcavePolygonShape3D.new()
 	var key := _raised_chunk()
 	var raised := _chunk_with_shared_shape(shared)
 	_dressing.dress_chunk(raised, _plan, key.x, key.y, _groups.get(key, []))
 	var result := 0
 	var shape: Shape3D = (raised.get_node("Collision") as CollisionShape3D).shape
-	var corners := 0
-	for mesh: Mesh in _ground_meshes(raised):
-		for s in range(mesh.get_surface_count()):
-			corners += (mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
-	var faces := 0 if not (shape is ConcavePolygonShape3D) else (shape as ConcavePolygonShape3D).get_faces().size()
-	if shape == shared or faces != corners:
-		print("FAIL _test_relief_chunk_owns_a_collision_matching_its_mesh: relief chunk shape %s, %d face corners for %d mesh corners" % [shape, faces, corners])
+	var faces := PackedVector3Array() if not (shape is ConcavePolygonShape3D) else (shape as ConcavePolygonShape3D).get_faces()
+	if shape == shared or faces.size() != 15 * 20 * 6:
+		print("FAIL _test_relief_chunk_collides_on_its_height_grid: shape %s with %d face corners, expected %d" % [shape, faces.size(), 15 * 20 * 6])
+		result = 1
+	var mesh_arrays: Array = ((raised.get_node("Surface") as MeshInstance3D).mesh as Mesh).surface_get_arrays(0)
+	var mesh_vertices: PackedVector3Array = mesh_arrays[Mesh.ARRAY_VERTEX]
+	var mesh_indices: PackedInt32Array = mesh_arrays[Mesh.ARRAY_INDEX]
+	var mesh_sign := signf(_faces_axis(mesh_vertices[mesh_indices[0]], mesh_vertices[mesh_indices[1]], mesh_vertices[mesh_indices[2]]))
+	var area := 0.0
+	for t in range(0, faces.size(), 3):
+		for k in range(3):
+			var v: Vector3 = faces[t + k]
+			var at := _section_xz(key, v)
+			if absf(Vector2(v.x, v.y).length() - (RADIUS - _plan.height_at(at.x, at.y))) > 0.001:
+				print("FAIL _test_relief_chunk_collides_on_its_height_grid: corner %s off the ground" % v)
+				raised.free()
+				return 1
+		if signf(_faces_axis(faces[t], faces[t + 1], faces[t + 2])) != mesh_sign:
+			print("FAIL _test_relief_chunk_collides_on_its_height_grid: triangle %d wound the other way from the mesh" % (t / 3))
+			raised.free()
+			return 1
+		var flat := []
+		for k in range(3):
+			var v: Vector3 = faces[t + k]
+			var r := Vector2(v.x, v.y).length()
+			flat.append(Vector3(v.x * RADIUS / r, v.y * RADIUS / r, v.z))
+		area += ((flat[1] - flat[0]) as Vector3).cross(flat[2] - flat[0]).length() * 0.5
+	var expected: float = 3.0 * _plan.lot_width * 4.0 * _plan.lot_length
+	if absf(area - expected) > expected * 0.001:
+		print("FAIL _test_relief_chunk_collides_on_its_height_grid: collision covers %.1f m2, expected %.1f" % [area, expected])
 		result = 1
 	# The same chunk from a plan with no heights keeps the shared shape.
-	var flat = SectionGenerator.generate(42, RADIUS, 20000.0)
-	flat.heights = PackedFloat32Array()
+	var flat_plan = SectionGenerator.generate(42, RADIUS, 20000.0)
+	flat_plan.heights = PackedFloat32Array()
 	var level := _chunk_with_shared_shape(shared)
-	_dressing.dress_chunk(level, flat, key.x, key.y, _groups.get(key, []))
+	_dressing.dress_chunk(level, flat_plan, key.x, key.y, _groups.get(key, []))
 	if (level.get_node("Collision") as CollisionShape3D).shape != shared:
-		print("FAIL _test_relief_chunk_owns_a_collision_matching_its_mesh: a flat chunk lost the shared shape")
+		print("FAIL _test_relief_chunk_collides_on_its_height_grid: a flat chunk lost the shared shape")
 		result = 1
 	raised.free()
 	level.free()
+	return result
+
+var _worker_ground := []
+
+func _build_ground_on_worker(key: Vector2i) -> void:
+	_worker_ground = TerrainDressing.build_ground(_plan, key.x, key.y)
+
+func _test_ground_built_on_a_worker_matches_one_built_in_place() -> int:
+	# The heavy vertex work runs on worker threads (InteriorWorld); the node
+	# work stays on the main thread. Same mesh and collision either way.
+	var key := _raised_chunk()
+	var task := WorkerThreadPool.add_task(_build_ground_on_worker.bind(key))
+	WorkerThreadPool.wait_for_task_completion(task)
+	var from_worker := StaticBody3D.new()
+	_dressing.dress_chunk(from_worker, _plan, key.x, key.y, _groups.get(key, []), _worker_ground)
+	var in_place := _dress(key)
+	var result := 0
+	var a: Array = _ground_meshes(from_worker)
+	var b: Array = _ground_meshes(in_place)
+	if a.size() != b.size() or a.is_empty():
+		print("FAIL _test_ground_built_on_a_worker_matches_one_built_in_place: %d ground meshes from the worker, %d in place" % [a.size(), b.size()])
+		result = 1
+	else:
+		for m in range(a.size()):
+			for s in range((a[m] as Mesh).get_surface_count()):
+				if (a[m] as Mesh).surface_get_arrays(s)[Mesh.ARRAY_VERTEX] != (b[m] as Mesh).surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+					print("FAIL _test_ground_built_on_a_worker_matches_one_built_in_place: surface %d of mesh %d differs" % [s, m])
+					result = 1
+	if from_worker.get_node_or_null("Collision") == null:
+		print("FAIL _test_ground_built_on_a_worker_matches_one_built_in_place: no collision from the worker's ground")
+		result = 1
+	from_worker.free()
+	in_place.free()
 	return result
 
 func _test_water_only_where_the_plan_has_lakes() -> int:

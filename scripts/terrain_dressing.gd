@@ -167,17 +167,40 @@ class MeshArrays:
 		var zs := relief_breaks(z0, z1, chunk_start.y, step.y, lot_start.y, plan.lot_length)
 		var radius: float = plan.radius
 		var base: int = vertices.size()
+		# SectionPlan.sample_at inlined (a call per vertex costs more than the
+		# sum): the grid cell and weights, then height and slope.
+		var heights: PackedFloat32Array = plan.heights
+		var slopes_x: PackedFloat32Array = plan._slopes_x
+		var slopes_z: PackedFloat32Array = plan._slopes_z
+		var columns := SectionPlanScript.RELIEF_COLUMNS
+		var per_lot := float(SectionPlanScript.RELIEF_POINTS_PER_LOT)
 		for x: float in xs:
 			var angle: float = x / radius
 			var outward := Vector3(cos(angle), sin(angle), 0.0)
 			var around := Vector3(-sin(angle), cos(angle), 0.0)
+			var gx: float = fposmod((chunk_start.x + x) / plan.lot_width, SectionPlanScript.LOTS_AROUND) * per_lot
+			var column := floori(gx)
+			var fx: float = gx - column
+			var east: int = (column + 1) % columns
 			for z: float in zs:
-				var h: float = plan.height_at(chunk_start.x + x, chunk_start.y + z)
-				var slope: Vector2 = plan.slope_at(chunk_start.x + x, chunk_start.y + z)
+				var gz: float = clampf((chunk_start.y + z) / plan.lot_length * per_lot, 0.0, SectionPlanScript.RELIEF_ROWS - 1)
+				var row := mini(floori(gz), SectionPlanScript.RELIEF_ROWS - 2)
+				var fz: float = gz - row
+				var i00: int = row * columns + column
+				var i10: int = row * columns + east
+				var i01: int = i00 + columns
+				var i11: int = i10 + columns
+				var w00: float = (1.0 - fx) * (1.0 - fz)
+				var w10: float = fx * (1.0 - fz)
+				var w01: float = (1.0 - fx) * fz
+				var w11: float = fx * fz
+				var h: float = heights[i00] * w00 + heights[i10] * w10 + heights[i01] * w01 + heights[i11] * w11
+				var sx: float = slopes_x[i00] * w00 + slopes_x[i10] * w10 + slopes_x[i01] * w01 + slopes_x[i11] * w11
+				var sz: float = slopes_z[i00] * w00 + slopes_z[i10] * w10 + slopes_z[i01] * w01 + slopes_z[i11] * w11
 				var k: float = (radius - h) / radius
 				vertices.append(outward * (radius - h) + Vector3(0.0, 0.0, z))
-				normals.append((-outward * k - around * slope.x - Vector3(0.0, 0.0, k * slope.y)).normalized())
-				colors.append(relief_color(h, slope.length()) if relief_lot else color)
+				normals.append((-outward * k - around * sx - Vector3(0.0, 0.0, k * sz)).normalized())
+				colors.append(relief_color(h, sqrt(sx * sx + sz * sz)) if relief_lot else color)
 				uvs.append(Vector2(x, z) / ROW_SPACING if rows_along else Vector2(z, x) / ROW_SPACING)
 		# Same winding as add_patch: (x_i, z_j) is base + i * zs.size() + j.
 		var nz: int = zs.size()
@@ -185,13 +208,6 @@ class MeshArrays:
 			for j in range(nz - 1):
 				var p00: int = base + i * nz + j
 				indices.append_array(PackedInt32Array([p00, p00 + nz, p00 + 1, p00 + nz, p00 + nz + 1, p00 + 1]))
-
-	# Triangle corners in draw order, for a collision shape.
-	func faces() -> PackedVector3Array:
-		var out := PackedVector3Array()
-		for i in indices:
-			out.append(vertices[i])
-		return out
 
 	static func relief_color(height: float, slope: float) -> Color:
 		var rock := maxf(smoothstep(0.5, 0.9, slope), smoothstep(180.0, 300.0, height))
@@ -258,8 +274,10 @@ func _init() -> void:
 	building_material.shader = shader
 	building_material.set_shader_parameter("glow_energy", BUILDING_GLOW_ENERGY)
 
-func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array) -> void:
-	_build_ground(chunk, plan, chunk_around, chunk_along)
+# `ground` is build_ground's result for this chunk, when a worker thread made
+# it already; empty, it is built here.
+func dress_chunk(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int, building_indices: Array, ground: Array = []) -> void:
+	_add_ground(chunk, ground if not ground.is_empty() else build_ground(plan, chunk_around, chunk_along))
 	if not building_indices.is_empty():
 		_build_buildings(chunk, plan, chunk_around, chunk_along, building_indices)
 
@@ -275,7 +293,11 @@ static func cell_road(column: int, row: int, west: int, east: int, south: int, n
 		return column_road
 	return maxi(column_road, row_road)
 
-func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: int) -> void:
+# The chunk's ground as vertex data: [fields, paved, water, collision],
+# three MeshArrays and, for a chunk with relief, its collision triangles
+# (empty when flat). Touches no node or resource: safe on a worker thread
+# (the plan is only read).
+static func build_ground(plan, chunk_around: int, chunk_along: int) -> Array:
 	var fields := MeshArrays.new()
 	var paved := MeshArrays.new()
 	var water := MeshArrays.new()
@@ -321,6 +343,37 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 						_add(fields, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, CROP_COLORS[plan.crops[lot]], plan.rows_along[lot] == 1, false)
 					else:
 						_add(paved, relief, plan, chunk_start, lot_start, cx0, cx1, cz0, cz1, TOWN_GROUND_COLOR if zone == SectionPlanScript.Zone.TOWN else CITY_GROUND_COLOR, true, false)
+	return [fields, paved, water, relief_collision_faces(plan, chunk_around, chunk_along) if relief else PackedVector3Array()]
+
+# A chunk with relief collides with the height grid's points (every one of
+# them is also a vertex of the drawn ground), two triangles per grid cell,
+# wound like the mesh: about a third of the drawn triangles, so the physics
+# server builds it quickly on the main thread.
+static func relief_collision_faces(plan, chunk_around: int, chunk_along: int) -> PackedVector3Array:
+	var columns: int = SectionPlanScript.CHUNK_LOTS_AROUND * SectionPlanScript.RELIEF_POINTS_PER_LOT
+	var rows: int = SectionPlanScript.CHUNK_LOTS_ALONG * SectionPlanScript.RELIEF_POINTS_PER_LOT
+	var step: Vector2 = plan.height_step()
+	var points := PackedVector3Array()
+	for c in range(columns + 1):
+		var angle: float = c * step.x / plan.radius
+		var outward := Vector3(cos(angle), sin(angle), 0.0)
+		for r in range(rows + 1):
+			var h: float = plan.grid_height(chunk_around * columns + c, chunk_along * rows + r)
+			points.append(outward * (plan.radius - h) + Vector3(0.0, 0.0, r * step.y))
+	var faces := PackedVector3Array()
+	var n: int = rows + 1
+	for c in range(columns):
+		for r in range(rows):
+			var p00: int = c * n + r
+			for i in [p00, p00 + n, p00 + 1, p00 + n, p00 + n + 1, p00 + 1]:
+				faces.append(points[i])
+	return faces
+
+# Meshes and, with relief, the collision of a chunk's ground (build_ground).
+func _add_ground(chunk: StaticBody3D, ground: Array) -> void:
+	var fields: MeshArrays = ground[0]
+	var paved: MeshArrays = ground[1]
+	var water: MeshArrays = ground[2]
 	var surface_mesh := ArrayMesh.new()
 	for part in [[fields, field_material], [paved, paved_material]]:
 		var arrays: MeshArrays = part[0]
@@ -340,15 +393,12 @@ func _build_ground(chunk: StaticBody3D, plan, chunk_around: int, chunk_along: in
 		water_node.mesh = water_mesh
 		water_node.material_override = water_material
 		chunk.add_child(water_node)
-	if relief:
-		_set_ground_collision(chunk, [fields, paved, water])
+	if not (ground[3] as PackedVector3Array).is_empty():
+		_set_ground_collision(chunk, ground[3])
 
-# A chunk with relief collides with its own drawn ground, not the shared
-# level-0 shape: same triangles as the mesh.
-func _set_ground_collision(chunk: StaticBody3D, parts: Array) -> void:
-	var faces := PackedVector3Array()
-	for arrays: MeshArrays in parts:
-		faces.append_array(arrays.faces())
+# A chunk with relief collides with its own ground, not the shared level-0
+# shape.
+func _set_ground_collision(chunk: StaticBody3D, faces: PackedVector3Array) -> void:
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(faces)
 	var collision := chunk.get_node_or_null("Collision") as CollisionShape3D

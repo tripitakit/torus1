@@ -58,8 +58,14 @@ var building_accent := PackedByteArray()
 # Share of the building's windows that are lit, 0..1.
 var building_lit := PackedFloat64Array()
 # Ground height toward the axis in metres, per grid point, index
-# row * RELIEF_COLUMNS + column. Empty: all flat.
-var heights := PackedFloat32Array()
+# row * RELIEF_COLUMNS + column. Empty: all flat. Setting it also fills the
+# slope grids (_slopes_x, _slopes_z: central differences per grid point).
+var heights := PackedFloat32Array():
+	set(value):
+		heights = value
+		_update_slopes()
+var _slopes_x := PackedFloat32Array()
+var _slopes_z := PackedFloat32Array()
 # Mountain-noise level above which lot centres became RELIEF, and the
 # highest lot-centre value (see section_generator.gd).
 var relief_threshold := 0.0
@@ -98,29 +104,56 @@ func grid_height(column: int, row: int) -> float:
 		return 0.0
 	return heights[clampi(row, 0, RELIEF_ROWS - 1) * RELIEF_COLUMNS + posmod(column, RELIEF_COLUMNS)]
 
-# Bilinear between the four grid points around (x, z); x wraps around.
 func height_at(x: float, z: float) -> float:
+	return sample_at(x, z).x
+
+func slope_at(x: float, z: float) -> Vector2:
+	var sample := sample_at(x, z)
+	return Vector2(sample.y, sample.z)
+
+# (height, dh/dx, dh/dz) at (x, z), each bilinear between the four grid
+# points around it; x wraps around. One cell lookup for all three: the
+# terrain dressing calls it for every vertex.
+func sample_at(x: float, z: float) -> Vector3:
 	if heights.is_empty():
-		return 0.0
-	var step := height_step()
-	var gx: float = fposmod(x, circumference()) / step.x
-	var gz: float = clampf(z / step.y, 0.0, RELIEF_ROWS - 1)
+		return Vector3.ZERO
+	var gx: float = fposmod(x / lot_width, LOTS_AROUND) * RELIEF_POINTS_PER_LOT
+	var gz: float = clampf(z / lot_length * RELIEF_POINTS_PER_LOT, 0.0, RELIEF_ROWS - 1)
 	var column := floori(gx)
 	var row := mini(floori(gz), RELIEF_ROWS - 2)
 	var fx: float = gx - column
 	var fz: float = gz - row
-	var low: float = lerpf(grid_height(column, row), grid_height(column + 1, row), fx)
-	var high: float = lerpf(grid_height(column, row + 1), grid_height(column + 1, row + 1), fx)
-	return lerpf(low, high, fz)
+	var i00: int = row * RELIEF_COLUMNS + column
+	var i10: int = row * RELIEF_COLUMNS + (column + 1) % RELIEF_COLUMNS
+	var i01: int = i00 + RELIEF_COLUMNS
+	var i11: int = i10 + RELIEF_COLUMNS
+	var w00: float = (1.0 - fx) * (1.0 - fz)
+	var w10: float = fx * (1.0 - fz)
+	var w01: float = (1.0 - fx) * fz
+	var w11: float = fx * fz
+	return Vector3(
+		heights[i00] * w00 + heights[i10] * w10 + heights[i01] * w01 + heights[i11] * w11,
+		_slopes_x[i00] * w00 + _slopes_x[i10] * w10 + _slopes_x[i01] * w01 + _slopes_x[i11] * w11,
+		_slopes_z[i00] * w00 + _slopes_z[i10] * w10 + _slopes_z[i01] * w01 + _slopes_z[i11] * w11)
 
-# (dh/dx, dh/dz) by central differences one grid step each way.
-func slope_at(x: float, z: float) -> Vector2:
-	if heights.is_empty():
-		return Vector2.ZERO
-	var step := height_step()
-	return Vector2(
-		(height_at(x + step.x, z) - height_at(x - step.x, z)) / (2.0 * step.x),
-		(height_at(x, z + step.y) - height_at(x, z - step.y)) / (2.0 * step.y))
+func _update_slopes() -> void:
+	var slopes_x := PackedFloat32Array()
+	var slopes_z := PackedFloat32Array()
+	if not heights.is_empty():
+		var step := height_step()
+		slopes_x.resize(heights.size())
+		slopes_z.resize(heights.size())
+		for row in range(RELIEF_ROWS):
+			var here: int = row * RELIEF_COLUMNS
+			var below: int = maxi(row - 1, 0) * RELIEF_COLUMNS
+			var above: int = mini(row + 1, RELIEF_ROWS - 1) * RELIEF_COLUMNS
+			for column in range(RELIEF_COLUMNS):
+				var west: int = (column + RELIEF_COLUMNS - 1) % RELIEF_COLUMNS
+				var east: int = (column + 1) % RELIEF_COLUMNS
+				slopes_x[here + column] = (heights[here + east] - heights[here + west]) / (2.0 * step.x)
+				slopes_z[here + column] = (heights[above + column] - heights[below + column]) / (2.0 * step.y)
+	_slopes_x = slopes_x
+	_slopes_z = slopes_z
 
 # True when any grid point of the chunk, borders included, is above 0.
 func chunk_has_relief(chunk_around: int, chunk_along: int) -> bool:

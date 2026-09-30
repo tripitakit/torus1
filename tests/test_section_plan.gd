@@ -14,6 +14,7 @@ func _init():
 	failures += _test_height_at_wraps_and_interpolates()
 	failures += _test_slope_of_a_ramp()
 	failures += _test_chunk_has_relief_looks_at_its_own_grid_points()
+	failures += _test_sample_at_gives_height_and_slope_in_one_call()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -113,3 +114,28 @@ func _test_chunk_has_relief_looks_at_its_own_grid_points() -> int:
 		print("FAIL _test_chunk_has_relief_looks_at_its_own_grid_points: border point not shared")
 		return 1
 	return 0
+
+func _test_sample_at_gives_height_and_slope_in_one_call() -> int:
+	# (h, dh/dx, dh/dz). The slope is bilinear between the grid points' own
+	# central differences: on a grid point it is that point's difference,
+	# halfway between two points the mean of theirs.
+	var plan = _plan_with(func(c: int, r: int) -> float: return float((c * 7 + r * 13) % 50) + 0.1 * c * r)
+	var step: Vector2 = plan.height_step()
+	var result := 0
+	for p in [Vector2(3.0, 4.0), Vector2(17.25, 100.5), Vector2(239.5, 7.75), Vector2(120.0, 399.5)]:
+		var sample: Vector3 = plan.sample_at(p.x * step.x, p.y * step.y)
+		var slope: Vector2 = plan.slope_at(p.x * step.x, p.y * step.y)
+		if not is_equal_approx(sample.x, plan.height_at(p.x * step.x, p.y * step.y)) or not is_equal_approx(sample.y, slope.x) or not is_equal_approx(sample.z, slope.y):
+			print("FAIL _test_sample_at_gives_height_and_slope_in_one_call: at grid %s sample %s, height %f slope %s" % [p, sample, plan.height_at(p.x * step.x, p.y * step.y), slope])
+			result = 1
+	var at_point: Vector2 = plan.slope_at(10.0 * step.x, 20.0 * step.y)
+	var expected := Vector2((plan.grid_height(11, 20) - plan.grid_height(9, 20)) / (2.0 * step.x), (plan.grid_height(10, 21) - plan.grid_height(10, 19)) / (2.0 * step.y))
+	if not at_point.is_equal_approx(expected):
+		print("FAIL _test_sample_at_gives_height_and_slope_in_one_call: slope on a grid point %s, expected %s" % [at_point, expected])
+		result = 1
+	var halfway: Vector2 = plan.slope_at(10.5 * step.x, 20.0 * step.y)
+	var next: Vector2 = plan.slope_at(11.0 * step.x, 20.0 * step.y)
+	if not halfway.is_equal_approx((at_point + next) * 0.5):
+		print("FAIL _test_sample_at_gives_height_and_slope_in_one_call: slope halfway %s, expected %s" % [halfway, (at_point + next) * 0.5])
+		result = 1
+	return result

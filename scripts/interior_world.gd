@@ -77,6 +77,12 @@ const SIGN_TEXT := "UNDOCK  [F]"
 const SIGN_READY_COLOR := Color(0.3, 1.0, 0.4)
 const SIGN_IDLE_COLOR := Color(0.5, 0.5, 0.5)
 
+# One chunk's ground vertex data (TerrainDressing.build_ground), filled by a
+# worker thread: one object per chunk, so workers never share a container.
+class GroundSlot:
+	extends RefCounted
+	var ground := []
+
 # One section of the chain, from the moment it is wanted until it is freed.
 class SectionLoad:
 	extends RefCounted
@@ -84,10 +90,14 @@ class SectionLoad:
 	var ring_index := 0
 	var radius := 0.0
 	var length := 0.0
+	var chunks_around := 0
 	var node: Node3D
 	var plan = null
 	var groups := {}
 	var task_id := -1
+	# The group task building every chunk's ground, after the plan.
+	var ground_task := -1
+	var grounds := []
 	var pending_chunks := []
 	var unloading := false
 
@@ -96,8 +106,19 @@ class SectionLoad:
 		plan = SectionGeneratorScript.generate(ring_index, radius, length)
 		groups = plan.group_buildings_by_chunk()
 
+	# Runs on worker threads, one call per chunk: writes only its own slot.
+	@warning_ignore("integer_division")
+	func build_ground(index: int) -> void:
+		(grounds[index] as GroundSlot).ground = TerrainDressingScript.build_ground(plan, index % chunks_around, index / chunks_around)
+
 	func is_ready() -> bool:
-		return task_id < 0 and plan != null and pending_chunks.is_empty() and not unloading
+		return task_id < 0 and ground_task < 0 and plan != null and pending_chunks.is_empty() and not unloading
+
+	# Waits for the ground task if it is still running.
+	func finish_ground() -> void:
+		if ground_task >= 0:
+			WorkerThreadPool.wait_for_group_task_completion(ground_task)
+			ground_task = -1
 
 var _chain: Node3D
 var _tube_material: StandardMaterial3D
@@ -140,12 +161,14 @@ func build() -> void:
 	load_now(0.0)
 
 # Loads everything wanted around chain position `focus_z` at once, waiting
-# for every plan, and frees what is too far.
+# for every plan and ground, and frees what is too far.
 func load_now(focus_z: float) -> void:
 	_plan_window(focus_z)
 	for state: SectionLoad in _sections.values():
 		if state.task_id >= 0:
 			_finish_plan(state, focus_z)
+	for state: SectionLoad in _sections.values():
+		state.finish_ground()
 	_dress_chunks(focus_z, ALL_AT_ONCE)
 	_free_unloading(ALL_AT_ONCE)
 
@@ -156,6 +179,8 @@ func stream_step(focus_z: float, chunk_budget: int, free_budget: int) -> int:
 	for state: SectionLoad in _sections.values():
 		if state.task_id >= 0 and WorkerThreadPool.is_task_completed(state.task_id):
 			_finish_plan(state, focus_z)
+		if state.ground_task >= 0 and WorkerThreadPool.is_group_task_completed(state.ground_task):
+			state.finish_ground()
 	var dressed := _dress_chunks(focus_z, chunk_budget)
 	_free_unloading(free_budget)
 	return dressed
@@ -248,6 +273,7 @@ func _notification(what: int) -> void:
 			if state.task_id >= 0:
 				WorkerThreadPool.wait_for_task_completion(state.task_id)
 				state.task_id = -1
+			state.finish_ground()
 
 # Starts every wanted section, marks far ones for unloading, and keeps the
 # bridges at both ends of the loaded sections.
@@ -258,7 +284,7 @@ func _plan_window(focus_z: float) -> void:
 			_start_section(slot)
 	for slot in _sections:
 		var state: SectionLoad = _sections[slot]
-		if state.task_id < 0 and absf(InteriorLayout.section_slot_z(slot, p) - focus_z) > UNLOAD_REACH * p:
+		if state.task_id < 0 and state.ground_task < 0 and absf(InteriorLayout.section_slot_z(slot, p) - focus_z) > UNLOAD_REACH * p:
 			state.unloading = true
 	_update_bridges()
 
@@ -268,20 +294,26 @@ func _start_section(slot: int) -> void:
 	state.ring_index = InteriorLayout.section_ring_index(docked_bridge_index, slot, ring_sections)
 	state.radius = section_radius
 	state.length = section_length
+	state.chunks_around = CHUNKS_AROUND
 	state.node = _build_section_shell(slot)
 	_chain.add_child(state.node)
 	state.task_id = WorkerThreadPool.add_task(state.generate)
 	_sections[slot] = state
 
-# Takes the finished plan and queues the section's chunks, nearest first.
+# Takes the finished plan, starts building every chunk's ground on worker
+# threads, and queues the chunks, nearest first.
 func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 	WorkerThreadPool.wait_for_task_completion(state.task_id)
 	state.task_id = -1
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
+	var grounds := []
 	for along in range(roundi(section_length / CHUNK_LENGTH)):
 		for around in range(CHUNKS_AROUND):
 			chunks.append(Vector2i(around, along))
+			grounds.append(GroundSlot.new())
+	state.grounds = grounds
+	state.ground_task = WorkerThreadPool.add_group_task(state.build_ground, grounds.size())
 	chunks.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
 		return absf(start_z + (a.y + 0.5) * CHUNK_LENGTH - focus_z) < absf(start_z + (b.y + 0.5) * CHUNK_LENGTH - focus_z))
 	state.pending_chunks = chunks
@@ -290,7 +322,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 func _dress_chunks(focus_z: float, budget: int) -> int:
 	var p := period()
 	var order: Array = _sections.values().filter(func(s: SectionLoad) -> bool:
-		return s.task_id < 0 and not s.unloading and not s.pending_chunks.is_empty())
+		return s.task_id < 0 and s.ground_task < 0 and not s.unloading and not s.pending_chunks.is_empty())
 	order.sort_custom(func(a: SectionLoad, b: SectionLoad) -> bool:
 		return absf(InteriorLayout.section_slot_z(a.slot, p) - focus_z) < absf(InteriorLayout.section_slot_z(b.slot, p) - focus_z))
 	var dressed := 0
@@ -355,7 +387,10 @@ func _build_chunk(state: SectionLoad, around: int, along: int) -> void:
 	collision.name = "Collision"
 	collision.shape = _chunk_shape
 	chunk.add_child(collision)
-	_dressing.dress_chunk(chunk, state.plan, around, along, state.groups.get(Vector2i(around, along), []))
+	# The worker's ground data is used once: drop it to free the memory.
+	var ground_slot: GroundSlot = state.grounds[along * CHUNKS_AROUND + around]
+	_dressing.dress_chunk(chunk, state.plan, around, along, state.groups.get(Vector2i(around, along), []), ground_slot.ground)
+	ground_slot.ground = []
 	state.node.add_child(chunk)
 
 func _build_cap(cap_name: String, z: float, facing: float) -> StaticBody3D:
