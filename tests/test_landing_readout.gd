@@ -19,6 +19,10 @@ func _init():
 func _test_lines() -> int:
 	var r := LandingReadout.readout(123.4, -3.26, 1.12, 12.3, 3, false)
 	var none := LandingReadout.readout(5000.0, 0.0, 0.0, 0.0, 0, false)
+	# Resting, the hull's bottom can read a hair under the pad.
+	if LandingReadout.readout(-0.2, 0.0, 0.0, 0.0, 1, true).alt != "ALT 0 m":
+		print("FAIL _test_lines: a hair under the pad reads below zero")
+		return 1
 	if r.pad != "PAD 3" or r.alt != "ALT 123 m" or r.vs != "V/S -3.3 m/s" or r.drift != "DRIFT 1.1 m/s" or r.level != "LEVEL 12°" or none.pad != "":
 		print("FAIL _test_lines: %s / %s" % [r, none.pad])
 		return 1

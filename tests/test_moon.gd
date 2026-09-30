@@ -32,6 +32,7 @@ func _initialize():
 	_failures += _test_base_transform_on_the_surface()
 	_failures += _test_surface_mesh()
 	_failures += _test_altitude()
+	_failures += _test_far_version()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -105,5 +106,15 @@ func _test_altitude() -> int:
 	var point: Vector3 = _moon.global_position + up * (MoonOrbit.RADIUS + 100.0)
 	if absf(_moon.altitude(point) - 100.0) > 0.01 or _moon.up_at(point).dot(up) < 0.999999:
 		print("FAIL _test_altitude: %f" % _moon.altitude(point))
+		return 1
+	return 0
+
+func _test_far_version() -> int:
+	# From afar a light sphere with the same material takes over: the full
+	# mesh is 420k triangles.
+	var near := _moon.get_node("Surface") as MeshInstance3D
+	var far := _moon.get_node_or_null("FarSurface") as MeshInstance3D
+	if far == null or near.visibility_range_end != MoonScript.FAR_SWITCH or far.visibility_range_begin != MoonScript.FAR_SWITCH or far.visibility_range_end != 0.0 or far.material_override != near.material_override or far.mesh.get_faces().size() / 3 > 20000:
+		print("FAIL _test_far_version: far surface missing or not set up")
 		return 1
 	return 0

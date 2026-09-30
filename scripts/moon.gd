@@ -20,6 +20,10 @@ const DENSE_STEP := 20.0
 const DENSE_REACH := 2000.0
 const GROWTH := 1.08
 const STEP_CAP := 3000.0
+# Past this distance from the moon's centre a light sphere (FAR_SEGMENTS
+# round) stands in for the full mesh, with the same material.
+const FAR_SWITCH := 1500000.0
+const FAR_SEGMENTS := 96
 # Base Selene: 30 degrees from the point right under the planet (the moon's
 # local -X), toward its local +Y.
 const BASE_ANGLE := PI / 6.0
@@ -180,7 +184,23 @@ func build() -> void:
 	material.set_shader_parameter("surface_color", load(COLOR_PATH))
 	material.set_shader_parameter("surface_normal", load(NORMAL_PATH))
 	surface.material_override = material
+	surface.visibility_range_end = FAR_SWITCH
 	add_child(surface)
+	var old_far := get_node_or_null("FarSurface")
+	if old_far != null:
+		remove_child(old_far)
+		old_far.queue_free()
+	var far := MeshInstance3D.new()
+	far.name = "FarSurface"
+	var sphere := SphereMesh.new()
+	sphere.radius = MoonOrbit.RADIUS
+	sphere.height = MoonOrbit.RADIUS * 2.0
+	sphere.radial_segments = FAR_SEGMENTS
+	sphere.rings = FAR_SEGMENTS / 2
+	far.mesh = sphere
+	far.material_override = material
+	far.visibility_range_begin = FAR_SWITCH
+	add_child(far)
 	var old_base := get_node_or_null("Base")
 	if old_base != null:
 		remove_child(old_base)

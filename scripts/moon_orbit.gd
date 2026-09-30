@@ -15,8 +15,10 @@ const GM := 6.1e10
 # above DETACH_ALTITUDE (no flicker across the boundary).
 const ATTACH_ALTITUDE := 30000.0
 const DETACH_ALTITUDE := 32000.0
-# 60 degrees ahead of the ship's start along the ring's motion.
-const START_ANGLE := -PI / 6.0
+# At the start: Base Selene in daylight (the scene's sun shines toward -Z)
+# and the moon nearly full, about 45 degrees left of the ship's nose, clear
+# of the planet's disc.
+const START_ANGLE := 5.0 * PI / 6.0
 
 static func moon_rate(planet_gm: float) -> float:
 	return OrbitalFrame.orbit_angular_velocity(planet_gm, ORBIT_RADIUS)

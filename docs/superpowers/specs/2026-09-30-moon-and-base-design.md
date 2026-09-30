@@ -198,3 +198,26 @@ la gravità della luna.
   sulla piazzola 1.
 - Verifica dal vivo con la build a precisione doppia: raggiungere la luna,
   agganciarsi, allunare su una piazzola e ripartire.
+
+## Cambiato durante l'esecuzione
+
+- **Angolo iniziale 150°** (non 60° davanti alla nave): con il sole della
+  scena la base era al buio all'avvio e la luna mostrava il lato scuro. Ora
+  la base è in pieno giorno (il giorno lunare, visto dall'anello, dura circa
+  9 ore) e la luna è quasi piena, circa 45° a sinistra della prua. A 24.000 km
+  è un disco di circa 1,2°: piccola, come previsto dai numeri scelti.
+- **Mesh:** 512 spicchi e anelli fino a 3 km di passo (circa 211.000 vertici,
+  costruita in circa 140 ms); oltre 1500 km dal centro la sostituisce una
+  sfera leggera con lo stesso materiale (la mesh piena costava FPS anche da
+  lontano).
+- **Base come corpo statico** (non animato): un corpo cinematico si sposta
+  solo al passo di fisica successivo, e alla velocità della luna la base
+  restava 32 m indietro sotto una nave in piazzola. La luna passa al server di
+  fisica la nuova posizione della base a ogni tick.
+- **Trascinamento:** la nave agganciata ruota esattamente dell'ultimo passo
+  della luna (la luna si muove per prima a ogni tick). Il riferimento si
+  decide prima del trascinamento: al tick di aggancio la nave viene
+  trascinata, a quello di sgancio no.
+- **Misure (GTX 1650 Super, 1600 × 900):** posati sulla piazzola e a 2,5 km
+  sopra la base circa 48 FPS; alla partenza sull'anello circa 24 FPS con o
+  senza la luna (costo della stazione, già presente prima).

@@ -12,6 +12,7 @@ func _init():
 	failures += _test_world_environment_builds_the_sky()
 	failures += _test_void_cruiser_orbits_with_the_station()
 	failures += _test_moon_orbits_beside_the_planet()
+	failures += _test_base_in_daylight_and_moon_in_view_at_start()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -199,3 +200,28 @@ func _test_moon_orbits_beside_the_planet() -> int:
 		result = 1
 	scene.free()
 	return result
+
+func _test_base_in_daylight_and_moon_in_view_at_start() -> int:
+	# At the start the sun lights Base Selene (a dark base first thing
+	# reads as broken) and the moon shows from the ship, clear of the
+	# planet's disc.
+	const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+	const MoonScript = preload("res://scripts/moon.gd")
+	var scene: Node3D = (load("res://scenes/torus1_system.tscn") as PackedScene).instantiate()
+	var sun := scene.get_node("SunLight") as Node3D
+	var system := scene.get_node("PlanetSystem") as Node3D
+	var ship := scene.get_node("VoidCruiser") as Node3D
+	var toward_sun: Vector3 = sun.transform.basis.z.normalized()
+	var base_up: Vector3 = MoonOrbit.moon_basis(MoonOrbit.START_ANGLE) * MoonScript.base_direction()
+	var planet: Vector3 = system.position
+	var moon: Vector3 = planet + MoonOrbit.centre_offset(MoonOrbit.START_ANGLE)
+	var to_moon: Vector3 = (moon - ship.position).normalized()
+	var to_planet: Vector3 = (planet - ship.position).normalized()
+	var apart: float = rad_to_deg(acos(to_moon.dot(to_planet)))
+	var planet_disc: float = rad_to_deg(asin(1737400.0 / ship.position.distance_to(planet)))
+	var lit_face: float = (ship.position - moon).normalized().dot(toward_sun)
+	scene.free()
+	if base_up.dot(toward_sun) < 0.3 or apart < planet_disc + 5.0 or lit_face < 0.3:
+		print("FAIL _test_base_in_daylight_and_moon_in_view_at_start: sun on the base %.2f, moon %.1f deg from the planet (disc %.1f), lit face toward the ship %.2f" % [base_up.dot(toward_sun), apart, planet_disc, lit_face])
+		return 1
+	return 0

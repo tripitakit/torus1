@@ -25,7 +25,8 @@ static func readout(altitude: float, vertical: float, drift: float, tilt: float,
 		status = "TOO FAST"
 	return {
 		"pad": "PAD %d" % pad if pad > 0 else "",
-		"alt": "ALT %.0f m" % altitude,
+		# Resting, the hull's bottom can sit a hair under the pad's top.
+		"alt": "ALT %.0f m" % maxf(altitude, 0.0),
 		"vs": "V/S %+.1f m/s" % vertical,
 		"drift": "DRIFT %.1f m/s" % drift,
 		"level": "LEVEL %.0f°" % tilt,
