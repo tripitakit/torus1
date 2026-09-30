@@ -29,7 +29,7 @@ func _init():
 	failures += _test_about_a_third_of_sections_have_a_chain()
 	failures += _test_chain_reaches_1000_to_1500_m()
 	failures += _test_chain_stays_clear_of_ends_and_city()
-	failures += _test_chain_crest_varies_and_has_spires()
+	failures += _test_chain_crest_varies_without_spires()
 	failures += _test_hills_stay_under_150_off_the_chain()
 	failures += _test_heights_join_where_the_way_round_closes()
 	failures += _test_buildings_stand_at_level_zero()
@@ -307,7 +307,7 @@ func _test_chain_stays_clear_of_ends_and_city() -> int:
 		return 1
 	return 0
 
-func _test_chain_crest_varies_and_has_spires() -> int:
+func _test_chain_crest_varies_without_spires() -> int:
 	var plan = _chain_plan()
 	var chain = SectionGenerator.chain_of(plan)
 	var step: Vector2 = plan.height_step()
@@ -323,9 +323,10 @@ func _test_chain_crest_varies_and_has_spires() -> int:
 		z += 500.0
 	var result := 0
 	if crests.is_empty() or crests.max() - crests.min() < 400.0:
-		print("FAIL _test_chain_crest_varies_and_has_spires: crest from %s to %s m" % [crests.min(), crests.max()])
+		print("FAIL _test_chain_crest_varies_without_spires: crest from %s to %s m" % [crests.min(), crests.max()])
 		result = 1
-	# Spires: points 150 m above everything two grid steps away.
+	# No spires (they read as needles): no point 150 m above everything two
+	# grid steps away.
 	var spires := 0
 	for row in range(2, 399):
 		for column in range(240):
@@ -338,8 +339,8 @@ func _test_chain_crest_varies_and_has_spires() -> int:
 			if h - around >= 150.0:
 				spires += 1
 	print("  crest %.0f-%.0f m, %d spire points" % [crests.min(), crests.max(), spires])
-	if spires < 3:
-		print("FAIL _test_chain_crest_varies_and_has_spires: %d spire points" % spires)
+	if spires > 0:
+		print("FAIL _test_chain_crest_varies_without_spires: %d spire points" % spires)
 		result = 1
 	return result
 

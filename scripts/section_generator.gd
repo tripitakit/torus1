@@ -23,22 +23,18 @@ const RELIEF_BLEND := 250.0
 # its line wandering CHAIN_MEANDER either way. Along it one noise
 # (CHAIN_FEATURE_SIZE) sets both the crest and the half width: wide high
 # massifs, narrow low saddles. The ends taper over CHAIN_TAPER. Flanks get
-# spurs and valleys from a ridged noise (CHAIN_DETAIL_SIZE); spires stand on
-# the crest. Nothing above MOUNTAIN_HEIGHT. A lot whose centre the chain
+# spurs and valleys from a ridged noise (CHAIN_DETAIL_SIZE). No spires: they
+# read as needles. Nothing above MOUNTAIN_HEIGHT. A lot whose centre the chain
 # raises past MOUNTAIN_LOT_MIN is MOUNTAIN.
 const CHAIN_CHANCE := 1.0 / 3.0
 const CHAIN_LENGTHS := Vector2(6000.0, 12000.0)
 const CHAIN_END_MARGIN := 2000.0
 const CHAIN_MEANDER := 400.0
-const CHAIN_CREST := Vector2(450.0, 1150.0)
+const CHAIN_CREST := Vector2(600.0, 1350.0)
 const CHAIN_HALF_WIDTH := Vector2(1000.0, 2000.0)
 const CHAIN_TAPER := 1500.0
 const CHAIN_FEATURE_SIZE := 3000.0
 const CHAIN_DETAIL_SIZE := 600.0
-const SPIRE_COUNT := Vector2i(3, 8)
-# At least 80 m: a narrower spire can fall between the 50 m grid's points.
-const SPIRE_RADIUS := Vector2(80.0, 125.0)
-const SPIRE_HEIGHT := Vector2(400.0, 700.0)
 const MOUNTAIN_HEIGHT := 1500.0
 const MOUNTAIN_LOT_MIN := 20.0
 const ZONE_FEATURE_SIZE := 2500.0
@@ -165,8 +161,6 @@ class Chain:
 	var meander: FastNoiseLite
 	var massif: FastNoiseLite
 	var detail: FastNoiseLite
-	# Vector4(x, z, radius, height) per spire.
-	var spires: Array[Vector4] = []
 
 	func ridge_x(z: float) -> float:
 		return x0 + CHAIN_MEANDER * meander.get_noise_1d(z)
@@ -181,7 +175,9 @@ class Chain:
 		var dx: float = _gap(x, ridge_x(z))
 		if dx >= CHAIN_HALF_WIDTH.y:
 			return 0.0
-		var bulk: float = clampf((massif.get_noise_1d(z) + 1.0) * 0.5, 0.0, 1.0)
+		# The noise mostly stays within +-0.6: stretched, massifs and saddles
+		# use the whole crest range.
+		var bulk: float = clampf(0.5 + 0.8 * massif.get_noise_1d(z), 0.0, 1.0)
 		var taper: float = smoothstep(0.0, CHAIN_TAPER, z - z0) * smoothstep(0.0, CHAIN_TAPER, z1 - z)
 		var p: float = clampf(1.0 - dx / lerpf(CHAIN_HALF_WIDTH.x, CHAIN_HALF_WIDTH.y, bulk), 0.0, 1.0)
 		var h := 0.0
@@ -190,10 +186,6 @@ class Chain:
 			var angle: float = x / radius
 			var ridged: float = 1.0 - absf(detail.get_noise_3d(cos(angle) * radius, sin(angle) * radius, z))
 			h = taper * lerpf(CHAIN_CREST.x, CHAIN_CREST.y, bulk) * pow(p, 1.4) * (0.7 + 0.45 * ridged)
-		for spire in spires:
-			var d: float = Vector2(_gap(x, spire.x), z - spire.y).length()
-			if d < spire.z:
-				h += spire.w * pow(1.0 - d / spire.z, 1.2)
 		return minf(h, MOUNTAIN_HEIGHT)
 
 static func _chain_rng(section_index: int) -> RandomNumberGenerator:
@@ -220,10 +212,6 @@ static func chain_of(plan) -> Chain:
 	chain.meander = _noise(hash([plan.section_index, "meander"]), CHAIN_FEATURE_SIZE, 2)
 	chain.massif = _noise(hash([plan.section_index, "massif"]), CHAIN_FEATURE_SIZE, 3)
 	chain.detail = _noise(hash([plan.section_index, "detail"]), CHAIN_DETAIL_SIZE, 3)
-	for k in range(rng.randi_range(SPIRE_COUNT.x, SPIRE_COUNT.y)):
-		var z: float = rng.randf_range(chain.z0 + CHAIN_TAPER, chain.z1 - CHAIN_TAPER)
-		var x: float = fposmod(chain.ridge_x(z) + rng.randf_range(-150.0, 150.0), chain.circumference)
-		chain.spires.append(Vector4(x, z, rng.randf_range(SPIRE_RADIUS.x, SPIRE_RADIUS.y), rng.randf_range(SPIRE_HEIGHT.x, SPIRE_HEIGHT.y)))
 	return chain
 
 # Every lot but the city's whose centre the chain raises past
