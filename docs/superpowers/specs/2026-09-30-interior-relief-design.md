@@ -106,23 +106,29 @@ strade, così le strade la vedono.
 
 ### Geometria: `scripts/terrain_dressing.gd`
 
-- **Blocco piatto** (`chunk_has_relief` falso): tutto come oggi, stessi
-  vertici e stessa collisione condivisa.
-- **Blocco con rilievo:**
+(Aggiornato dopo l'esecuzione e la revisione finale: vedi "Cambiato durante
+l'esecuzione" in fondo.)
+
+- **Piano senza quote** (per esempio nei test): tutto come prima, mosaico a
+  quota 0 e collisione condivisa.
+- **Piano con quote**, ogni blocco, anche quelli piatti:
   - Ogni rettangolo del mosaico (campo, strada, selciato, acqua, RILIEVO) si
     divide su **tutte le linee della griglia di quote** che lo attraversano,
     sui **bordi di ogni possibile fascia stradale del suo lotto** (4 e 6 m da
     ogni lato del lotto), più i suoi bordi. Così due rettangoli che
     condividono un lato hanno esattamente gli stessi vertici su quel lato,
-    nei due sensi. Niente crepe, anche fra una strada di 6 m e un campo di
-    250 m.
-  - Vertice: `(R - h) * (cos a, sin a, 0) + z * Z`, con `a = x / R` e
-    `h = height_at` in coordinate della sezione (`x` del blocco + inizio del
-    blocco).
+    nei due sensi, anche fra blocchi vicini. Niente crepe.
+  - **Quota:** ogni cella della griglia è fatta di due triangoli, divisi
+    dalla diagonale (x1, z0)-(x0, z1) (la "piega"). La quota di un punto sta
+    sul triangolo che lo contiene. Un rettangolo che attraversa la piega
+    viene tagliato lungo la piega: ogni triangolo disegnato sta su un piano
+    della collisione.
+  - Vertice: `(R - h) * (cos a, sin a, 0) + z * Z`, con `a = x / R`.
   - Normale: con `u` verso l'asse, `t` attorno (verso x crescente) e
-    `k = (R - h) / R`: `normalize(k * u - h_x * t - k * h_z * Z)`. Su terreno
-    piatto è `u`; su un pendio che sale verso +x si inclina verso -x.
-  - UV dei filari come oggi (metri piatti).
+    `k = (R - h) / R`: `normalize(k * u - h_x * t - k * h_z * Z)`. La
+    pendenza (`h_x`, `h_z`) è bilineare fra le differenze centrali dei punti
+    di griglia: ombreggiatura morbida anche sopra la piega.
+  - UV dei filari come prima (metri piatti).
 - **Colore del RILIEVO** (solo i lotti RELIEF; i campi in collina tengono il
   colore della coltura):
   - prato `Color(0.36, 0.5, 0.26)`, roccia `Color(0.46, 0.44, 0.41)`;
@@ -130,21 +136,45 @@ strade, così le strade la vedono.
     `smoothstep(180, 300, h)`, con pendenza = lunghezza di `slope_at`.
   - Materiale: quello del selciato (colore dei vertici, niente strisce).
 - **Collisione:** un blocco con rilievo sostituisce la forma del suo nodo
-  `Collision` con una `ConcavePolygonShape3D` fatta con gli stessi triangoli
-  di tutte le sue superfici del terreno (acqua compresa). È propria del
-  blocco e sparisce con lui. Gli edifici tengono i loro collisori.
-- **Budget di vestizione:** oggi 16 blocchi per frame (frame peggiore misurato
-  27 ms, limite del test 50 ms). Quasi ogni blocco con campi avrà colline,
-  quindi non serve un costo diverso per i blocchi con rilievo: si misura il
-  frame peggiore e, se supera 35 ms, si abbassa `CHUNKS_DRESSED_PER_FRAME`
-  finché torna sotto, controllando che le sezioni siano ancora pronte in
-  volo.
+  `Collision` con una `ConcavePolygonShape3D` propria, fatta con i **punti
+  della griglia di quote** (15 × 20 celle, due triangoli ciascuna, con la
+  stessa piega del disegno). Il terreno disegnato sta su quei piani, a meno
+  della freccia della corda (circa 0,3 m fra punti a 52 m sull'arco). I
+  blocchi piatti tengono la forma condivisa. Gli edifici tengono i loro
+  collisori.
+- **Dati e nodi separati:** `build_ground` (statico, sicuro sui thread)
+  produce i dati dei vertici e i triangoli di collisione di un blocco;
+  `dress_chunk` crea mesh e forma sul thread principale.
 
 ### `scripts/interior_world.gd`
 
-- Al massimo cambia `CHUNKS_DRESSED_PER_FRAME` (vedi sopra).
-- Tutto il resto non cambia: la forma condivisa resta la forma iniziale di ogni
-  blocco, e il rivestimento la sostituisce solo dove serve.
+- Quando il piano di una sezione è pronto, un task di gruppo del
+  `WorkerThreadPool` (alta priorità, tutti i thread meno due) costruisce i
+  dati di tutti i suoi 320 blocchi, uno slot per blocco. Il frame crea solo
+  mesh e forme, 16 blocchi per frame come prima.
+- Una sezione non si scarica e non si libera mentre il suo task gira; alla
+  distruzione del mondo si aspetta il task.
+
+## Cambiato durante l'esecuzione
+
+Misure e motivi stanno nel ledger del piano; qui il risultato.
+
+- **Dati dei blocchi sui thread di lavoro.** Sul thread principale un
+  blocco con rilievo costava circa 22 ms: frame fino a 390 ms e attracco di
+  molti secondi. Abbassare i blocchi per frame non bastava, perché
+  all'attracco si vestono 640 blocchi insieme.
+- **Collisione sui punti di griglia**, non su tutti i triangoli disegnati:
+  `set_faces` su circa 1900 triangoli costava circa 1,9 ms per blocco sul
+  thread principale.
+- **Quota sui due triangoli della cella e taglio lungo la piega** (dalla
+  revisione finale): con la quota bilineare il disegno si staccava dalla
+  collisione fino a 7 m sui pendii ripidi.
+- **Suddivisione fine anche per i blocchi piatti** (dalla revisione finale):
+  le corde lunghe di un blocco piatto aprivano fessure fino a 0,44 m accanto
+  a un blocco con rilievo.
+- Risultato: attracco circa 2,5 s (limite 3 s), frame peggiore in volo circa
+  34 ms (limite 50 ms), generazione di un piano circa 0,5 s su un thread di
+  lavoro.
 
 ## Test (TDD, ogni test visto rosso prima)
 
@@ -160,7 +190,7 @@ strade, così le strade la vedono.
 - la quota combacia dove il giro si chiude: `height_at(0, z)` =
   `height_at(circonferenza, z)`;
 - `height_at` sui punti di griglia vale la griglia; a metà fra due punti vale
-  la media;
+  la media; `sample_at` dà quota e pendenza insieme;
 - quota 0 sotto ogni angolo di ogni edificio;
 - esiste almeno un punto oltre 200 m (le montagne ci sono davvero).
 
@@ -175,8 +205,14 @@ strade, così le strade la vedono.
   blocco (niente buchi né sovrapposizioni);
 - colore RILIEVO: prato in basso e in piano, roccia su un pendio ripido o in
   alto;
-- collisione: un blocco con rilievo ha una `ConcavePolygonShape3D` propria con
-  gli stessi triangoli della mesh; un blocco piatto tiene la forma data.
+- collisione: un blocco con rilievo ha una `ConcavePolygonShape3D` propria
+  sulla griglia di quote; un blocco piatto tiene la forma data;
+- il terreno disegnato sta sulla collisione: vertici esatti, centri dei
+  triangoli entro la freccia della corda, anche sul blocco più ripido;
+- due blocchi vicini lungo la sezione, uno piatto e uno con rilievo, hanno
+  gli stessi vertici sul bordo comune;
+- i dati preparati su un thread di lavoro danno la stessa mesh di quelli
+  preparati sul posto.
 
 `tests/test_interior_world.gd`:
 - il test sulla forma condivisa diventa: blocchi piatti condividono la forma,
