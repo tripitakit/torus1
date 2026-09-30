@@ -7,6 +7,7 @@ const VelocityCross = preload("res://scripts/velocity_cross.gd")
 const Attitude = preload("res://scripts/attitude.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+const LandingReadout = preload("res://scripts/landing_readout.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -54,9 +55,9 @@ const COCKPIT_POSITION := Vector3(0.0, 0.5, -8.0)
 # Landing on the moon (ground, pads, flat roofs): slower than these, and
 # level (the ship's up within LANDING_TILT of the local vertical, the nose
 # any way). Otherwise a crash.
-const LANDING_VERTICAL_SPEED := 5.0
-const LANDING_HORIZONTAL_SPEED := 2.0
-const LANDING_TILT := 0.4363323  # 25 degrees
+const LANDING_VERTICAL_SPEED := LandingReadout.DESCENT_LIMIT
+const LANDING_HORIZONTAL_SPEED := LandingReadout.DRIFT_LIMIT
+const LANDING_TILT := LandingReadout.LEVEL_LIMIT * PI / 180.0
 const HALF_HEIGHT := 3.75  # HULL_SIZE.y / 2
 # The wreck comes to rest this far above the planet's surface.
 const PLANET_CLEARANCE := 10.0
@@ -118,6 +119,18 @@ func _process(delta: float) -> void:
 	var readout := _update_approach_guide()
 	if cockpit:
 		cockpit.update_approach(readout)
+		cockpit.update_moon(moon_readout())
+
+# The moon panel's readout while in the moon's frame, else empty.
+func moon_readout() -> Dictionary:
+	var moon := moon_node()
+	if not in_moon_frame or moon == null:
+		return {}
+	var up: Vector3 = moon.up_at(global_position)
+	var vertical: float = velocity.dot(up)
+	var drift: float = (velocity - up * vertical).length()
+	var tilt: float = rad_to_deg(acos(clampf(_world_basis().y.normalized().dot(up), -1.0, 1.0)))
+	return LandingReadout.readout(moon.altitude(global_position) - HALF_HEIGHT, vertical, drift, tilt, 0, is_landed)
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)

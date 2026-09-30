@@ -40,6 +40,15 @@ const APPROACH_LINES := {
 	"status": "StatusLabel",
 }
 const APPROACH_PANEL_WIDTH := 300.0
+# The moon panel (same place as the approach panel): readout key -> label.
+const MOON_LINES := {
+	"pad": "PadLabel",
+	"alt": "AltLabel",
+	"vs": "VsLabel",
+	"drift": "DriftLabel",
+	"level": "LevelLabel",
+	"status": "StatusLabel",
+}
 # By DockingAssist.Rating: OK, CAUTION, OVER.
 const APPROACH_COLORS := [Color(0.3, 1.0, 0.4), Color(1.0, 0.8, 0.3), Color(1.0, 0.3, 0.25)]
 
@@ -88,6 +97,23 @@ func update_approach(readout: Dictionary) -> void:
 	var status := lines.get_node("StatusLabel") as Label
 	status.visible = readout.status != ""
 	status.label_settings.font_color = APPROACH_COLORS[0] if readout.ready else APPROACH_COLORS[2]
+
+# Landing on the moon (LandingReadout.readout); empty hides the panel. Empty
+# pad and status lines are hidden.
+func update_moon(readout: Dictionary) -> void:
+	var panel := get_node("Hud/MoonPanel") as Control
+	panel.visible = not readout.is_empty()
+	if readout.is_empty():
+		return
+	var lines := panel.get_node("Lines")
+	for key in MOON_LINES:
+		var label := lines.get_node(MOON_LINES[key]) as Label
+		label.text = readout[key]
+		label.visible = readout[key] != ""
+		if readout.colors.has(key):
+			label.label_settings.font_color = readout.colors[key]
+	var status := lines.get_node("StatusLabel") as Label
+	status.label_settings.font_color = APPROACH_COLORS[0] if readout.status == "LANDED" else APPROACH_COLORS[2]
 
 # Shown only while the thrust is scaled down near a dock.
 func set_thrust_scale(scale: float) -> void:
@@ -202,6 +228,26 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(approach_lines, APPROACH_LINES[key], settings)
+	# Top right too, instead of the approach panel near the moon.
+	var moon := PanelContainer.new()
+	moon.name = "MoonPanel"
+	moon.anchor_left = 1.0
+	moon.anchor_right = 1.0
+	moon.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
+	moon.offset_right = -HUD_MARGIN
+	moon.offset_top = HUD_MARGIN
+	moon.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	moon.add_theme_stylebox_override("panel", background)
+	moon.visible = false
+	hud.add_child(moon)
+	var moon_lines := VBoxContainer.new()
+	moon_lines.name = "Lines"
+	moon.add_child(moon_lines)
+	for key in MOON_LINES:
+		var settings := LabelSettings.new()
+		settings.font_size = HUD_FONT_SIZE
+		settings.font_color = HUD_TEXT_COLOR
+		_add_hud_label(moon_lines, MOON_LINES[key], settings)
 	# Bottom right.
 	var navball: Control = NavballScript.new()
 	navball.name = "Navball"

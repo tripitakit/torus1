@@ -17,6 +17,7 @@ func _init():
 	failures += _test_thrust_line_shows_the_scale_near_a_dock()
 	failures += _test_approach_panel_top_right_hidden_until_fed()
 	failures += _test_approach_panel_writes_and_colours_the_readout()
+	failures += _test_moon_panel_shows_the_landing_readout()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_bottom_right()
 	failures += _test_hud_hosts_the_flight_markers_full_screen()
@@ -315,6 +316,36 @@ func _test_hud_hosts_the_flight_markers_full_screen() -> int:
 	var markers := cockpit.get_node_or_null("Hud/FlightMarkers") as Control
 	if markers == null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE or not is_equal_approx(markers.anchor_right, 1.0) or not is_equal_approx(markers.anchor_bottom, 1.0):
 		print("FAIL _test_hud_hosts_the_flight_markers_full_screen: missing, catching the mouse, or not full screen")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_moon_panel_shows_the_landing_readout() -> int:
+	# Top right like the approach panel, hidden until fed; lines coloured by
+	# the readout.
+	const LandingReadout = preload("res://scripts/landing_readout.gd")
+	var cockpit := _make_cockpit()
+	var result := 0
+	var panel := cockpit.get_node_or_null("Hud/MoonPanel") as Control
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
+		print("FAIL _test_moon_panel_shows_the_landing_readout: missing, shown from the start, or not top right")
+		cockpit.free()
+		return 1
+	cockpit.update_moon(LandingReadout.readout(120.0, -6.0, 0.5, 3.0, 4, false))
+	var lines := panel.get_node("Lines")
+	var vs := lines.get_node("VsLabel") as Label
+	var drift := lines.get_node("DriftLabel") as Label
+	var status := lines.get_node("StatusLabel") as Label
+	if not panel.visible or (lines.get_node("PadLabel") as Label).text != "PAD 4" or (lines.get_node("AltLabel") as Label).text != "ALT 120 m" or not vs.label_settings.font_color.is_equal_approx(LandingReadout.BAD) or not drift.label_settings.font_color.is_equal_approx(LandingReadout.GOOD) or status.text != "TOO FAST" or not status.visible:
+		print("FAIL _test_moon_panel_shows_the_landing_readout: readout not shown as expected")
+		result = 1
+	cockpit.update_moon(LandingReadout.readout(900.0, -1.0, 0.5, 3.0, 0, false))
+	if (lines.get_node("PadLabel") as Label).visible or status.visible:
+		print("FAIL _test_moon_panel_shows_the_landing_readout: empty pad or status lines still shown")
+		result = 1
+	cockpit.update_moon({})
+	if panel.visible:
+		print("FAIL _test_moon_panel_shows_the_landing_readout: an empty readout left it shown")
 		result = 1
 	cockpit.free()
 	return result
