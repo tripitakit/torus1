@@ -144,22 +144,20 @@ const CONIFER_GREEN := Color(0.12, 0.3, 0.16)
 const BROADLEAF_GREEN := Color(0.24, 0.42, 0.14)
 # Past this the forest floor's colour stands in for the trees.
 const TREE_VISIBILITY_END := 3000.0
-# Floats per tree in a MultiMesh buffer: 12 of transform, 4 of custom data
-# (the crown's green).
+# Floats per tree in a MultiMesh buffer: 12 of transform, 4 of colour (the
+# crown's green). Instance colour, not custom data: the compatibility
+# renderer showed custom data as red, blue and magenta crowns.
 const TREE_FLOATS := 16
+const TRUNK_COLOR := Color(0.36, 0.25, 0.16)
 const TREE_SHADER := """
 shader_type spatial;
 
-// Vertex colour: trunk brown with alpha 0, crown with alpha 1; each tree's
-// crown green comes in its instance custom data.
-varying vec3 crown;
+uniform vec3 trunk_color : source_color = vec3(0.36, 0.25, 0.16);
 
-void vertex() {
-	crown = INSTANCE_CUSTOM.rgb;
-}
-
+// COLOR is the vertex colour times the instance's: the crown (white, alpha
+// 1) takes the tree's green; the trunk (alpha 0) stays trunk_color.
 void fragment() {
-	ALBEDO = mix(COLOR.rgb, crown, COLOR.a);
+	ALBEDO = mix(trunk_color, COLOR.rgb, COLOR.a);
 	ROUGHNESS = 0.9;
 }
 """
@@ -427,6 +425,7 @@ func _init() -> void:
 	tree_shader.code = TREE_SHADER
 	tree_material = ShaderMaterial.new()
 	tree_material.shader = tree_shader
+	tree_material.set_shader_parameter("trunk_color", TRUNK_COLOR)
 
 # `ground` is build_ground's result for this chunk, when a worker thread made
 # it already; empty, it is built here.
@@ -568,7 +567,7 @@ func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
 			continue
 		var multimesh := MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.use_custom_data = true
+		multimesh.use_colors = true
 		multimesh.mesh = part[2]
 		multimesh.instance_count = buffer.size() / TREE_FLOATS
 		multimesh.buffer = buffer

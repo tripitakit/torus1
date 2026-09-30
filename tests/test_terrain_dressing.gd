@@ -645,7 +645,9 @@ func _test_tree_nodes() -> int:
 			continue
 		var angle: float = 1.5 * _plan.lot_width / RADIUS
 		var top: Vector3 = Vector3(cos(angle), sin(angle), 0.0) * (RADIUS - float(trees[2]) + 1.0) + Vector3(0.0, 0.0, 500.0)
-		if node == null or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_VISIBILITY_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
+		# Instance colours carry the crown green (custom data showed red and
+		# blue crowns in the compatibility renderer).
+		if node == null or not node.multimesh.use_colors or node.multimesh.use_custom_data or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_VISIBILITY_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
 			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % names[kind])
 			result = 1
 	chunk.free()
