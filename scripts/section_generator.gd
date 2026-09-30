@@ -12,6 +12,14 @@ const TOWN_SHARE := 0.15
 # all lots (see _with_relief).
 const RELIEF_SHARE := 0.05
 const MOUNTAIN_FEATURE_SIZE := 1500.0
+# Hills roll up to HILL_HEIGHT everywhere on open land; mountains add up to
+# MOUNTAIN_HEIGHT in total where the mountain noise passes the RELIEF
+# threshold. Both fade to 0 within RELIEF_BLEND of a town, the city, a lake
+# or an end wall.
+const HILL_FEATURE_SIZE := 800.0
+const HILL_HEIGHT := 100.0
+const MOUNTAIN_HEIGHT := 350.0
+const RELIEF_BLEND := 250.0
 const ZONE_FEATURE_SIZE := 2500.0
 const CITY_RADIUS := 700.0
 # Share of the length, from each end, the city centre keeps away from.
@@ -63,6 +71,7 @@ static func generate(section_index: int, radius: float, length: float):
 	plan.road_west = roads[0]
 	plan.road_south = roads[1]
 	_place_buildings(plan)
+	plan.heights = _heights(plan)
 	return plan
 
 # Noise sampled at the lot centre's 3D position on the cylinder, so zones join
@@ -152,6 +161,65 @@ static func _with_relief(plan, zones: PackedByteArray) -> PackedByteArray:
 	plan.relief_threshold = threshold
 	plan.relief_peak = peak
 	return zones
+
+static func _is_flat(zone: int) -> bool:
+	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY or zone == SectionPlanScript.Zone.WATER
+
+# For each lot, the rectangles (x0, z0, x1, z1) of the flat lots among it and
+# its 8 neighbours. RELIEF_BLEND is under one lot, so no farther lot can be
+# nearer than it. Lots next to the seam get the neighbour across it at its
+# unrolled position (x below 0 or past the circumference).
+static func _flat_rects_by_lot(plan) -> Array:
+	var by_lot := []
+	for along in range(SectionPlanScript.LOTS_ALONG):
+		for around in range(SectionPlanScript.LOTS_AROUND):
+			var rects := []
+			for dz in range(-1, 2):
+				var lot_z: int = along + dz
+				if lot_z < 0 or lot_z >= SectionPlanScript.LOTS_ALONG:
+					continue
+				for dx in range(-1, 2):
+					var lot_x: int = around + dx
+					if _is_flat(plan.zone_at(lot_x, lot_z)):
+						rects.append(Rect2(lot_x * plan.lot_width, lot_z * plan.lot_length, plan.lot_width, plan.lot_length))
+			by_lot.append(rects)
+	return by_lot
+
+# Distance from (x, z) to the nearest of `rects` or to an end wall. A point
+# inside or on the edge of a flat lot is at 0.
+static func _flat_distance(plan, x: float, z: float, rects: Array) -> float:
+	var nearest: float = minf(z, plan.length - z)
+	for rect: Rect2 in rects:
+		var gap_x: float = maxf(0.0, maxf(rect.position.x - x, x - rect.end.x))
+		var gap_z: float = maxf(0.0, maxf(rect.position.y - z, z - rect.end.y))
+		nearest = minf(nearest, Vector2(gap_x, gap_z).length())
+	return nearest
+
+@warning_ignore("integer_division")
+static func _heights(plan) -> PackedFloat32Array:
+	var mountains := mountain_noise(plan.section_index)
+	var hills := FastNoiseLite.new()
+	hills.seed = hash([plan.section_index, "hills"])
+	hills.frequency = 1.0 / HILL_FEATURE_SIZE
+	hills.fractal_octaves = 2
+	var flat_rects := _flat_rects_by_lot(plan)
+	var step: Vector2 = plan.height_step()
+	var heights := PackedFloat32Array()
+	heights.resize(SectionPlanScript.RELIEF_COLUMNS * SectionPlanScript.RELIEF_ROWS)
+	for row in range(SectionPlanScript.RELIEF_ROWS):
+		var z: float = row * step.y
+		var along: int = mini(row / SectionPlanScript.RELIEF_POINTS_PER_LOT, SectionPlanScript.LOTS_ALONG - 1)
+		for column in range(SectionPlanScript.RELIEF_COLUMNS):
+			var x: float = column * step.x
+			var around: int = column / SectionPlanScript.RELIEF_POINTS_PER_LOT
+			var distance := _flat_distance(plan, x, z, flat_rects[along * SectionPlanScript.LOTS_AROUND + around])
+			if distance <= 0.0:
+				continue  # resize() filled it with 0
+			var p := surface_point(plan, x, z)
+			var hill: float = HILL_HEIGHT * clampf((hills.get_noise_3dv(p) + 1.0) * 0.5, 0.0, 1.0)
+			var mountain: float = (MOUNTAIN_HEIGHT - HILL_HEIGHT) * smoothstep(plan.relief_threshold, plan.relief_peak, mountains.get_noise_3dv(p))
+			heights[row * SectionPlanScript.RELIEF_COLUMNS + column] = minf(hill + mountain, MOUNTAIN_HEIGHT) * smoothstep(0.0, RELIEF_BLEND, distance)
+	return heights
 
 # Crops come in patches: one seed per block of CHUNK lots, jittered inside
 # it with a random crop; every lot takes the crop of its nearest seed. The

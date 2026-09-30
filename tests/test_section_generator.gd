@@ -23,6 +23,12 @@ func _init():
 	failures += _test_road_kinds()
 	failures += _test_relief_lots_are_the_highest_five_percent_of_fields()
 	failures += _test_no_road_touches_relief()
+	failures += _test_same_index_same_heights()
+	failures += _test_flat_zones_and_ends_stay_at_zero()
+	failures += _test_heights_in_range_and_mountains_only_above_the_threshold()
+	failures += _test_heights_join_where_the_way_round_closes()
+	failures += _test_buildings_stand_at_level_zero()
+	failures += _test_some_chunks_flat_some_raised()
 	failures += _test_buildings_only_in_towns_and_city()
 	failures += _test_buildings_stay_inside_their_lot_clear_of_roads()
 	failures += _test_building_sizes_match_their_zone()
@@ -213,6 +219,87 @@ func _test_no_road_touches_relief() -> int:
 			if _plan.road_on_west(around, along) + _plan.road_on_east(around, along) + _plan.road_on_south(around, along) + _plan.road_on_north(around, along) != 0:
 				print("FAIL _test_no_road_touches_relief: RELIEF lot (%d, %d) has a road on an edge" % [around, along])
 				return 1
+	return 0
+
+const FLAT_ZONES := [SectionPlan.Zone.TOWN, SectionPlan.Zone.CITY, SectionPlan.Zone.WATER]
+
+func _test_same_index_same_heights() -> int:
+	var again = SectionGenerator.generate(42, RADIUS, LENGTH)
+	var other = SectionGenerator.generate(43, RADIUS, LENGTH)
+	if _plan.heights.size() != 240 * 401 or again.heights != _plan.heights or other.heights == _plan.heights:
+		print("FAIL _test_same_index_same_heights: %d heights, same index equal %s, other index differs %s" % [_plan.heights.size(), again.heights == _plan.heights, other.heights != _plan.heights])
+		return 1
+	return 0
+
+func _test_flat_zones_and_ends_stay_at_zero() -> int:
+	# Every grid point inside or on the edge of a town, city or lake lot, and
+	# both end rows.
+	for along in range(80):
+		for around in range(48):
+			if not (_plan.zone_at(around, along) in FLAT_ZONES):
+				continue
+			for row in range(along * 5, along * 5 + 6):
+				for column in range(around * 5, around * 5 + 6):
+					if absf(_plan.grid_height(column, row)) > 0.001:
+						print("FAIL _test_flat_zones_and_ends_stay_at_zero: lot (%d, %d) point (%d, %d) at %f m" % [around, along, column, row, _plan.grid_height(column, row)])
+						return 1
+	for column in range(240):
+		if absf(_plan.grid_height(column, 0)) > 0.001 or absf(_plan.grid_height(column, 400)) > 0.001:
+			print("FAIL _test_flat_zones_and_ends_stay_at_zero: end row not flat at column %d" % column)
+			return 1
+	return 0
+
+func _test_heights_in_range_and_mountains_only_above_the_threshold() -> int:
+	var noise: FastNoiseLite = SectionGenerator.mountain_noise(_plan.section_index)
+	var step: Vector2 = _plan.height_step()
+	var highest := 0.0
+	for row in range(401):
+		for column in range(240):
+			var h: float = _plan.grid_height(column, row)
+			highest = maxf(highest, h)
+			if h < 0.0 or h > SectionGenerator.MOUNTAIN_HEIGHT + 0.001:
+				print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: %f m at (%d, %d)" % [h, column, row])
+				return 1
+			if h > SectionGenerator.HILL_HEIGHT + 0.001:
+				var value: float = noise.get_noise_3dv(SectionGenerator.surface_point(_plan, column * step.x, row * step.y))
+				if value <= _plan.relief_threshold:
+					print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: %f m at (%d, %d) with mountain noise below the threshold" % [h, column, row])
+					return 1
+	if highest < 200.0:
+		print("FAIL _test_heights_in_range_and_mountains_only_above_the_threshold: highest point %f m, expected a mountain over 200 m" % highest)
+		return 1
+	print("  highest point: %.0f m" % highest)
+	return 0
+
+func _test_heights_join_where_the_way_round_closes() -> int:
+	for k in range(40):
+		var z: float = 250.0 + k * 490.0
+		if not is_equal_approx(_plan.height_at(0.0, z), _plan.height_at(_plan.circumference(), z)) or absf(_plan.height_at(-1.0, z) - _plan.height_at(_plan.circumference() - 1.0, z)) > 1e-6:
+			print("FAIL _test_heights_join_where_the_way_round_closes: at z %f" % z)
+			return 1
+	return 0
+
+func _test_buildings_stand_at_level_zero() -> int:
+	for b in range(_plan.building_count()):
+		var size: Vector3 = _plan.building_size[b]
+		for corner in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+			var x: float = _plan.building_x[b] + corner.x * size.x
+			var z: float = _plan.building_z[b] + corner.y * size.z
+			if absf(_plan.height_at(x, z)) > 0.001:
+				print("FAIL _test_buildings_stand_at_level_zero: building %d corner at %f m" % [b, _plan.height_at(x, z)])
+				return 1
+	return 0
+
+func _test_some_chunks_flat_some_raised() -> int:
+	var raised := 0
+	for along in range(20):
+		for around in range(16):
+			if _plan.chunk_has_relief(around, along):
+				raised += 1
+	print("  chunks with relief: %d of 320" % raised)
+	if raised == 0:
+		print("FAIL _test_some_chunks_flat_some_raised: no chunk has relief")
+		return 1
 	return 0
 
 func _test_buildings_only_in_towns_and_city() -> int:
