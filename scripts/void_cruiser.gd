@@ -6,6 +6,7 @@ const ApproachGuide = preload("res://scripts/approach_guide.gd")
 const VelocityCross = preload("res://scripts/velocity_cross.gd")
 const Attitude = preload("res://scripts/attitude.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
+const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -15,6 +16,8 @@ const DockingAssist = preload("res://scripts/docking_assist.gd")
 @export var ring_radius: float = 6949600.0
 # The station whose nearest dock the approach guide points at.
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
+# The moon: its pull everywhere, and its frame near it (see moon_orbit.gd).
+@export var moon_path: NodePath = NodePath("../PlanetSystem/Moon")
 const APPROACH_COLOR := Color(0.3, 1.0, 0.4, 0.7)
 
 # Out in the void the ramp goes on: 10x after 5 s, 100x after 10 s.
@@ -69,6 +72,13 @@ var has_planet := false
 var planet_center := Vector3.ZERO
 var planet_axis := Vector3.UP
 var planet_radius := 1737400.0
+# In the moon's frame (below MoonOrbit.ATTACH_ALTITUDE): carried with the
+# moon every tick, `velocity` relative to it.
+var in_moon_frame := false
+var is_landed := false
+var crashed_on_moon := false
+# The moon's angle when the ship last followed it.
+var _moon_angle_seen := 0.0
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -126,9 +136,16 @@ func _linear_damping_now() -> float:
 
 func _external_acceleration() -> Vector3:
 	# Holding velocity or braking: the thrusters cancel the orbital pulls.
-	if not has_planet or cruise_locked or brake_engaged:
+	if not has_planet or cruise_locked or brake_engaged or is_landed:
 		return Vector3.ZERO
-	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, ring_omega(), planet_radius)
+	var omega := ring_omega()
+	var pull := Vector3.ZERO
+	var moon := moon_node()
+	if moon != null:
+		pull = MoonOrbit.gravity(_world_position() - moon.centre())
+		if in_moon_frame:
+			omega = moon.frame_omega()
+	return OrbitalFrame.frame_acceleration(_world_position() - planet_center, velocity, planet_gm, omega, planet_radius) + pull
 
 # Near a dock the precision factor scales every thruster and stops the
 # ramp. The brake stops the ship at up to BRAKE_MULTIPLIER times the base
@@ -406,4 +423,41 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 
 func _physics_process(delta: float) -> void:
 	_sync_planet()
+	_follow_moon()
 	_fly(delta)
+
+func moon_node() -> Node3D:
+	if not is_inside_tree():
+		return null
+	var moon := get_node_or_null(moon_path) as Node3D
+	return moon if moon != null and moon.is_inside_tree() else null
+
+# In the moon's frame the ship turns with the moon about the planet's axis
+# (by however far the moon turned since the ship last looked); then it
+# joins the frame below ATTACH_ALTITUDE and leaves it above DETACH_ALTITUDE,
+# its velocity converted so the true motion does not jump.
+func _follow_moon() -> void:
+	var moon := moon_node()
+	if moon == null:
+		in_moon_frame = false
+		return
+	if in_moon_frame:
+		var turn: Transform3D = MoonOrbit.spin(moon.axis(), moon.angle - _moon_angle_seen, moon.planet_centre())
+		global_transform = turn * global_transform
+		velocity = turn.basis * velocity
+	_moon_angle_seen = moon.angle
+	var distance: float = global_position.distance_to(moon.centre())
+	var offset: Vector3 = global_position - moon.planet_centre()
+	if not in_moon_frame and distance < MoonOrbit.RADIUS + MoonOrbit.ATTACH_ALTITUDE:
+		velocity = MoonOrbit.to_moon_velocity(velocity, offset, moon.axis(), moon.relative_rate())
+		in_moon_frame = true
+	elif in_moon_frame and distance > MoonOrbit.RADIUS + MoonOrbit.DETACH_ALTITUDE:
+		velocity = MoonOrbit.to_ring_velocity(velocity, offset, moon.axis(), moon.relative_rate())
+		in_moon_frame = false
+
+# The ship's velocity in the ring's frame, whichever frame it flies in.
+func ring_velocity() -> Vector3:
+	var moon := moon_node()
+	if not in_moon_frame or moon == null:
+		return velocity
+	return MoonOrbit.to_ring_velocity(velocity, global_position - moon.planet_centre(), moon.axis(), moon.relative_rate())
