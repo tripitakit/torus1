@@ -87,8 +87,9 @@ Ordine: zone → città → **catena** → **colline** → colture → filari �
     (cresta a spigolo, fianchi concavi, piede morbido).
   - Dettaglio: moltiplicato per `0,7 + 0,45 × (1 − |rumore|)` (rumore 3D a
     circa 600 m, sul cilindro): contrafforti e valli laterali.
-  - Guglie: 3–8 coni stretti (raggio 50–125 m, alti 300–600 m in più) vicino
-    alla cresta.
+  - Guglie: 3–8 coni stretti (raggio 80–125 m, alti 400–700 m in più) vicino
+    alla cresta. Il raggio minimo di 80 m tiene ogni guglia visibile sulla
+    griglia a 50 m (un raggio di 50 m può cadere fra due punti e sparire).
   - Massimo 1500 m.
 - **Zona MONTAGNA:** ogni lotto, tranne la città, con il centro dove la
   catena supera 20 m. Vince su campi, paesi e laghi.
