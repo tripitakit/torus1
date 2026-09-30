@@ -8,6 +8,7 @@ const Attitude = preload("res://scripts/attitude.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const LandingReadout = preload("res://scripts/landing_readout.gd")
+const LandingGuide = preload("res://scripts/landing_guide.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -121,7 +122,22 @@ func _process(delta: float) -> void:
 		cockpit.update_approach(readout)
 		cockpit.update_moon(moon_readout())
 
-# The moon panel's readout while in the moon's frame, else empty.
+# The pad the landing guide points at: {number, pad (top-centre
+# transform)}, within LandingGuide.GUIDE_RANGE of the base in the moon's
+# frame; else empty.
+func landing_target() -> Dictionary:
+	var moon := moon_node()
+	if not in_moon_frame or moon == null or global_position.distance_to(moon.base_transform().origin) > LandingGuide.GUIDE_RANGE:
+		return {}
+	var pads := []
+	for number in range(1, 7):
+		pads.append(moon.pad_transform(number))
+	var index := LandingGuide.target_pad(global_position, pads)
+	return {"number": index + 1, "pad": pads[index]}
+
+# The moon panel's readout while in the moon's frame, else empty: the height
+# of the hull's bottom above the target pad near the base, above the ground
+# elsewhere.
 func moon_readout() -> Dictionary:
 	var moon := moon_node()
 	if not in_moon_frame or moon == null:
@@ -130,7 +146,13 @@ func moon_readout() -> Dictionary:
 	var vertical: float = velocity.dot(up)
 	var drift: float = (velocity - up * vertical).length()
 	var tilt: float = rad_to_deg(acos(clampf(_world_basis().y.normalized().dot(up), -1.0, 1.0)))
-	return LandingReadout.readout(moon.altitude(global_position) - HALF_HEIGHT, vertical, drift, tilt, 0, is_landed)
+	var height: float = moon.altitude(global_position)
+	var number := 0
+	var target := landing_target()
+	if not target.is_empty():
+		number = target.number
+		height = (global_position - (target.pad as Transform3D).origin).dot(up)
+	return LandingReadout.readout(height - HALF_HEIGHT, vertical, drift, tilt, number, is_landed)
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)
@@ -383,6 +405,11 @@ func _line_mesh(node_name: String, color: Color) -> MeshInstance3D:
 func _update_approach_guide() -> Dictionary:
 	var guide := get_node_or_null("ApproachGuide") as MeshInstance3D
 	if guide == null:
+		return {}
+	# Near Base Selene the same lines guide down onto the nearest pad.
+	var target := landing_target()
+	if not target.is_empty():
+		_show_lines(guide, LandingGuide.gate_segments(target.pad, global_position))
 		return {}
 	var gate_lines := PackedVector3Array()
 	var readout := {}

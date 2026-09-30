@@ -49,6 +49,7 @@ func _initialize():
 	_failures += await _test_tilted_touch_crashes()
 	_failures += await _test_soft_landing_on_a_pad()
 	_failures += await _test_hitting_a_module_bounces()
+	_failures += await _test_guide_points_at_the_nearest_pad()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -280,4 +281,22 @@ func _test_hitting_a_module_bounces() -> int:
 	if not bounced or _ship.is_landed or _ship.is_crashed or _crashes != 0:
 		print("FAIL _test_hitting_a_module_bounces: bounced %s, landed %s, crashed %s" % [bounced, _ship.is_landed, _ship.is_crashed])
 		result = 1
+	return result
+
+func _test_guide_points_at_the_nearest_pad() -> int:
+	# 300 m over pad 5 (hull bottom): the panel names it and reads 300 m, the
+	# guide lines show.
+	var pad: Transform3D = _moon.pad_transform(5)
+	_place(pad.origin + pad.basis.y.normalized() * (300.0 + VoidCruiserScript.HALF_HEIGHT))
+	await physics_frame
+	_ship.brake_engaged = true
+	await process_frame
+	await process_frame
+	var readout: Dictionary = _ship.moon_readout()
+	var guide := _ship.get_node("ApproachGuide") as MeshInstance3D
+	var result := 0
+	if readout.get("pad", "") != "PAD 5" or readout.get("alt", "") != "ALT 300 m" or not guide.visible:
+		print("FAIL _test_guide_points_at_the_nearest_pad: %s / %s, guide shown %s" % [readout.get("pad", ""), readout.get("alt", ""), guide.visible])
+		result = 1
+	_ship.brake_engaged = false
 	return result
