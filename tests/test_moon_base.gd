@@ -29,6 +29,8 @@ func _initialize():
 	_failures += _test_pads_on_the_sphere_level()
 	_failures += _test_base_body_and_colliders()
 	_failures += _test_beacon_on_the_tower()
+	_failures += _test_many_low_modules_all_joined()
+	_failures += _test_pad_zone_clear()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -46,7 +48,7 @@ func _test_six_numbered_pads() -> int:
 		numbers.append(pad.number)
 	numbers.sort()
 	var centres := MoonBase.pad_centres()
-	if numbers != [1, 2, 3, 4, 5, 6] or centres.size() != 6 or _pieces("tower").size() != 1 or _pieces("module").size() != 20 or _pieces("hangar").size() != 6:
+	if numbers != [1, 2, 3, 4, 5, 6] or centres.size() != 6 or _pieces("tower").size() != 1 or _pieces("hangar").size() != 6:
 		print("FAIL _test_six_numbered_pads: pads %s, %d tower, %d modules, %d hangars" % [numbers, _pieces("tower").size(), _pieces("module").size(), _pieces("hangar").size()])
 		return 1
 	for i in range(6):
@@ -114,4 +116,38 @@ func _test_beacon_on_the_tower() -> int:
 	if material == null or float(material.get_shader_parameter("min_pixels")) < 4.0 or not _moon.beacon_position().is_equal_approx(beacon.global_position):
 		print("FAIL _test_beacon_on_the_tower: material or beacon_position wrong")
 		return 1
+	return 0
+
+func _test_many_low_modules_all_joined() -> int:
+	# Space 1999's Alpha: rows of low modules off the arms, many of them,
+	# every one joined to the rest by a tube.
+	var modules := _pieces("module")
+	var tubes := _pieces("tube")
+	if modules.size() < 70:
+		print("FAIL _test_many_low_modules_all_joined: only %d modules" % modules.size())
+		return 1
+	for module in modules:
+		if module.size.y > MoonBase.MODULE_SIZE.y:
+			print("FAIL _test_many_low_modules_all_joined: %s is %.0f m tall" % [module.name, module.size.y])
+			return 1
+		var joined := false
+		for tube in tubes:
+			if _footprint(module).grow(0.01).intersects(_footprint(tube)):
+				joined = true
+				break
+		if not joined:
+			print("FAIL _test_many_low_modules_all_joined: %s has no tube" % module.name)
+			return 1
+	return 0
+
+func _test_pad_zone_clear() -> int:
+	# Round each pad and its hangar, room to land: nothing else within 40 m.
+	for pad in _pieces("pad"):
+		var zone := _footprint(pad).grow(40.0)
+		for piece in MoonBase.layout():
+			if piece.kind in ["pad", "hangar"] or piece.name.begins_with("HangarTube") or piece.name.contains("PadTube"):
+				continue
+			if zone.intersects(_footprint(piece)):
+				print("FAIL _test_pad_zone_clear: %s next to pad %d" % [piece.name, pad.number])
+				return 1
 	return 0

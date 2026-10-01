@@ -23,6 +23,16 @@ const PAD_HEIGHT := 2.0
 const PAD_POSITIONS := [560.0, 660.0, 760.0]
 const HANGAR_SIZE := Vector3(30.0, 12.0, 40.0)  # x, up, z
 const HANGAR_OFFSET := 70.0
+# The wings (Space 1999's Alpha): off every north and south arm module, a row
+# of low modules east and west, WING_MIN to WING_MAX long, MODULE_SPACING
+# apart; some rows joined to the next by a tube across. Lengths and heights
+# from a fixed hash, so the base is the same every time.
+const WING_MIN := 2
+const WING_MAX := 4
+const WING_LENGTH := Vector2(30.0, 50.0)
+const WING_HEIGHT := Vector2(6.0, 9.0)
+const WING_ACROSS := 20.0
+const CROSS_TUBE_SHARE := 0.5
 const WHITE := Color(0.92, 0.93, 0.95)
 const LIGHT_GREY := Color(0.78, 0.8, 0.83)
 const TUBE_COLOR := Color(0.7, 0.72, 0.75)
@@ -63,7 +73,54 @@ static func layout() -> Array:
 			pieces.append({"kind": "hangar", "name": "Hangar%d" % number, "centre": centre + Vector2(0.0, HANGAR_OFFSET), "size": HANGAR_SIZE, "number": number})
 			pieces.append(_tube("HangarTube%d" % number, Vector2(0, 1), PAD_SIZE * 0.5, HANGAR_OFFSET - HANGAR_SIZE.z * 0.5, centre.x))
 			previous_end = PAD_POSITIONS[p] + PAD_SIZE * 0.5
+	pieces.append_array(_wings())
 	return pieces
+
+# The rows of low modules off the north and south arms, and the tubes
+# joining them.
+static func _wings() -> Array:
+	var pieces := []
+	for arm in [["North", -1.0], ["South", 1.0]]:
+		var lengths := {}
+		for k in range(1, MODULES_PER_ARM + 1):
+			var z: float = arm[1] * MODULE_SPACING * k
+			for side in [["E", 1.0], ["W", -1.0]]:
+				var row: String = "Wing%s%d%s" % [arm[0], k, side[0]]
+				var count: int = WING_MIN + int(_hash(arm[1], k, side[1], 0) * (WING_MAX - WING_MIN + 1))
+				lengths[Vector2(side[1], k)] = count
+				# From the arm module's side (MODULE_SIZE.z wide across).
+				var previous_end: float = MODULE_SIZE.z * 0.5
+				for j in range(1, count + 1):
+					var along: float = lerpf(WING_LENGTH.x, WING_LENGTH.y, _hash(arm[1], k, side[1], j))
+					var height: float = snappedf(lerpf(WING_HEIGHT.x, WING_HEIGHT.y, _hash(arm[1], k, side[1], j + 10)), 0.5)
+					var x: float = MODULE_SPACING * j
+					pieces.append(_tube_at("%sTube%d" % [row, j], true, previous_end, x - along * 0.5, z, side[1]))
+					pieces.append({"kind": "module", "name": "%sModule%d" % [row, j], "centre": Vector2(side[1] * x, z), "size": Vector3(along, height, WING_ACROSS), "number": 0})
+					previous_end = x + along * 0.5
+		# Across from row k to row k + 1, where both reach.
+		for k in range(1, MODULES_PER_ARM):
+			for side in [1.0, -1.0]:
+				var reach: int = mini(lengths[Vector2(side, k)], lengths[Vector2(side, k + 1)])
+				for j in range(1, reach + 1):
+					if _hash(arm[1], k, side, j + 20) >= CROSS_TUBE_SHARE:
+						continue
+					var from: float = MODULE_SPACING * k + WING_ACROSS * 0.5
+					var to: float = MODULE_SPACING * (k + 1) - WING_ACROSS * 0.5
+					pieces.append(_tube_at("Wing%s%d%sCross%d" % [arm[0], k, "E" if side > 0.0 else "W", j], false, from, to, side * MODULE_SPACING * j, arm[1]))
+	return pieces
+
+# A tube along x (`along_x`) from `from` to `to` metres out on the `sign`
+# side, at z = `at`; or along z, at x = `at`.
+static func _tube_at(tube_name: String, along_x: bool, from: float, to: float, at: float, sign: float) -> Dictionary:
+	var middle: float = sign * (from + to) * 0.5
+	var length: float = to - from
+	if along_x:
+		return {"kind": "tube", "name": tube_name, "centre": Vector2(middle, at), "size": Vector3(length, TUBE_WIDTH, TUBE_WIDTH), "number": 0}
+	return {"kind": "tube", "name": tube_name, "centre": Vector2(at, middle), "size": Vector3(TUBE_WIDTH, TUBE_WIDTH, length), "number": 0}
+
+# A fixed pseudo-random number in [0, 1) for a wing piece.
+static func _hash(a: float, b: int, c: float, d: int) -> float:
+	return fposmod(sin(a * 12.9898 + b * 78.233 + c * 37.719 + d * 4.581) * 43758.5453, 1.0)
 
 # A tube along `direction` from `from` to `to` metres out (offset sideways
 # to x = `shift` for the hangar tubes, which run along z).
