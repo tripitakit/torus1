@@ -21,8 +21,8 @@ func _init():
 	failures += _test_sections_share_one_mesh_resource()
 	failures += _test_bridges_share_one_mesh_resource()
 	failures += _test_section_panel_material_has_emission()
-	failures += _test_sections_are_animatable_bodies()
-	failures += _test_bridges_are_animatable_bodies()
+	failures += _test_sections_are_static_bodies()
+	failures += _test_bridges_are_static_bodies()
 	failures += _test_sections_have_matching_collision_shape()
 	failures += _test_bridges_have_matching_collision_shape()
 	failures += _test_section_collision_shapes_are_shared()
@@ -120,7 +120,7 @@ func _test_bridge_positions_are_distinct_and_close_the_ring() -> int:
 	var torus_radius := 500.0 + 1500.0
 	var step := TAU / 4.0
 	for i in range(4):
-		var bridge: AnimatableBody3D = station.get_node("Bridge%d" % i)
+		var bridge: StaticBody3D = station.get_node("Bridge%d" % i)
 		var expected_theta := i * step + step * 0.5
 		var expected_pos := Vector3(cos(expected_theta), 0.0, sin(expected_theta)) * torus_radius
 		if not bridge.transform.origin.is_equal_approx(expected_pos):
@@ -139,7 +139,7 @@ func _test_uses_planet_node_radius_when_set() -> int:
 	station.planet_node = NodePath("Planet")
 	station.build_station()
 	var result := 0
-	var section0: AnimatableBody3D = station.get_node("Section0")
+	var section0: StaticBody3D = station.get_node("Section0")
 	var expected_torus_radius := 900.0 + 1500.0
 	if not is_equal_approx(section0.transform.origin.length(), expected_torus_radius):
 		print("FAIL _test_uses_planet_node_radius_when_set: Section0 distance=%f expected=%f" % [section0.transform.origin.length(), expected_torus_radius])
@@ -152,7 +152,7 @@ func _test_sections_have_no_stripe_marker() -> int:
 	# a section is only its hull mesh and collision shape.
 	var station := _make_station(4)
 	station.build_station()
-	var section: AnimatableBody3D = station.get_node("Section0")
+	var section: StaticBody3D = station.get_node("Section0")
 	var result := 0
 	if section.get_node_or_null("Stripe") != null:
 		print("FAIL _test_sections_have_no_stripe_marker: Section0 still has a Stripe child")
@@ -167,7 +167,7 @@ func _test_sections_have_no_stripe_marker() -> int:
 func _test_rotate_sections_applies_correct_local_y_angle() -> int:
 	var station := _make_station(4)
 	station.build_station()
-	var section: AnimatableBody3D = station.get_node("Section0")
+	var section: StaticBody3D = station.get_node("Section0")
 	var original_basis: Basis = section.transform.basis
 	var delta := 0.1
 	station._rotate_sections(delta)
@@ -189,7 +189,7 @@ func _test_rotate_sections_leaves_bridges_still() -> int:
 	# ships outside have a still dock to fly to.
 	var station := _make_station(4)
 	station.build_station()
-	var bridge: AnimatableBody3D = station.get_node("Bridge0")
+	var bridge: StaticBody3D = station.get_node("Bridge0")
 	var section: Node3D = station.get_node("Section0")
 	var bridge_basis: Basis = bridge.transform.basis
 	var section_basis: Basis = section.transform.basis
@@ -270,26 +270,28 @@ func _test_section_panel_material_has_emission() -> int:
 	station.free()
 	return result
 
-func _test_sections_are_animatable_bodies() -> int:
+func _test_sections_are_static_bodies() -> int:
+	# Static, not kinematic: a kinematic body moved by a jump (the world
+	# origin shift after a portal, 20,000 km) gets a velocity from it, and
+	# its collision box swept along that whole path overlaps every other
+	# body's: with 4000 of them the physics step took ~50 s. A static body
+	# just jumps. (The physics step is cheaper too, ~1 ms against ~8.)
 	var station := _make_station(4)
 	station.build_station()
 	var result := 0
-	if not (station.get_node("Section0") is AnimatableBody3D):
-		print("FAIL _test_sections_are_animatable_bodies: Section0 is not an AnimatableBody3D")
+	if not (station.get_node("Section0") is StaticBody3D) or station.get_node("Section0") is AnimatableBody3D:
+		print("FAIL _test_sections_are_static_bodies: Section0 is not a plain StaticBody3D")
 		result = 1
 	station.free()
 	return result
 
-func _test_bridges_are_animatable_bodies() -> int:
-	# Bridges now rotate every frame together with sections — same reasoning
-	# as sections: Godot recommends against moving a StaticBody3D every
-	# frame, and a body under continuous external transform control should
-	# be an AnimatableBody3D instead.
+func _test_bridges_are_static_bodies() -> int:
+	# Same as the sections (see above).
 	var station := _make_station(4)
 	station.build_station()
 	var result := 0
-	if not (station.get_node("Bridge0") is AnimatableBody3D):
-		print("FAIL _test_bridges_are_animatable_bodies: Bridge0 is not an AnimatableBody3D")
+	if not (station.get_node("Bridge0") is StaticBody3D) or station.get_node("Bridge0") is AnimatableBody3D:
+		print("FAIL _test_bridges_are_static_bodies: Bridge0 is not a plain StaticBody3D")
 		result = 1
 	station.free()
 	return result

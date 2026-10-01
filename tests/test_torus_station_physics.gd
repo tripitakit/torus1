@@ -3,15 +3,11 @@ extends SceneTree
 # Real in-tree physics tests, separate from test_torus_station.gd's off-tree
 # unit tests. Nodes here are genuinely added to a processed SceneTree frame
 # (via `_initialize()` + `await physics_frame`, not the synchronous `_init()`
-# every other test in this project uses), so AnimatableBody3D's
-# sync_to_physics behavior actually engages. Verified empirically during the
-# code review for docs/superpowers/plans/2026-09-23-station-collisions.md:
-# off-tree tests cannot exercise this at all (see that plan's Global
-# Constraints), but in-tree tests like these can and must, since this is
-# exactly the class of bug (AnimatableBody3D default sync_to_physics=true
-# silently drops transform changes made outside _physics_process, and
-# ignores a parent's transform changes) that off-tree tests structurally
-# cannot catch.
+# every other test in this project uses), so the physics server really sees
+# the station's bodies move: the sections' rotation in _process and a
+# parent's shift (as WorldOriginRebase applies) must both reach it. Off-tree
+# tests structurally cannot catch that class of bug (see
+# docs/superpowers/plans/2026-09-23-station-collisions.md).
 
 const TorusStationScript = preload("res://scripts/torus_station.gd")
 const TorusGeometry = preload("res://scripts/torus_geometry.gd")

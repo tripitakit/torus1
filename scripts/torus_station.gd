@@ -265,18 +265,16 @@ func build_station() -> void:
 
 	var section_transforms := TorusGeometry.compute_section_transforms(effective_planet_radius, orbit_altitude, num_sections)
 	for i in range(section_transforms.size()):
-		var section := AnimatableBody3D.new()
+		var section := StaticBody3D.new()
 		section.name = "Section%d" % i
-		# Sections rotate every frame for artificial gravity. With the
-		# default sync_to_physics=true, the physics server treats itself as
-		# the source of truth for the body's transform between physics
-		# steps: transform changes applied outside a physics step (this
-		# rotation runs in _process, not _physics_process) are silently
-		# dropped except for roughly the last one before each physics tick,
-		# and a parent's transform change (as WorldOriginRebase applies) is
-		# not picked up correctly either. Verified empirically — see
+		# Sections rotate every frame for artificial gravity: a static body,
+		# moved by jumps (the rotation in _process, a parent's shift as
+		# WorldOriginRebase applies). Not a kinematic one: the physics server
+		# turns each jump into a velocity and sweeps the body's collision box
+		# along it, so the 20,000 km shift after a portal made all 4000
+		# boxes overlap and the physics step took ~50 s (and the step costs
+		# ~8 ms a frame against ~1 ms static). See
 		# tests/test_torus_station_physics.gd.
-		section.sync_to_physics = false
 
 		var section_mesh_instance := MeshInstance3D.new()
 		section_mesh_instance.name = "Mesh"
@@ -320,13 +318,10 @@ func build_station() -> void:
 	_lamp_material.set_shader_parameter("on_time", LAMP_ON_TIME)
 
 	for i in range(bridge_transforms.size()):
-		var bridge := AnimatableBody3D.new()
+		var bridge := StaticBody3D.new()
 		bridge.name = "Bridge%d" % i
-		# Bridges stay still (only sections spin). They keep the section's
-		# body setup: AnimatableBody3D with sync_to_physics off, so a
-		# parent's transform change (as WorldOriginRebase applies) is picked
-		# up (see the sync_to_physics comment on the section body above).
-		bridge.sync_to_physics = false
+		# Bridges stay still (only sections spin); a static body like the
+		# sections (see above).
 
 		var bridge_mesh_instance := MeshInstance3D.new()
 		bridge_mesh_instance.name = "Mesh"
