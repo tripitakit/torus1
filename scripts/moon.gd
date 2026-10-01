@@ -8,6 +8,8 @@ extends Node3D
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
+const PortalScript = preload("res://scripts/portal.gd")
+const PortalRules = preload("res://scripts/portal_rules.gd")
 
 const COLOR_PATH := "res://assets/textures/moon/color.png"
 const NORMAL_PATH := "res://assets/textures/moon/normal.png"
@@ -27,6 +29,8 @@ const FAR_SEGMENTS := 96
 # Base Selene: 30 degrees from the point right under the planet (the moon's
 # local -X), toward its local +Y.
 const BASE_ANGLE := PI / 6.0
+# The moon portal's amber (the earth portal is blue).
+const PORTAL_COLOR := Color(1.0, 0.7, 0.3)
 const MOON_SHADER := """
 shader_type spatial;
 
@@ -114,6 +118,9 @@ func _place() -> void:
 	var base := get_node_or_null("Base") as CollisionObject3D
 	if base != null and base.is_inside_tree():
 		PhysicsServer3D.body_set_state(base.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, base.global_transform)
+	var portal := get_node_or_null("Portal")
+	if portal != null:
+		portal.sync_body()
 
 func relative_rate() -> float:
 	return MoonOrbit.relative_rate(planet_gm, ring_radius)
@@ -212,6 +219,17 @@ func build() -> void:
 	base.transform = base_local_transform()
 	MoonBase.build(base, MoonOrbit.RADIUS)
 	add_child(base)
+	var old_portal := get_node_or_null("Portal")
+	if old_portal != null:
+		remove_child(old_portal)
+		old_portal.queue_free()
+	# The moon portal, MOON_HEIGHT over the base, back to the ring.
+	var portal: Node3D = PortalScript.new()
+	portal.name = "Portal"
+	portal.destination = "TERRA"
+	portal.light_color = PORTAL_COLOR
+	portal.transform = PortalRules.moon_local_transform(base_local_transform())
+	add_child(portal)
 
 # Base Selene's beacon, over the tower (world).
 func beacon_position() -> Vector3:

@@ -13,6 +13,7 @@ func _init():
 	failures += _test_void_cruiser_orbits_with_the_station()
 	failures += _test_moon_orbits_beside_the_planet()
 	failures += _test_base_in_daylight_and_moon_in_view_at_start()
+	failures += _test_two_portals()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -229,3 +230,15 @@ func _test_base_in_daylight_and_moon_in_view_at_start() -> int:
 		print("FAIL _test_base_in_daylight_and_moon_in_view_at_start: sun on the base %.2f, moon %.1f deg from the planet (disc %.1f), lit face toward the ship %.2f" % [base_up.dot(toward_sun), apart, planet_disc, lit_face])
 		return 1
 	return 0
+
+func _test_two_portals() -> int:
+	# The earth portal on the ring's frame, under PlanetSystem (the origin
+	# shift moves it). The moon builds its own (test_portal_physics).
+	var scene: Node3D = (load("res://scenes/torus1_system.tscn") as PackedScene).instantiate()
+	var earth := scene.get_node_or_null("PlanetSystem/EarthPortal")
+	var result := 0
+	if earth == null or earth.get_script() != load("res://scripts/portal.gd") or earth.destination != "LUNA" or not earth.place_on_ring:
+		print("FAIL _test_two_portals: no earth portal under PlanetSystem")
+		result = 1
+	scene.free()
+	return result
