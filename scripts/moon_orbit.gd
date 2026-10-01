@@ -19,6 +19,10 @@ const DETACH_ALTITUDE := 32000.0
 # and the moon nearly full, about 30 degrees left of the ship's nose, clear
 # of the planet's disc.
 const START_ANGLE := 13.0 * PI / 18.0  # 130 degrees
+# Base Selene in Plato, as Moonbase Alpha: latitude and longitude in degrees
+# (longitude 0 under the planet, the moon's local -X; east +Z; north +Y).
+const BASE_LATITUDE := 51.6
+const BASE_LONGITUDE := -9.4
 # Base Selene's HUD marker shows only this close to the moon's centre: the
 # moon about 6 degrees wide, Torus1 (about 13,000 km off) well outside.
 const MARKER_RANGE := 5.0e6
@@ -27,6 +31,15 @@ const MARKER_RANGE := 5.0e6
 # Selene's HUD marker.
 static func marker_in_range(offset_from_moon: Vector3) -> bool:
 	return offset_from_moon.length() < MARKER_RANGE
+
+# The moon-local direction of (latitude, longitude) degrees.
+static func direction_of(latitude: float, longitude: float) -> Vector3:
+	var lat := deg_to_rad(latitude)
+	var lon := deg_to_rad(longitude)
+	return Vector3(-cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon))
+
+static func base_direction() -> Vector3:
+	return direction_of(BASE_LATITUDE, BASE_LONGITUDE)
 
 static func moon_rate(planet_gm: float) -> float:
 	return OrbitalFrame.orbit_angular_velocity(planet_gm, ORBIT_RADIUS)

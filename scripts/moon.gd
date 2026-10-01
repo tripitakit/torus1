@@ -26,10 +26,6 @@ const STEP_CAP := 3000.0
 # round) stands in for the full mesh, with the same material.
 const FAR_SWITCH := 1500000.0
 const FAR_SEGMENTS := 96
-# Base Selene in Plato, as Moonbase Alpha: latitude and longitude in degrees
-# (longitude 0 under the planet, the moon's local -X; east +Z; north +Y).
-const BASE_LATITUDE := 51.6
-const BASE_LONGITUDE := -9.4
 # The moon portal's amber (the earth portal is blue).
 const PORTAL_COLOR := Color(1.0, 0.7, 0.3)
 const MOON_SHADER := """
@@ -151,18 +147,16 @@ func up_at(point: Vector3) -> Vector3:
 func altitude(point: Vector3) -> float:
 	return point.distance_to(global_position) - MoonOrbit.RADIUS
 
+# Base Selene, in Plato (MoonOrbit.BASE_LATITUDE, BASE_LONGITUDE).
 static func base_direction() -> Vector3:
-	return direction_of(BASE_LATITUDE, BASE_LONGITUDE)
+	return MoonOrbit.base_direction()
 
-# The moon-local direction of (latitude, longitude) degrees.
 static func direction_of(latitude: float, longitude: float) -> Vector3:
-	var lat := deg_to_rad(latitude)
-	var lon := deg_to_rad(longitude)
-	return Vector3(-cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon))
+	return MoonOrbit.direction_of(latitude, longitude)
 
 # East at the base, along the surface.
 static func base_east() -> Vector3:
-	var lon := deg_to_rad(BASE_LONGITUDE)
+	var lon := deg_to_rad(MoonOrbit.BASE_LONGITUDE)
 	return Vector3(sin(lon), 0.0, cos(lon))
 
 # The base site in the moon's frame: origin on the surface, y the local up,
