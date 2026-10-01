@@ -10,6 +10,8 @@ const FRAME_WIDTH := 15.0
 # Entering at this speed (relative to the portal) or faster is a crash.
 const MAX_ENTRY_SPEED := 300.0
 const TRANSIT_TIME := 3.0
+# Out of the exit this far past its opening: the whole hull clear of it.
+const EXIT_CLEARANCE := 20.0
 # The earth portal: this far past the ring, this far along it from the
 # start toward the moon's side.
 const EARTH_OUT := 100000.0

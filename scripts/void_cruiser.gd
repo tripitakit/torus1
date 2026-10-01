@@ -10,6 +10,8 @@ const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const LandingReadout = preload("res://scripts/landing_readout.gd")
 const LandingGuide = preload("res://scripts/landing_guide.gd")
 const LandingAssist = preload("res://scripts/landing_assist.gd")
+const PortalRules = preload("res://scripts/portal_rules.gd")
+const SubspaceTunnel = preload("res://scripts/subspace_tunnel.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -92,6 +94,18 @@ var crashed_on_moon := false
 # While levelling itself near the moon: the nose's heading to keep, in the
 # moon's own axes (so it turns with the moon). Zero when not levelling.
 var _level_heading := Vector3.ZERO
+# Between the portals (PortalRules.TRANSIT_TIME): the ship holds still where
+# it went in, out of reach, until it comes out of the other one.
+signal transit_started
+signal transit_finished
+var in_transit := false
+var _transit_left := 0.0
+var _transit_to: Node3D
+# The ship (at the crossing point) and its velocity, and the entry portal,
+# as they were when it went in.
+var _transit_ship := Transform3D()
+var _transit_velocity := Vector3.ZERO
+var _transit_entry := Transform3D()
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -103,6 +117,7 @@ func _ready() -> void:
 	build_headlights()
 	build_cockpit()
 	build_approach_guide()
+	build_subspace_tunnel()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func _process(delta: float) -> void:
@@ -125,6 +140,10 @@ func _process(delta: float) -> void:
 	if cockpit:
 		cockpit.update_approach(readout)
 		cockpit.update_moon(moon_readout())
+		cockpit.update_gate(gate_readout())
+		var gate := nearest_portal()
+		var gate_shown: bool = not gate.is_empty() and not in_transit and gate.distance > PortalRules.MARKER_HIDE and gate.distance < PortalRules.MARKER_RANGE
+		cockpit.update_gate_marker(gate.get("centre", Vector3.ZERO), gate.get("distance", 0.0), gate_shown)
 		var moon := moon_node()
 		if moon != null and is_inside_tree():
 			var beacon: Vector3 = moon.beacon_position()
@@ -264,6 +283,8 @@ func _level_near_the_moon(altitude: float, torque: Vector3) -> void:
 # Any touch of the planet is a crash, no bounce: the move is swept against
 # the planet's sphere (PLANET_CLEARANCE up) before it is made.
 func _move(delta: float) -> void:
+	if _enter_portal(delta):
+		return
 	var moon := moon_node()
 	if in_moon_frame and moon != null:
 		# The moon's ground: a sphere as far under the ship's centre as the
@@ -283,6 +304,8 @@ func _move(delta: float) -> void:
 		# a bounce.
 		var collision := move_and_collide(velocity * delta)
 		if collision:
+			if _hit_portal_frame(collision):
+				return
 			var normal := collision.get_normal()
 			if normal.dot(moon.up_at(global_position)) >= cos(LANDING_TILT):
 				touch_down(global_position, moon.up_at(global_position), global_position)
@@ -295,7 +318,12 @@ func _move(delta: float) -> void:
 		if entry >= 0.0:
 			_crash_at(from + velocity * delta * entry)
 			return
-	super(delta)
+	if not is_inside_tree():
+		super(delta)
+		return
+	var hit := move_and_collide(velocity * delta)
+	if hit and not _hit_portal_frame(hit):
+		velocity = VoidCruiserPhysics.compute_bounce_velocity(velocity, hit.get_normal(), collision_restitution)
 
 # How far below the ship's centre its hull reaches along `up` (half the
 # box's extent along that direction).
@@ -352,6 +380,8 @@ func _crash_at(where: Vector3) -> void:
 # Flying again after a crash (GameMode has placed the ship).
 func restart_after_crash() -> void:
 	is_crashed = false
+	in_transit = false
+	_set_hull_solid(true)
 	crashed_on_moon = false
 	is_landed = false
 	velocity = Vector3.ZERO
@@ -434,6 +464,15 @@ func build_cockpit() -> void:
 # Square gates on the path to the nearest dock (see approach_guide.gd). Not
 # moved by the ship (top_level): _update_approach_guide places and redraws
 # them every frame.
+# The tunnel round the ship during a transit, around the pilot's eye.
+func build_subspace_tunnel() -> void:
+	var tunnel: Node3D = SubspaceTunnel.new()
+	tunnel.name = "SubspaceTunnel"
+	tunnel.position = COCKPIT_POSITION
+	add_child(tunnel)
+	transit_started.connect(tunnel.start)
+	transit_finished.connect(tunnel.stop)
+
 func build_approach_guide() -> void:
 	add_child(_line_mesh("ApproachGuide", APPROACH_COLOR))
 
@@ -591,8 +630,110 @@ func _add_headlight(light_name: String, local_position: Vector3) -> void:
 
 func _physics_process(delta: float) -> void:
 	_sync_planet()
+	if in_transit:
+		_transit_tick(delta)
+		return
 	_follow_moon()
 	_fly(delta)
+
+# The nearest portal: {portal, centre (world), distance}; empty without one.
+func nearest_portal() -> Dictionary:
+	var best := {}
+	for portal in portals():
+		var centre: Vector3 = (portal.active_transform() as Transform3D).origin
+		var distance := _world_position().distance_to(centre)
+		if best.is_empty() or distance < best.distance:
+			best = {"portal": portal, "centre": centre, "distance": distance}
+	return best
+
+# The gate panel's readout within PANEL_RANGE of a portal, else empty.
+func gate_readout() -> Dictionary:
+	var gate := nearest_portal()
+	if in_transit or gate.is_empty() or gate.distance > PortalRules.PANEL_RANGE:
+		return {}
+	var front := PortalRules.in_front(_world_position(), gate.portal.active_transform())
+	return PortalRules.readout(gate.portal.destination, gate.distance, velocity.length(), front)
+
+# The portals the ship can enter (the "portals" group).
+func portals() -> Array:
+	if not is_inside_tree():
+		return []
+	return get_tree().get_nodes_in_group("portals")
+
+# Through a portal's opening from its active side this move: slow enough,
+# the transit starts; too fast, a crash where it crossed. True if either.
+func _enter_portal(delta: float) -> bool:
+	var from := _world_position()
+	var to := from + velocity * delta
+	for portal in portals():
+		var entry: Transform3D = portal.active_transform()
+		var t := PortalRules.crossing(from, to, entry)
+		if t < 0.0:
+			continue
+		var point := from + (to - from) * t
+		if not PortalRules.speed_ok(velocity.length()):
+			crashed_on_moon = in_moon_frame
+			_crash_at(point)
+			return true
+		var exit: Node3D = portal.other_portal()
+		if exit == null:
+			continue
+		_transit_ship = Transform3D(_world_basis(), point)
+		_transit_velocity = velocity
+		_transit_entry = entry
+		_transit_to = exit
+		_transit_left = PortalRules.TRANSIT_TIME
+		in_transit = true
+		velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		cruise_locked = false
+		brake_engaged = false
+		_set_hull_solid(false)
+		transit_started.emit()
+		return true
+	return false
+
+func _transit_tick(delta: float) -> void:
+	# Nothing the pilot does meanwhile carries over.
+	_mouse_delta = Vector2.ZERO
+	_forward_hold_time = 0.0
+	_transit_left -= delta
+	if _transit_left <= 0.0:
+		_leave_transit()
+
+# Out of the other portal: the same offset, attitude and velocity against
+# it as against the entry, turned half round, EXIT_CLEARANCE out. Its own
+# frame: the moon's for the moon portal (under ATTACH_ALTITUDE), else the
+# ring's.
+func _leave_transit() -> void:
+	var exit: Transform3D = _transit_to.active_transform()
+	var out := PortalRules.exit_transform(_transit_ship, _transit_entry, exit)
+	out.origin += exit.basis.z.normalized() * PortalRules.EXIT_CLEARANCE
+	global_transform = out
+	velocity = PortalRules.exit_velocity(_transit_velocity, _transit_entry, exit)
+	angular_velocity = Vector3.ZERO
+	var moon := moon_node()
+	in_moon_frame = moon != null and moon.altitude(out.origin) < MoonOrbit.ATTACH_ALTITUDE
+	is_landed = false
+	_level_heading = Vector3.ZERO
+	in_transit = false
+	_transit_to = null
+	_set_hull_solid(true)
+	transit_finished.emit()
+
+func _set_hull_solid(solid: bool) -> void:
+	var shape := get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape != null:
+		shape.set_deferred("disabled", not solid)
+
+# The portal frames are solid: touching one is a crash, wherever.
+func _hit_portal_frame(collision: KinematicCollision3D) -> bool:
+	var body := collision.get_collider() as Node
+	if body == null or not body.is_in_group("portal_frames"):
+		return false
+	crashed_on_moon = in_moon_frame
+	_crash_at(global_position)
+	return true
 
 func moon_node() -> Node3D:
 	if not is_inside_tree():

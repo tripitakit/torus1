@@ -41,6 +41,14 @@ const APPROACH_LINES := {
 	"status": "StatusLabel",
 }
 const APPROACH_PANEL_WIDTH := 300.0
+# The gate panel, top centre, near a portal: readout key -> label.
+const GATE_LINES := {
+	"gate": "GateLabel",
+	"approach": "ApproachLabel",
+	"side": "SideLabel",
+}
+const GATE_PANEL_WIDTH := 340.0
+const GATE_MARKER_COLOR := Color(0.45, 0.75, 1.0, 0.95)
 # The moon panel (same place as the approach panel): readout key -> label.
 const MOON_LINES := {
 	"pad": "PadLabel",
@@ -115,6 +123,28 @@ func update_moon(readout: Dictionary) -> void:
 			label.label_settings.font_color = readout.colors[key]
 	var status := lines.get_node("StatusLabel") as Label
 	status.label_settings.font_color = APPROACH_COLORS[0] if readout.status == "LANDED" else APPROACH_COLORS[2]
+
+# The gate panel: PortalRules.readout(), or empty to hide it.
+func update_gate(readout: Dictionary) -> void:
+	var panel := get_node("Hud/GatePanel") as Control
+	panel.visible = not readout.is_empty()
+	if readout.is_empty():
+		return
+	var lines := panel.get_node("Lines")
+	for key in GATE_LINES:
+		var label := lines.get_node(GATE_LINES[key]) as Label
+		label.text = readout[key]
+		label.visible = readout[key] != ""
+		if readout.colors.has(key):
+			label.label_settings.font_color = readout.colors[key]
+
+# The nearest portal's marker, at `target` (world), `distance` away.
+func update_gate_marker(target: Vector3, distance: float, shown: bool) -> void:
+	var marker := get_node("Hud/GateMarker")
+	if shown and has_node("PilotCamera") and is_inside_tree():
+		marker.update_target(get_node("PilotCamera") as Camera3D, target, distance, true)
+	else:
+		marker.update_target(null, target, distance, false)
 
 # Base Selene's marker: the beacon at `target` (world), `distance` away.
 func update_beacon(target: Vector3, distance: float, shown: bool) -> void:
@@ -258,6 +288,26 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(moon_lines, MOON_LINES[key], settings)
+	# Top centre: the approach to a portal.
+	var gate := PanelContainer.new()
+	gate.name = "GatePanel"
+	gate.anchor_left = 0.5
+	gate.anchor_right = 0.5
+	gate.offset_left = -GATE_PANEL_WIDTH * 0.5
+	gate.offset_right = GATE_PANEL_WIDTH * 0.5
+	gate.offset_top = HUD_MARGIN
+	gate.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	gate.add_theme_stylebox_override("panel", background)
+	gate.visible = false
+	hud.add_child(gate)
+	var gate_lines := VBoxContainer.new()
+	gate_lines.name = "Lines"
+	gate.add_child(gate_lines)
+	for key in GATE_LINES:
+		var settings := LabelSettings.new()
+		settings.font_size = HUD_FONT_SIZE
+		settings.font_color = HUD_TEXT_COLOR
+		_add_hud_label(gate_lines, GATE_LINES[key], settings)
 	# Bottom right.
 	var navball: Control = NavballScript.new()
 	navball.name = "Navball"
@@ -278,6 +328,12 @@ func _build_hud() -> void:
 	var beacon: Control = BeaconMarkerScript.new()
 	beacon.name = "BeaconMarker"
 	hud.add_child(beacon)
+	# And the nearest portal's.
+	var gate_marker: Control = BeaconMarkerScript.new()
+	gate_marker.name = "GateMarker"
+	gate_marker.color = GATE_MARKER_COLOR
+	gate_marker.prefix = "GATE"
+	hud.add_child(gate_marker)
 
 	update_hud(0.0, {})
 

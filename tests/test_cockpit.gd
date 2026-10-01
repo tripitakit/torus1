@@ -19,6 +19,7 @@ func _init():
 	failures += _test_approach_panel_writes_and_colours_the_readout()
 	failures += _test_moon_panel_shows_the_landing_readout()
 	failures += _test_beacon_marker_in_the_hud()
+	failures += _test_gate_panel_and_marker()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_bottom_right()
 	failures += _test_hud_hosts_the_flight_markers_full_screen()
@@ -362,6 +363,36 @@ func _test_beacon_marker_in_the_hud() -> int:
 	var result := 0
 	if marker == null or marker.visible:
 		print("FAIL _test_beacon_marker_in_the_hud: missing or shown from the start")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_gate_panel_and_marker() -> int:
+	# Top centre, hidden until fed; the approach line green or red; the gate
+	# marker a second, blue, "GATE" marker.
+	const PortalRules = preload("res://scripts/portal_rules.gd")
+	var cockpit := _make_cockpit()
+	var result := 0
+	var panel := cockpit.get_node_or_null("Hud/GatePanel") as Control
+	var marker := cockpit.get_node_or_null("Hud/GateMarker") as Control
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 0.5) or marker == null or marker.visible or marker.prefix != "GATE" or marker.color == cockpit.get_node("Hud/BeaconMarker").color:
+		print("FAIL _test_gate_panel_and_marker: missing, shown from the start, misplaced, or the marker not its own")
+		cockpit.free()
+		return 1
+	var lines := panel.get_node("Lines")
+	cockpit.update_gate(PortalRules.readout("LUNA", 2500.0, 350.0, false))
+	var approach := lines.get_node("ApproachLabel") as Label
+	var side := lines.get_node("SideLabel") as Label
+	if not panel.visible or (lines.get_node("GateLabel") as Label).text != "GATE > LUNA  2.5 km" or not approach.label_settings.font_color.is_equal_approx(PortalRules.BAD) or not side.visible:
+		print("FAIL _test_gate_panel_and_marker: readout not shown as expected")
+		result = 1
+	cockpit.update_gate(PortalRules.readout("LUNA", 2500.0, 120.0, true))
+	if not approach.label_settings.font_color.is_equal_approx(PortalRules.GOOD) or side.visible:
+		print("FAIL _test_gate_panel_and_marker: OK not green, or the side warning still shown")
+		result = 1
+	cockpit.update_gate({})
+	if panel.visible:
+		print("FAIL _test_gate_panel_and_marker: an empty readout left it shown")
 		result = 1
 	cockpit.free()
 	return result

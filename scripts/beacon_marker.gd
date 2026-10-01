@@ -1,8 +1,9 @@
 extends Control
 
-# Base Selene's marker over the pilot's view: a diamond with the distance on
-# the base when it is on the screen, an arrow on the screen's edge toward it
-# when it is not (behind the camera included).
+# A target's marker over the pilot's view (Base Selene's, a portal's): a
+# diamond with the name and distance on it when it is on the screen, an
+# arrow on the screen's edge toward it when it is not (behind the camera
+# included).
 
 const COLOR := Color(1.0, 0.85, 0.35, 0.95)
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.75)
@@ -14,6 +15,9 @@ const FONT_SIZE := 18
 # Off-screen the arrow waits this far inside the edge (px).
 const EDGE_MARGIN := 40.0
 
+# The marker's colour and the name written before the distance.
+var color := COLOR
+var prefix := "SELENE"
 var _place := {}
 var _text := ""
 
@@ -50,7 +54,7 @@ func update_target(camera: Camera3D, target: Vector3, distance: float, shown: bo
 	var local_dir: Vector3 = view.inverse() * (target - camera.global_position).normalized()
 	var projected := Vector2.ZERO if local_dir.z >= 0.0 else camera.unproject_position(target)
 	_place = placement(local_dir, projected, Vector2(camera.get_viewport().size))
-	_text = "SELENE  %s" % _distance(distance)
+	_text = "%s  %s" % [prefix, _distance(distance)]
 	queue_redraw()
 
 static func _distance(metres: float) -> String:
@@ -72,11 +76,11 @@ func _draw() -> void:
 		var side := tip.orthogonal()
 		outline = PackedVector2Array([point + tip * ARROW, point - tip * ARROW * 0.4 + side * ARROW * 0.6, point - tip * ARROW * 0.4 - side * ARROW * 0.6, point + tip * ARROW])
 	draw_polyline(outline, OUTLINE_COLOR, OUTLINE_WIDTH)
-	draw_polyline(outline, COLOR, LINE_WIDTH)
+	draw_polyline(outline, color, LINE_WIDTH)
 	var font := get_theme_default_font()
 	var at := point + Vector2(DIAMOND + 6.0, FONT_SIZE * 0.35)
 	if not _place.on_screen:
 		# Keep the label inside the screen, on the side away from the edge.
 		at = point - Vector2.from_angle(_place.angle) * (ARROW + 90.0) + Vector2(-60.0, FONT_SIZE * 0.35)
 	draw_string_outline(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, OUTLINE_COLOR)
-	draw_string(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, COLOR)
+	draw_string(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)

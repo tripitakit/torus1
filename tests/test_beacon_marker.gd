@@ -53,7 +53,7 @@ func _test_behind_goes_to_the_opposite_edge() -> int:
 func _test_marker_node() -> int:
 	var marker: Control = BeaconMarker.new()
 	var result := 0
-	if marker.visible or marker.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+	if marker.visible or marker.mouse_filter != Control.MOUSE_FILTER_IGNORE or marker.prefix != "SELENE" or marker.color != BeaconMarker.COLOR:
 		print("FAIL _test_marker_node: shown from the start or catching the mouse")
 		result = 1
 	marker.free()
