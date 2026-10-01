@@ -27,14 +27,16 @@ func _init() -> void:
 # {on_screen, point, angle} (angle: the edge arrow's direction, 0 = right,
 # screen y down).
 static func placement(local_dir: Vector3, projected: Vector2, screen: Vector2) -> Dictionary:
-	var inside := Rect2(Vector2.ONE * EDGE_MARGIN, screen - Vector2.ONE * EDGE_MARGIN * 2.0)
+	# On a view smaller than the margins (headless runs) the margin shrinks.
+	var margin: float = minf(EDGE_MARGIN, minf(screen.x, screen.y) * 0.25)
+	var inside := Rect2(Vector2.ONE * margin, (screen - Vector2.ONE * margin * 2.0).max(Vector2.ZERO))
 	if local_dir.z < 0.0 and inside.has_point(projected):
 		return {"on_screen": true, "point": projected, "angle": 0.0}
 	var across := Vector2(local_dir.x, -local_dir.y)
 	if across.length() < 1e-6:
 		across = Vector2(0.0, 1.0)  # dead astern: point down
 	across = across.normalized()
-	var half := screen * 0.5 - Vector2.ONE * EDGE_MARGIN
+	var half := screen * 0.5 - Vector2.ONE * margin
 	var reach: float = minf(half.x / maxf(absf(across.x), 1e-6), half.y / maxf(absf(across.y), 1e-6))
 	return {"on_screen": false, "point": screen * 0.5 + across * reach, "angle": across.angle()}
 

@@ -13,6 +13,7 @@ func _init():
 	failures += _test_off_to_the_right()
 	failures += _test_behind_goes_to_the_opposite_edge()
 	failures += _test_marker_node()
+	failures += _test_tiny_screen()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -57,3 +58,13 @@ func _test_marker_node() -> int:
 		result = 1
 	marker.free()
 	return result
+
+func _test_tiny_screen() -> int:
+	# A view smaller than the margins (headless runs): no negative rectangle,
+	# the point stays on the screen.
+	var tiny := Vector2(50.0, 50.0)
+	var place := BeaconMarker.placement(Vector3(5.0, 0.0, -1.0), Vector2(300.0, 25.0), tiny)
+	if place.point.x < 0.0 or place.point.x > tiny.x or place.point.y < 0.0 or place.point.y > tiny.y:
+		print("FAIL _test_tiny_screen: %s on a 50 px screen" % place.point)
+		return 1
+	return 0
