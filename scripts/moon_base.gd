@@ -27,6 +27,14 @@ const WHITE := Color(0.92, 0.93, 0.95)
 const LIGHT_GREY := Color(0.78, 0.8, 0.83)
 const TUBE_COLOR := Color(0.7, 0.72, 0.75)
 const NUMBER_COLOR := Color(1.0, 0.96, 0.88)
+# The beacon over the tower: a short white flash every second, never under
+# BEACON_MIN_PIXELS, drawn at any distance (the station lamps' shader).
+const BEACON_LIFT := 6.0
+const BEACON_SIZE := 25.0
+const BEACON_MIN_PIXELS := 4.0
+const BEACON_COLOR := Color(1.0, 0.97, 0.85)
+const BEACON_PERIOD := 1.0
+const BEACON_ON_TIME := 0.15
 
 # Every piece: {kind, name, centre (x, z), size (x, up, z), number (pads)}.
 static func layout() -> Array:
@@ -132,6 +140,28 @@ static func build(base: StaticBody3D, radius: float) -> void:
 		base.add_child(collision)
 	for style in buildings:
 		base.add_child(_buildings(style, buildings[style], building_material))
+	base.add_child(_beacon(lamp_mesh, radius))
+
+static func _beacon(lamp_mesh: QuadMesh, radius: float) -> MeshInstance3D:
+	var material := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = TorusStation.LAMP_SHADER
+	material.shader = shader
+	material.set_shader_parameter("lamp_size", BEACON_SIZE)
+	material.set_shader_parameter("min_pixels", BEACON_MIN_PIXELS)
+	material.set_shader_parameter("lamp_color", BEACON_COLOR)
+	material.set_shader_parameter("period", BEACON_PERIOD)
+	material.set_shader_parameter("on_time", BEACON_ON_TIME)
+	var beacon := MeshInstance3D.new()
+	beacon.name = "Beacon"
+	beacon.mesh = lamp_mesh
+	beacon.material_override = material
+	var top := ground(0.0, 0.0, radius)
+	beacon.position = top.origin + top.basis.y * (TOWER_HEIGHT + BEACON_LIFT)
+	# The quad grows with distance in the shader: never cull it by its 1 m box.
+	beacon.extra_cull_margin = 16384.0
+	beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return beacon
 
 static func _box(size: Vector3) -> BoxShape3D:
 	var box := BoxShape3D.new()

@@ -213,6 +213,10 @@ func build() -> void:
 	MoonBase.build(base, MoonOrbit.RADIUS)
 	add_child(base)
 
+# Base Selene's beacon, over the tower (world).
+func beacon_position() -> Vector3:
+	return (get_node("Base/Beacon") as Node3D).global_position
+
 # The top centre of pad `number` (1-6), y the local up (world).
 func pad_transform(number: int) -> Transform3D:
 	var centre: Vector2 = MoonBase.pad_centres()[number - 1]

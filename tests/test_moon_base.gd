@@ -28,6 +28,7 @@ func _initialize():
 	_failures += _test_everything_within_1300_m()
 	_failures += _test_pads_on_the_sphere_level()
 	_failures += _test_base_body_and_colliders()
+	_failures += _test_beacon_on_the_tower()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -99,5 +100,18 @@ func _test_base_body_and_colliders() -> int:
 	var shapes := base.find_children("*", "CollisionShape3D", true, false)
 	if shapes.size() != MoonBase.layout().size():
 		print("FAIL _test_base_body_and_colliders: %d colliders for %d pieces" % [shapes.size(), MoonBase.layout().size()])
+		return 1
+	return 0
+
+func _test_beacon_on_the_tower() -> int:
+	# A blinking light over the tower, drawn at any distance, never under a
+	# few pixels.
+	var beacon := _moon.get_node_or_null("Base/Beacon") as MeshInstance3D
+	if beacon == null or beacon.visibility_range_end != 0.0 or beacon.position.y < MoonBase.TOWER_HEIGHT:
+		print("FAIL _test_beacon_on_the_tower: missing, range-limited or below the tower top")
+		return 1
+	var material := beacon.material_override as ShaderMaterial
+	if material == null or float(material.get_shader_parameter("min_pixels")) < 4.0 or not _moon.beacon_position().is_equal_approx(beacon.global_position):
+		print("FAIL _test_beacon_on_the_tower: material or beacon_position wrong")
 		return 1
 	return 0
