@@ -282,10 +282,11 @@ func _test_soft_landing_on_a_pad() -> int:
 
 func _test_hitting_a_sector_bounces() -> int:
 	# An outer ring sector spans 230..290 m from the tower, 25..70 degrees,
-	# 6 m high: come at its outer wall at 35 degrees, 20 m/s, level, low.
+	# 6 m high: come at its outer wall at 35 degrees, 20 m/s, level, low;
+	# the bow 3 m off it, before the moon's pull brings the hull down.
 	var out := Vector2.from_angle(deg_to_rad(35.0))
-	_place(_at_base(out.x * 330.0, out.y * 330.0, 5.0))
-	await physics_frame
+	_place(_at_base(out.x * 308.0, out.y * 308.0, 5.0))
+	await _attached()
 	var inward: Vector3 = (_at_base(out.x * 250.0, out.y * 250.0, 5.0) - _ship.global_position).normalized()
 	_ship.velocity = inward * 20.0
 	_crashes = 0

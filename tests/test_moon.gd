@@ -52,14 +52,23 @@ func _test_advances_at_the_relative_rate() -> int:
 	return result
 
 func _test_base_faces_the_planet() -> int:
-	# 30 degrees off the point right under the planet, at any orbit angle.
+	# In Plato (51.6 N, 9.4 W; longitude 0 toward the planet, east +Z), at
+	# any orbit angle; the base's x points east.
+	var direction: Vector3 = MoonScript.base_direction()
+	var latitude := rad_to_deg(asin(direction.y))
+	var longitude := rad_to_deg(atan2(direction.z, -direction.x))
+	var east: Vector3 = MoonScript.base_local_transform().basis.x.normalized()
+	if absf(latitude - 51.6) > 0.01 or absf(longitude + 9.4) > 0.01 or not east.is_equal_approx(Vector3(sin(deg_to_rad(-9.4)), 0.0, cos(deg_to_rad(-9.4)))):
+		print("FAIL _test_base_faces_the_planet: base at %.2f, %.2f, east %s" % [latitude, longitude, east])
+		return 1
+	var expected := rad_to_deg(acos(cos(deg_to_rad(51.6)) * cos(deg_to_rad(9.4))))
 	for angle in [0.0, 1.3, -2.0]:
 		_moon.angle = angle
 		_moon.advance(0.0)
 		var site: Vector3 = _moon.base_transform().origin
 		var to_planet: Vector3 = (_planet.global_position - _moon.global_position).normalized()
 		var off: float = rad_to_deg(acos(clampf((site - _moon.global_position).normalized().dot(to_planet), -1.0, 1.0)))
-		if absf(off - 30.0) > 0.01:
+		if absf(off - expected) > 0.01:
 			print("FAIL _test_base_faces_the_planet: base %.3f degrees off the planet's direction" % off)
 			return 1
 	return 0

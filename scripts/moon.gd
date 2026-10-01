@@ -26,9 +26,10 @@ const STEP_CAP := 3000.0
 # round) stands in for the full mesh, with the same material.
 const FAR_SWITCH := 1500000.0
 const FAR_SEGMENTS := 96
-# Base Selene: 30 degrees from the point right under the planet (the moon's
-# local -X), toward its local +Y.
-const BASE_ANGLE := PI / 6.0
+# Base Selene in Plato, as Moonbase Alpha: latitude and longitude in degrees
+# (longitude 0 under the planet, the moon's local -X; east +Z; north +Y).
+const BASE_LATITUDE := 51.6
+const BASE_LONGITUDE := -9.4
 # The moon portal's amber (the earth portal is blue).
 const PORTAL_COLOR := Color(1.0, 0.7, 0.3)
 const MOON_SHADER := """
@@ -151,13 +152,24 @@ func altitude(point: Vector3) -> float:
 	return point.distance_to(global_position) - MoonOrbit.RADIUS
 
 static func base_direction() -> Vector3:
-	return Vector3(-cos(BASE_ANGLE), sin(BASE_ANGLE), 0.0)
+	return direction_of(BASE_LATITUDE, BASE_LONGITUDE)
+
+# The moon-local direction of (latitude, longitude) degrees.
+static func direction_of(latitude: float, longitude: float) -> Vector3:
+	var lat := deg_to_rad(latitude)
+	var lon := deg_to_rad(longitude)
+	return Vector3(-cos(lat) * cos(lon), sin(lat), cos(lat) * sin(lon))
+
+# East at the base, along the surface.
+static func base_east() -> Vector3:
+	var lon := deg_to_rad(BASE_LONGITUDE)
+	return Vector3(sin(lon), 0.0, cos(lon))
 
 # The base site in the moon's frame: origin on the surface, y the local up,
-# x the moon's local +Z (east).
+# x east.
 static func base_local_transform() -> Transform3D:
 	var up := base_direction()
-	var east := Vector3(0.0, 0.0, 1.0)
+	var east := base_east()
 	return Transform3D(Basis(east, up, east.cross(up)), up * MoonOrbit.RADIUS)
 
 func base_transform() -> Transform3D:
@@ -248,7 +260,7 @@ func pad_transform(number: int) -> Transform3D:
 static func build_surface_mesh() -> ArrayMesh:
 	var arcs := ring_arcs()
 	var pole := base_direction()
-	var a := Vector3(0.0, 0.0, 1.0)
+	var a := base_east()
 	var b := pole.cross(a)
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()

@@ -16,9 +16,9 @@ const GM := 6.1e10
 const ATTACH_ALTITUDE := 30000.0
 const DETACH_ALTITUDE := 32000.0
 # At the start: Base Selene in daylight (the scene's sun shines toward -Z)
-# and the moon nearly full, about 45 degrees left of the ship's nose, clear
+# and the moon nearly full, about 30 degrees left of the ship's nose, clear
 # of the planet's disc.
-const START_ANGLE := 5.0 * PI / 6.0
+const START_ANGLE := 13.0 * PI / 18.0  # 130 degrees
 # Base Selene's HUD marker shows only this close to the moon's centre: the
 # moon about 6 degrees wide, Torus1 (about 13,000 km off) well outside.
 const MARKER_RANGE := 5.0e6
