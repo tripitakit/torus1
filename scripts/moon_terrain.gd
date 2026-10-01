@@ -40,15 +40,18 @@ static func load_heights() -> void:
 		_base_height = nasa_height(MoonOrbit.base_direction())
 
 # The ground's height at `direction` (unit, moon axes); `detail` 0..1 scales
-# the small craters (0: NASA's map only).
-static func height(direction: Vector3, detail := 1.0) -> float:
+# the small craters (0: NASA's map only); craters of a size class whose
+# largest is under `smallest` metres across are left out (a coarse mesh
+# cannot show them); those whose largest is under `fine_below` count
+# `fine_weight` times (a patch ring fading out what the next one leaves out).
+static func height(direction: Vector3, detail := 1.0, smallest := 0.0, fine_below := 0.0, fine_weight := 1.0) -> float:
 	load_heights()
 	var from_base := MoonOrbit.RADIUS * acos(clampf(direction.dot(MoonOrbit.base_direction()), -1.0, 1.0))
 	if from_base < FLAT_RADIUS:
 		return _base_height
 	var natural := nasa_height(direction)
 	if detail > 0.0:
-		natural += crater_height(direction) * detail
+		natural += crater_height(direction, smallest, fine_below, fine_weight) * detail
 	if from_base < BLEND_RADIUS:
 		return lerpf(_base_height, natural, smoothstep(FLAT_RADIUS, BLEND_RADIUS, from_base))
 	return natural
@@ -80,7 +83,7 @@ static func _sample(x: int, y: int) -> float:
 	return _bytes.decode_s16((y * WIDTH + x) * 2)
 
 # The small craters' height at `direction` (their sum).
-static func crater_height(direction: Vector3) -> float:
+static func crater_height(direction: Vector3, smallest := 0.0, fine_below := 0.0, fine_weight := 1.0) -> float:
 	var total := 0.0
 	var major := maxf(absf(direction.x), maxf(absf(direction.y), absf(direction.z)))
 	for axis in range(3):
@@ -96,6 +99,11 @@ static func crater_height(direction: Vector3) -> float:
 		var stretch := (1.0 + s * s + t * t) / MoonOrbit.RADIUS
 		for octave in range(OCTAVES.size()):
 			var largest: float = OCTAVES[octave][1]
+			if largest < smallest:
+				continue
+			var weight := fine_weight if largest < fine_below else 1.0
+			if weight <= 0.0:
+				continue
 			var cell: float = largest * CELL_DIAMETERS / MoonOrbit.RADIUS
 			var reach: float = largest * 0.5 * EJECTA_REACH * stretch
 			var share: float = OCTAVES[octave][2]
@@ -116,7 +124,7 @@ static func crater_height(direction: Vector3) -> float:
 					var radius: float = lerpf(OCTAVES[octave][0], largest, _part(more, 0)) * 0.5
 					var x: float = (direction - on_face.normalized()).length() * MoonOrbit.RADIUS / radius
 					if x < EJECTA_REACH:
-						total += _profile(x, radius, _part(more, 1) < FRESH_SHARE)
+						total += _profile(x, radius, _part(more, 1) < FRESH_SHARE) * weight
 	return total
 
 # The crater in a face's cell, or empty: {centre (unit), radius, fresh}.

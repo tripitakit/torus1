@@ -32,6 +32,7 @@ func _initialize():
 	_failures += _test_base_faces_the_planet()
 	_failures += _test_base_transform_on_the_surface()
 	_failures += _test_surface_mesh()
+	_failures += _test_mesh_radius_meets_the_triangles()
 	_failures += _test_altitude()
 	_failures += _test_far_version()
 	_failures += _test_maps_have_mipmaps()
@@ -139,4 +140,21 @@ func _test_maps_have_mipmaps() -> int:
 		if not (load(path) as Texture2D).get_image().has_mipmaps():
 			print("FAIL _test_maps_have_mipmaps: %s has none" % path)
 			return 1
+	return 0
+
+func _test_mesh_radius_meets_the_triangles() -> int:
+	# Along a vertex's or a triangle's centre's direction, MoonMesh finds
+	# that very point (32-bit mesh positions: a few cm).
+	const MoonMesh = preload("res://scripts/moon_mesh.gd")
+	var arrays: Array = (_moon.get_node("Surface") as MeshInstance3D).mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for t in range(0, indices.size(), 3 * 997):
+		var a: Vector3 = vertices[indices[t]]
+		var centre: Vector3 = (a + vertices[indices[t + 1]] + vertices[indices[t + 2]]) / 3.0
+		for p in [a, centre]:
+			var found := MoonMesh.mesh_radius((p as Vector3).normalized())
+			if absf(found - (p as Vector3).length()) > 0.1:
+				print("FAIL _test_mesh_radius_meets_the_triangles: %.2f m off at %s" % [found - (p as Vector3).length(), p])
+				return 1
 	return 0

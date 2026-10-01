@@ -9,20 +9,13 @@ const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
 const MoonTerrain = preload("res://scripts/moon_terrain.gd")
+const MoonPatch = preload("res://scripts/moon_patch.gd")
+const MoonMesh = preload("res://scripts/moon_mesh.gd")
 const PortalScript = preload("res://scripts/portal.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
 
 const COLOR_PATH := "res://assets/textures/moon/color.jpg"
 const NORMAL_PATH := "res://assets/textures/moon/normal.png"
-# The surface mesh is laid out in rings round the base: DENSE_STEP apart up
-# to DENSE_REACH from it, then each GROWTH times farther than the last, up
-# to STEP_CAP; SEGMENTS round each ring. Near the base the chord sag is well
-# under a centimetre; far away it stays within a few metres.
-const SEGMENTS := 512
-const DENSE_STEP := 20.0
-const DENSE_REACH := 2000.0
-const GROWTH := 1.08
-const STEP_CAP := 3000.0
 # Past this distance from the moon's centre a light sphere (FAR_SEGMENTS
 # round) stands in for the full mesh, with the same material.
 const FAR_SWITCH := 1500000.0
@@ -34,13 +27,26 @@ shader_type spatial;
 
 uniform sampler2D surface_color : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D surface_normal : hint_normal, filter_linear_mipmap, repeat_enable;
+// The patch's rings sit at `offset` (moon axes) and carry their own relief:
+// no normal map there (normal_depth 0).
+uniform vec3 offset = vec3(0.0);
+uniform float normal_depth = 1.0;
+// The whole moon leaves a hole where the patch is: the square of points
+// whose direction falls within `hole_half` metres each way along hole_x and
+// hole_z of the plane touching the sphere (radius `hole_radius`) at
+// hole_up, as the patch lays its points out (0: no hole).
+uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
+uniform float hole_radius = 250000.0;
+uniform vec3 hole_x = vec3(1.0, 0.0, 0.0);
+uniform vec3 hole_z = vec3(0.0, 0.0, 1.0);
+uniform float hole_half = 0.0;
 
 varying vec3 local_dir;
 varying vec3 local_pos;
 
 void vertex() {
-	local_dir = normalize(VERTEX);
-	local_pos = VERTEX;
+	local_pos = VERTEX + offset;
+	local_dir = normalize(local_pos);
 	// East (+Z at longitude 0) and north, for the normal map (x east, y
 	// north).
 	TANGENT = normalize(cross(vec3(0.0, 1.0, 0.0), NORMAL));
@@ -77,11 +83,21 @@ void fragment() {
 		dx = dx2;
 		dy = dy2;
 	}
+	if (hole_half > 0.0) {
+		float facing = dot(local_dir, hole_up);
+		if (facing > 0.99) {
+			vec2 on_plane = vec2(dot(local_dir, hole_x), dot(local_dir, hole_z)) * hole_radius / facing;
+			if (abs(on_plane.x) < hole_half && abs(on_plane.y) < hole_half) {
+				discard;
+			}
+		}
+	}
 	vec2 uv = vec2(u, v);
 	// Fine grain for close-up flying: the colour map is ~190 m a pixel.
 	float grain = value_noise(local_pos / 40.0) * 0.6 + value_noise(local_pos / 9.0) * 0.4;
 	ALBEDO = textureGrad(surface_color, uv, dx, dy).rgb * (0.9 + 0.2 * grain);
 	NORMAL_MAP = textureGrad(surface_normal, uv, dx, dy).rgb;
+	NORMAL_MAP_DEPTH = normal_depth;
 	ROUGHNESS = 0.95;
 }
 """
@@ -164,8 +180,7 @@ static func direction_of(latitude: float, longitude: float) -> Vector3:
 
 # East at the base, along the surface.
 static func base_east() -> Vector3:
-	var lon := deg_to_rad(MoonOrbit.BASE_LONGITUDE)
-	return Vector3(sin(lon), 0.0, cos(lon))
+	return MoonMesh.base_east()
 
 # The base site in the moon's frame: origin on the surface, y the local up,
 # x east.
@@ -177,20 +192,9 @@ static func base_local_transform() -> Transform3D:
 func base_transform() -> Transform3D:
 	return global_transform * base_local_transform()
 
-# Arc distances from the base of the surface mesh's rings: 0 (the base
-# itself) first, the antipode (pi * RADIUS) last.
+# Arc distances of the surface mesh's rings (MoonMesh).
 static func ring_arcs() -> PackedFloat64Array:
-	var arcs := PackedFloat64Array()
-	var far := PI * MoonOrbit.RADIUS
-	var s := 0.0
-	var step := DENSE_STEP
-	while s < far - step * 0.5:
-		arcs.append(s)
-		s += step
-		if s >= DENSE_REACH:
-			step = minf(step * GROWTH, STEP_CAP)
-	arcs.append(far)
-	return arcs
+	return MoonMesh.ring_arcs()
 
 func build() -> void:
 	var existing := get_node_or_null("Surface")
@@ -224,6 +228,20 @@ func build() -> void:
 	far.material_override = material
 	far.visibility_range_begin = FAR_SWITCH
 	add_child(far)
+	# The fine ground under the ship (see follow_patch), its own copy of the
+	# material: offset to its rings, no normal map.
+	var old_patch := get_node_or_null("Patch")
+	if old_patch != null:
+		remove_child(old_patch)
+		old_patch.queue_free()
+	var patch: Node3D = MoonPatch.new()
+	patch.name = "Patch"
+	var patch_material := material.duplicate() as ShaderMaterial
+	patch_material.set_shader_parameter("normal_depth", 0.0)
+	patch.set_material(patch_material)
+	patch.visible = false
+	patch.rebuilt.connect(_on_patch_rebuilt.bind(patch, material, patch_material))
+	add_child(patch)
 	var old_base := get_node_or_null("Base")
 	if old_base != null:
 		remove_child(old_base)
@@ -247,6 +265,29 @@ func build() -> void:
 	portal.transform = PortalRules.moon_local_transform(base_local_transform())
 	add_child(portal)
 
+# The ship at `point` (world): the fine ground under it while `active` (in
+# the moon's frame), none otherwise.
+func follow_patch(point: Vector3, active: bool) -> void:
+	var patch := get_node_or_null("Patch")
+	if patch == null:
+		return
+	if active:
+		patch.follow(global_transform.affine_inverse() * point)
+	elif patch.visible or patch.built:
+		patch.stop()
+		((get_node("Surface") as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("hole_half", 0.0)
+
+# New rings in place: the whole moon's hole and the patch's offset follow.
+func _on_patch_rebuilt(patch: Node3D, material: ShaderMaterial, patch_material: ShaderMaterial) -> void:
+	var frame: Transform3D = MoonPatch.tangent_frame(patch.centre)
+	patch_material.set_shader_parameter("offset", frame.origin)
+	material.set_shader_parameter("hole_up", frame.basis.y)
+	material.set_shader_parameter("hole_radius", MoonOrbit.RADIUS)
+	material.set_shader_parameter("hole_x", frame.basis.x)
+	material.set_shader_parameter("hole_z", frame.basis.z)
+	# A metre short of the patch's edge: the two overlap rather than gap.
+	material.set_shader_parameter("hole_half", MoonPatch.SPACINGS[-1] * MoonPatch.CELLS * 0.5 - 1.0)
+
 # Base Selene's beacon, over the tower (world).
 func beacon_position() -> Vector3:
 	return (get_node("Base/Beacon") as Node3D).global_position
@@ -257,61 +298,6 @@ func pad_transform(number: int) -> Transform3D:
 	var ground: Transform3D = MoonBase.ground(centre.x, centre.y, ground_radius())
 	return base_transform() * Transform3D(ground.basis, ground.origin + ground.basis.y * MoonBase.PAD_HEIGHT)
 
-# The whole moon's ground: NASA's heights only (the patch under the ship
-# adds the small craters).
-static func _surface_radius(direction: Vector3) -> float:
-	return MoonOrbit.RADIUS + MoonTerrain.height(direction, 0.0)
-
-# The sphere in rings round the base (its pole): dense near it, sparse far.
-# Vertex 0 is the base point, then SEGMENTS per ring, then the antipode.
+# The whole moon's surface mesh (MoonMesh).
 static func build_surface_mesh() -> ArrayMesh:
-	var arcs := ring_arcs()
-	var pole := base_direction()
-	var a := base_east()
-	var b := pole.cross(a)
-	var vertices := PackedVector3Array()
-	var normals := PackedVector3Array()
-	vertices.append(pole * _surface_radius(pole))
-	normals.append(pole)
-	var cosines := PackedFloat64Array()
-	var sines := PackedFloat64Array()
-	for i in range(SEGMENTS):
-		cosines.append(cos(TAU * i / SEGMENTS))
-		sines.append(sin(TAU * i / SEGMENTS))
-	for k in range(1, arcs.size() - 1):
-		var theta: float = arcs[k] / MoonOrbit.RADIUS
-		var up_part: Vector3 = pole * cos(theta)
-		var side: float = sin(theta)
-		for i in range(SEGMENTS):
-			var direction: Vector3 = up_part + (a * cosines[i] + b * sines[i]) * side
-			vertices.append(direction * _surface_radius(direction))
-			normals.append(direction)
-	vertices.append(-pole * _surface_radius(-pole))
-	normals.append(-pole)
-	var rings: int = arcs.size() - 2
-	var last: int = vertices.size() - 1
-	var indices := PackedInt32Array()
-	# Winding (front faces out): with P(k, i) ring k's i-th vertex, the base
-	# point as ring 0 and the antipode as ring `rings` + 1, a quad is
-	# [P(k,i), P(k,i+1), P(k+1,i)] and [P(k,i+1), P(k+1,i+1), P(k+1,i)].
-	for i in range(SEGMENTS):
-		var next: int = (i + 1) % SEGMENTS
-		indices.append_array(PackedInt32Array([0, 1 + next, 1 + i]))
-	for k in range(rings - 1):
-		var row: int = 1 + k * SEGMENTS
-		var below: int = row + SEGMENTS
-		for i in range(SEGMENTS):
-			var next: int = (i + 1) % SEGMENTS
-			indices.append_array(PackedInt32Array([row + i, row + next, below + i, row + next, below + next, below + i]))
-	var outer: int = 1 + (rings - 1) * SEGMENTS
-	for i in range(SEGMENTS):
-		var next: int = (i + 1) % SEGMENTS
-		indices.append_array(PackedInt32Array([outer + i, outer + next, last]))
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
+	return MoonMesh.build()

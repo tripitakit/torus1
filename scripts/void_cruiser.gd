@@ -648,6 +648,9 @@ func _physics_process(delta: float) -> void:
 		_transit_tick(delta)
 		return
 	_follow_moon()
+	var moon := moon_node()
+	if moon != null:
+		moon.follow_patch(global_position, in_moon_frame)
 	_fly(delta)
 
 # The nearest portal: {portal, centre (world), distance}; empty without one.
