@@ -5,6 +5,7 @@ extends SceneTree
 
 const MoonScript = preload("res://scripts/moon.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 const WorldOriginRebaseScript = preload("res://scripts/world_origin_rebase.gd")
 
@@ -42,6 +43,7 @@ func _initialize():
 	_failures += await _test_moon_gravity_pulls_down()
 	_failures += _test_landing_ok_limits()
 	_failures += await _test_soft_level_touch_lands()
+	_failures += await _test_lands_in_a_crater()
 	_failures += await _test_landed_ship_stays_put_for_many_ticks()
 	_failures += await _test_up_thrust_takes_off()
 	_failures += await _test_fast_touch_crashes()
@@ -62,8 +64,10 @@ func _initialize():
 	quit()
 
 # A point `height` above the moon in moon-local direction `direction`.
+# A point `height` over the ground (MoonTerrain) in moon-local `direction`.
 func _above(direction: Vector3, height: float) -> Vector3:
-	return _moon.to_global(direction.normalized() * (MoonOrbit.RADIUS + height))
+	var d := direction.normalized()
+	return _moon.to_global(d * (MoonOrbit.RADIUS + MoonTerrain.height(d) + height))
 
 # The ship at `point`, level (its up the local up), moving with the moon's
 # surface plus `extra` (world), in the ring's frame, not attached yet.
@@ -176,7 +180,7 @@ func _test_landing_ok_limits() -> int:
 			return 1
 	return 0
 
-# The ship `height` metres (bottom of the hull) above the ground, moving at
+# The ship `height` metres (its lowest corner) above the ground, moving at
 # `velocity` in the moon's frame, level or tilted by `tilt` degrees; waits
 # up to 20 s for it to land or crash.
 # `velocity`: x across (the ship's side), y up.
@@ -185,11 +189,15 @@ func _drop(direction: Vector3, height: float, velocity: Vector2, tilt := 0.0) ->
 	if _ship.is_crashed:
 		_ship.restart_after_crash()
 	_place(point)
-	await _attached()
 	var up: Vector3 = _moon.up_at(_ship.global_position)
 	var level: Basis = _ship.global_transform.basis
 	_ship.global_transform.basis = Basis(level.x.normalized(), deg_to_rad(tilt)) * level
 	var side: Vector3 = level.x.normalized()
+	# `height` from the hull's lowest corner (the ground may slope).
+	_ship.global_position += up * (height - _ship.lowest_clearance(_ship.global_transform))
+	await _attached()
+	up = _moon.up_at(_ship.global_position)
+	side = _ship.global_transform.basis.x.normalized()
 	_ship.velocity = up * velocity.y + side * velocity.x
 	if not _ship.crashed.is_connected(_on_crashed):
 		_ship.crashed.connect(_on_crashed)
@@ -198,13 +206,38 @@ func _drop(direction: Vector3, height: float, velocity: Vector2, tilt := 0.0) ->
 		await physics_frame
 		if _ship.is_landed or _ship.is_crashed:
 			return
+		if tilt != 0.0:
+			_hold_tilt(tilt)
+
+# The pilot holding the ship `tilt` degrees about its side axis (the
+# auto-level would turn it level otherwise).
+func _hold_tilt(tilt: float) -> void:
+	var up: Vector3 = _moon.up_at(_ship.global_position)
+	var side: Vector3 = _ship.global_transform.basis.x
+	side = (side - up * side.dot(up)).normalized()
+	_ship.global_transform.basis = Basis(side, deg_to_rad(tilt)) * Basis(side, up, side.cross(up))
+	_ship.angular_velocity = Vector3.ZERO
+
+func _test_lands_in_a_crater() -> int:
+	# A fresh crater far from the base: the ship comes to rest in its bowl,
+	# metres under the sphere of NASA's heights there.
+	var crater := MoonTerrain.find_crater(true, MoonScript.direction_of(-20.0, 40.0))
+	var centre: Vector3 = crater.centre
+	await _drop(centre, 3.0, Vector2(0.0, -1.0))
+	var local: Vector3 = _moon.global_transform.affine_inverse() * _ship.global_position
+	var below_map: float = MoonOrbit.RADIUS + MoonTerrain.nasa_height(local.normalized()) - (local.length() - VoidCruiserScript.HALF_HEIGHT)
+	if not _ship.is_landed or absf(_ship.lowest_clearance(_ship.global_transform)) > 0.05 or below_map < crater.radius * 0.2:
+		print("FAIL _test_lands_in_a_crater: landed %s, %.1f m into a %.0f m crater" % [_ship.is_landed, below_map, crater.radius * 2.0])
+		return 1
+	return 0
 
 func _test_soft_level_touch_lands() -> int:
 	var direction := Vector3(0.1, 0.8, -0.6)
 	await _drop(direction, 5.0, Vector2(0.0, -1.0))
-	var height: float = _moon.altitude(_ship.global_position)
-	if not _ship.is_landed or _crashes != 0 or absf(height - VoidCruiserScript.HALF_HEIGHT) > 0.05 or _ship.velocity != Vector3.ZERO:
-		print("FAIL _test_soft_level_touch_lands: landed %s, crashes %d, centre %.3f m up, velocity %s" % [_ship.is_landed, _crashes, height, _ship.velocity])
+	# Resting on its lowest corner (the ground may slope under it).
+	var height: float = _ship.lowest_clearance(_ship.global_transform)
+	if not _ship.is_landed or _crashes != 0 or absf(height) > 0.05 or _ship.velocity != Vector3.ZERO:
+		print("FAIL _test_soft_level_touch_lands: landed %s, crashes %d, lowest corner %.3f m up, velocity %s" % [_ship.is_landed, _crashes, height, _ship.velocity])
 		return 1
 	return 0
 
@@ -259,7 +292,7 @@ func _test_tilted_touch_crashes() -> int:
 # A point of the base's tangent plane (x east, z south), `height` above the
 # sphere under it.
 func _at_base(x: float, z: float, height: float) -> Vector3:
-	var r := MoonOrbit.RADIUS
+	var r: float = MoonScript.ground_radius()
 	return _moon.base_transform() * Vector3(x, sqrt(r * r - x * x - z * z) - r + height, z)
 
 func _test_soft_landing_on_a_pad() -> int:

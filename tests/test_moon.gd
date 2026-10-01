@@ -5,6 +5,7 @@ extends SceneTree
 
 const MoonScript = preload("res://scripts/moon.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
+const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 
 var _failures := 0
 var _system: Node3D
@@ -76,7 +77,7 @@ func _test_base_faces_the_planet() -> int:
 func _test_base_transform_on_the_surface() -> int:
 	var site: Transform3D = _moon.base_transform()
 	var up: Vector3 = (site.origin - _moon.global_position).normalized()
-	if absf(site.origin.distance_to(_moon.global_position) - MoonOrbit.RADIUS) > 0.01 or site.basis.y.normalized().dot(up) < 0.999999 or absf(site.basis.determinant() - 1.0) > 1e-6:
+	if absf(site.origin.distance_to(_moon.global_position) - MoonScript.ground_radius()) > 0.01 or site.basis.y.normalized().dot(up) < 0.999999 or absf(site.basis.determinant() - 1.0) > 1e-6:
 		print("FAIL _test_base_transform_on_the_surface: %s" % site)
 		return 1
 	return 0
@@ -90,9 +91,10 @@ func _test_surface_mesh() -> int:
 		print("FAIL _test_surface_mesh: %d vertices" % vertices.size())
 		return 1
 	for v in vertices:
-		# Mesh positions are 32-bit floats: ~2 cm at 250 km.
-		if absf(v.length() - MoonOrbit.RADIUS) > 0.05:
-			print("FAIL _test_surface_mesh: vertex %s off the sphere" % v)
+		# On NASA's heights (no small craters). Mesh positions are 32-bit
+		# floats: ~2 cm at 250 km.
+		if absf(v.length() - MoonOrbit.RADIUS - MoonTerrain.height(v.normalized(), 0.0)) > 0.05:
+			print("FAIL _test_surface_mesh: vertex %s off the ground" % v)
 			return 1
 	# Front faces out (the winding of the rest of the project).
 	for t in range(0, indices.size(), 3):
@@ -112,9 +114,10 @@ func _test_surface_mesh() -> int:
 	return 0
 
 func _test_altitude() -> int:
+	# Over the ground (MoonTerrain), in the moon's own axes.
 	var up := Vector3(0.3, 0.8, -0.2).normalized()
-	var point: Vector3 = _moon.global_position + up * (MoonOrbit.RADIUS + 100.0)
-	if absf(_moon.altitude(point) - 100.0) > 0.01 or _moon.up_at(point).dot(up) < 0.999999:
+	var point: Vector3 = _moon.to_global(up * (MoonOrbit.RADIUS + MoonTerrain.height(up) + 100.0))
+	if absf(_moon.altitude(point) - 100.0) > 0.01 or _moon.up_at(point).dot(_moon.global_transform.basis * up) < 0.999999:
 		print("FAIL _test_altitude: %f" % _moon.altitude(point))
 		return 1
 	return 0

@@ -63,6 +63,9 @@ const LANDING_VERTICAL_SPEED := LandingReadout.DESCENT_LIMIT
 const LANDING_HORIZONTAL_SPEED := LandingReadout.DRIFT_LIMIT
 const LANDING_TILT := LandingReadout.LEVEL_LIMIT * PI / 180.0
 const HALF_HEIGHT := 3.75  # HULL_SIZE.y / 2
+# Under this height (centre over the ground) the hull's corners are checked
+# against the ground: more than the hull's half diagonal plus a fast tick.
+const GROUND_CHECK_HEIGHT := 60.0
 # Base Selene's HUD marker hides this close to the beacon.
 const BEACON_HIDE_DISTANCE := 1000.0
 # The wreck comes to rest this far above the planet's surface.
@@ -287,18 +290,18 @@ func _move(delta: float) -> void:
 		return
 	var moon := moon_node()
 	if in_moon_frame and moon != null:
-		# The moon's ground: a sphere as far under the ship's centre as the
-		# hull's lowest corner (a tilted hull reaches lower than HALF_HEIGHT).
-		# Only moving down into it counts (lifting off starts on it).
+		# The moon's ground (MoonTerrain): the hull's lowest corner against it.
+		# Moving down or sinking deeper counts (lifting off starts on it; the
+		# ship turning level can keep its lowest corner just where it was).
 		var start := _world_position()
-		var up: Vector3 = moon.up_at(start)
-		if velocity.dot(up) < 0.0:
-			var reach := hull_reach(up)
-			var entry := VoidCruiserPhysics.sphere_entry(start, start + velocity * delta, moon.centre(), MoonOrbit.RADIUS + reach)
-			if entry >= 0.0:
-				var point: Vector3 = start + velocity * delta * entry
-				var ground_up: Vector3 = moon.up_at(point)
-				touch_down(point, ground_up, moon.centre() + ground_up * (MoonOrbit.RADIUS + reach))
+		var motion := velocity * delta
+		if moon.altitude(start) < GROUND_CHECK_HEIGHT:
+			var before := lowest_clearance(Transform3D(_world_basis(), start))
+			var after := lowest_clearance(Transform3D(_world_basis(), start + motion))
+			if after < 0.0 and (velocity.dot(moon.up_at(start)) < 0.0 or after < before - 0.001):
+				var share := clampf(before / (before - after), 0.0, 1.0)
+				var point: Vector3 = start + motion * share
+				touch_down(point, moon.up_at(point), point)
 				return
 		# Base Selene: a level surface (a pad, a roof) is a touch-down, a wall
 		# a bounce.
@@ -324,6 +327,17 @@ func _move(delta: float) -> void:
 	var hit := move_and_collide(velocity * delta)
 	if hit and not _hit_portal_frame(hit):
 		velocity = VoidCruiserPhysics.compute_bounce_velocity(velocity, hit.get_normal(), collision_restitution)
+
+# The lowest of the hull's eight corners over the moon's ground, with the
+# ship at `at` (world).
+func lowest_clearance(at: Transform3D) -> float:
+	var moon := moon_node()
+	var lowest := INF
+	for x in [-0.5, 0.5]:
+		for y in [-0.5, 0.5]:
+			for z in [-0.5, 0.5]:
+				lowest = minf(lowest, moon.altitude(at * (Vector3(x, y, z) * HULL_SIZE)))
+	return lowest
 
 # How far below the ship's centre its hull reaches along `up` (half the
 # box's extent along that direction).

@@ -8,6 +8,7 @@ extends Node3D
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
+const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 const PortalScript = preload("res://scripts/portal.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
 
@@ -95,6 +96,7 @@ var angle := MoonOrbit.START_ANGLE
 var last_step := 0.0
 
 func _ready() -> void:
+	MoonTerrain.load_heights()
 	build()
 	_place()
 
@@ -144,8 +146,14 @@ func centre() -> Vector3:
 func up_at(point: Vector3) -> Vector3:
 	return (point - global_position).normalized()
 
+# Height of `point` (world) over the ground under it (MoonTerrain).
 func altitude(point: Vector3) -> float:
-	return point.distance_to(global_position) - MoonOrbit.RADIUS
+	var local: Vector3 = global_transform.affine_inverse() * point
+	return local.length() - MoonOrbit.RADIUS - MoonTerrain.height(local.normalized())
+
+# The base's flat ground: its distance from the moon's centre.
+static func ground_radius() -> float:
+	return MoonOrbit.RADIUS + MoonTerrain.base_height()
 
 # Base Selene, in Plato (MoonOrbit.BASE_LATITUDE, BASE_LONGITUDE).
 static func base_direction() -> Vector3:
@@ -164,7 +172,7 @@ static func base_east() -> Vector3:
 static func base_local_transform() -> Transform3D:
 	var up := base_direction()
 	var east := base_east()
-	return Transform3D(Basis(east, up, east.cross(up)), up * MoonOrbit.RADIUS)
+	return Transform3D(Basis(east, up, east.cross(up)), up * ground_radius())
 
 func base_transform() -> Transform3D:
 	return global_transform * base_local_transform()
@@ -225,7 +233,7 @@ func build() -> void:
 	var base := StaticBody3D.new()
 	base.name = "Base"
 	base.transform = base_local_transform()
-	MoonBase.build(base, MoonOrbit.RADIUS)
+	MoonBase.build(base, ground_radius())
 	add_child(base)
 	var old_portal := get_node_or_null("Portal")
 	if old_portal != null:
@@ -246,8 +254,13 @@ func beacon_position() -> Vector3:
 # The top centre of pad `number` (1-6), y the local up (world).
 func pad_transform(number: int) -> Transform3D:
 	var centre: Vector2 = MoonBase.pad_centres()[number - 1]
-	var ground: Transform3D = MoonBase.ground(centre.x, centre.y, MoonOrbit.RADIUS)
+	var ground: Transform3D = MoonBase.ground(centre.x, centre.y, ground_radius())
 	return base_transform() * Transform3D(ground.basis, ground.origin + ground.basis.y * MoonBase.PAD_HEIGHT)
+
+# The whole moon's ground: NASA's heights only (the patch under the ship
+# adds the small craters).
+static func _surface_radius(direction: Vector3) -> float:
+	return MoonOrbit.RADIUS + MoonTerrain.height(direction, 0.0)
 
 # The sphere in rings round the base (its pole): dense near it, sparse far.
 # Vertex 0 is the base point, then SEGMENTS per ring, then the antipode.
@@ -258,7 +271,7 @@ static func build_surface_mesh() -> ArrayMesh:
 	var b := pole.cross(a)
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
-	vertices.append(pole * MoonOrbit.RADIUS)
+	vertices.append(pole * _surface_radius(pole))
 	normals.append(pole)
 	var cosines := PackedFloat64Array()
 	var sines := PackedFloat64Array()
@@ -271,9 +284,9 @@ static func build_surface_mesh() -> ArrayMesh:
 		var side: float = sin(theta)
 		for i in range(SEGMENTS):
 			var direction: Vector3 = up_part + (a * cosines[i] + b * sines[i]) * side
-			vertices.append(direction * MoonOrbit.RADIUS)
+			vertices.append(direction * _surface_radius(direction))
 			normals.append(direction)
-	vertices.append(-pole * MoonOrbit.RADIUS)
+	vertices.append(-pole * _surface_radius(-pole))
 	normals.append(-pole)
 	var rings: int = arcs.size() - 2
 	var last: int = vertices.size() - 1

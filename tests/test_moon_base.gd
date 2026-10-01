@@ -153,7 +153,7 @@ func _test_pads_on_the_sphere_level() -> int:
 	for number in range(1, 7):
 		var top: Transform3D = _moon.pad_transform(number)
 		var up: Vector3 = _moon.up_at(top.origin)
-		if absf(top.origin.distance_to(_moon.centre()) - (MoonOrbit.RADIUS + MoonBase.PAD_HEIGHT)) > 0.01 or top.basis.y.normalized().dot(up) < 0.99999:
+		if absf(top.origin.distance_to(_moon.centre()) - (MoonScript.ground_radius() + MoonBase.PAD_HEIGHT)) > 0.01 or top.basis.y.normalized().dot(up) < 0.99999:
 			print("FAIL _test_pads_on_the_sphere_level: pad %d top %.3f m from the centre, up off by %f" % [number, top.origin.distance_to(_moon.centre()), top.basis.y.normalized().dot(up)])
 			return 1
 	return 0
