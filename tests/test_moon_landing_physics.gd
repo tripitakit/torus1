@@ -48,7 +48,7 @@ func _initialize():
 	_failures += await _test_sideways_touch_crashes()
 	_failures += await _test_tilted_touch_crashes()
 	_failures += await _test_soft_landing_on_a_pad()
-	_failures += await _test_hitting_a_module_bounces()
+	_failures += await _test_hitting_a_sector_bounces()
 	_failures += await _test_guide_points_at_the_nearest_pad()
 	_failures += await _test_altitude_reads_zero_landed_away_from_the_pads()
 	_failures += await _test_tilted_landing_rests_its_lowest_corner_on_the_ground()
@@ -280,23 +280,24 @@ func _test_soft_landing_on_a_pad() -> int:
 		result = 1
 	return result
 
-func _test_hitting_a_module_bounces() -> int:
-	# The first module of the east arm spans x 70..110, z -10..10, 10 m high:
-	# come at its south face at 20 m/s, level, low.
-	_place(_at_base(90.0, 45.0, 5.0))
+func _test_hitting_a_sector_bounces() -> int:
+	# An outer ring sector spans 230..290 m from the tower, 25..70 degrees,
+	# 6 m high: come at its outer wall at 35 degrees, 20 m/s, level, low.
+	var out := Vector2.from_angle(deg_to_rad(35.0))
+	_place(_at_base(out.x * 330.0, out.y * 330.0, 5.0))
 	await physics_frame
-	var north: Vector3 = (_at_base(90.0, 0.0, 5.0) - _ship.global_position).normalized()
-	_ship.velocity = north * 20.0
+	var inward: Vector3 = (_at_base(out.x * 250.0, out.y * 250.0, 5.0) - _ship.global_position).normalized()
+	_ship.velocity = inward * 20.0
 	_crashes = 0
 	var bounced := false
 	for tick in range(120):
 		await physics_frame
-		if _ship.velocity.dot(north) < 0.0:
+		if _ship.velocity.dot(inward) < 0.0:
 			bounced = true
 			break
 	var result := 0
 	if not bounced or _ship.is_landed or _ship.is_crashed or _crashes != 0:
-		print("FAIL _test_hitting_a_module_bounces: bounced %s, landed %s, crashed %s" % [bounced, _ship.is_landed, _ship.is_crashed])
+		print("FAIL _test_hitting_a_sector_bounces: bounced %s, landed %s, crashed %s" % [bounced, _ship.is_landed, _ship.is_crashed])
 		result = 1
 	return result
 
