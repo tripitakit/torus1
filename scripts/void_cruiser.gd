@@ -9,6 +9,7 @@ const DockingAssist = preload("res://scripts/docking_assist.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const LandingReadout = preload("res://scripts/landing_readout.gd")
 const LandingGuide = preload("res://scripts/landing_guide.gd")
+const LandingAssist = preload("res://scripts/landing_assist.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -60,6 +61,8 @@ const LANDING_VERTICAL_SPEED := LandingReadout.DESCENT_LIMIT
 const LANDING_HORIZONTAL_SPEED := LandingReadout.DRIFT_LIMIT
 const LANDING_TILT := LandingReadout.LEVEL_LIMIT * PI / 180.0
 const HALF_HEIGHT := 3.75  # HULL_SIZE.y / 2
+# Base Selene's HUD marker hides this close to the beacon.
+const BEACON_HIDE_DISTANCE := 1000.0
 # The wreck comes to rest this far above the planet's surface.
 const PLANET_CLEARANCE := 10.0
 
@@ -86,6 +89,9 @@ var planet_radius := 1737400.0
 var in_moon_frame := false
 var is_landed := false
 var crashed_on_moon := false
+# While levelling itself near the moon: the nose's heading to keep, in the
+# moon's own axes (so it turns with the moon). Zero when not levelling.
+var _level_heading := Vector3.ZERO
 
 func _init() -> void:
 	forward_thrust_steps = PackedFloat64Array(VOID_THRUST_STEPS)
@@ -119,6 +125,13 @@ func _process(delta: float) -> void:
 	if cockpit:
 		cockpit.update_approach(readout)
 		cockpit.update_moon(moon_readout())
+		var moon := moon_node()
+		if moon != null and is_inside_tree():
+			var beacon: Vector3 = moon.beacon_position()
+			var distance := global_position.distance_to(beacon)
+			cockpit.update_beacon(beacon, distance, distance > BEACON_HIDE_DISTANCE and not is_landed)
+		else:
+			cockpit.update_beacon(Vector3.ZERO, 0.0, false)
 
 # The pad the landing guide points at: {number, pad (top-centre
 # transform)}, within LandingGuide.GUIDE_RANGE of the base in the moon's
@@ -133,9 +146,21 @@ func landing_target() -> Dictionary:
 	var index := LandingGuide.target_pad(global_position, pads)
 	return {"number": index + 1, "pad": pads[index]}
 
-# The moon panel's readout while in the moon's frame, else empty: the height
-# of the hull's bottom above the target pad near the base, above the ground
-# elsewhere.
+# The height of the hull's bottom (as when level) over the ground, or over
+# the target pad near the base, in the moon's frame; INF elsewhere.
+func landing_altitude() -> float:
+	var moon := moon_node()
+	if not in_moon_frame or moon == null:
+		return INF
+	var height: float = moon.altitude(global_position)
+	var target := landing_target()
+	if not target.is_empty():
+		# Over the pad its top counts; away from it the ground curves off
+		# under the pad's plane (199 m at 10 km), so the lower of the two.
+		height = minf(height, (global_position - (target.pad as Transform3D).origin).dot(moon.up_at(global_position)))
+	return height - HALF_HEIGHT
+
+# The moon panel's readout while in the moon's frame, else empty.
 func moon_readout() -> Dictionary:
 	var moon := moon_node()
 	if not in_moon_frame or moon == null:
@@ -144,15 +169,9 @@ func moon_readout() -> Dictionary:
 	var vertical: float = velocity.dot(up)
 	var drift: float = (velocity - up * vertical).length()
 	var tilt: float = rad_to_deg(acos(clampf(_world_basis().y.normalized().dot(up), -1.0, 1.0)))
-	var height: float = moon.altitude(global_position)
-	var number := 0
 	var target := landing_target()
-	if not target.is_empty():
-		number = target.number
-		# Over the pad its top counts; away from it the ground curves off
-		# under the pad's plane (199 m at 10 km), so the lower of the two.
-		height = minf(height, (global_position - (target.pad as Transform3D).origin).dot(up))
-	return LandingReadout.readout(height - HALF_HEIGHT, vertical, drift, tilt, number, is_landed)
+	var number: int = 0 if target.is_empty() else target.number
+	return LandingReadout.readout(landing_altitude(), vertical, drift, tilt, number, is_landed)
 
 func _unhandled_input(event: InputEvent) -> void:
 	super(event)
@@ -201,6 +220,7 @@ func _fly(delta: float) -> void:
 	var thrust_input := _read_thrust_input()
 	if is_landed:
 		# Only lifting off counts: the ship rests, carried with the moon.
+		_level_heading = Vector3.ZERO
 		if thrust_input.y <= 0.0:
 			_mouse_delta = Vector2.ZERO
 			_forward_hold_time = 0.0
@@ -210,11 +230,35 @@ func _fly(delta: float) -> void:
 		is_landed = false
 	_update_forward_hold_time(thrust_input.z, delta)
 	var dock := _nearest_dock()
+	# Near a dock and low over the moon the thrust eases off; the lower
+	# factor wins.
+	var altitude := landing_altitude()
 	thrust_scale = 1.0 if dock.is_empty() else DockingAssist.precision_factor(dock.distance)
+	thrust_scale = minf(thrust_scale, LandingAssist.thrust_factor(altitude))
 	thrust_input = DockingAssist.scaled_thrust(thrust_input, forward_thrust_multiplier(), thrust_scale)
 	if brake_engaged:
 		velocity = DockingAssist.brake_velocity(velocity, Vector3.ZERO, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
-	_apply_physics_step(delta, thrust_input, _read_torque_input(delta))
+	var torque := _read_torque_input(delta) * LandingAssist.torque_factor(altitude)
+	_level_near_the_moon(altitude, torque)
+	_apply_physics_step(delta, thrust_input, torque)
+
+# Low over the moon with hands off the mouse and the roll keys, the ship
+# turns itself level, keeping the heading its nose had when levelling began.
+func _level_near_the_moon(altitude: float, torque: Vector3) -> void:
+	var moon := moon_node()
+	if moon == null or altitude >= LandingAssist.RANGE or not torque.is_zero_approx():
+		_level_heading = Vector3.ZERO
+		return
+	var up: Vector3 = moon.up_at(global_position)
+	var moon_axes: Basis = moon.global_transform.basis.orthonormalized()
+	# A heading kept from somewhere else (no longer horizontal here) is stale.
+	if _level_heading != Vector3.ZERO and absf((moon_axes * _level_heading).dot(up)) > 0.05:
+		_level_heading = Vector3.ZERO
+	if _level_heading == Vector3.ZERO:
+		_level_heading = moon_axes.inverse() * LandingAssist.heading_of(_world_basis(), up)
+	var heading: Vector3 = moon_axes * _level_heading
+	heading = (heading - up * heading.dot(up)).normalized()
+	angular_velocity = LandingAssist.level_rate(_world_basis(), up, heading)
 
 # Any touch of the planet is a crash, no bounce: the move is swept against
 # the planet's sphere (PLANET_CLEARANCE up) before it is made.
@@ -290,6 +334,7 @@ func land_at(where: Transform3D) -> void:
 	cruise_locked = false
 	is_landed = true
 	in_moon_frame = true
+	_level_heading = Vector3.ZERO
 
 func _crash_at(where: Vector3) -> void:
 	if is_inside_tree():

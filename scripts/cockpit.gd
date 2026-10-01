@@ -4,6 +4,7 @@ const CockpitHudFormat = preload("res://scripts/cockpit_hud_format.gd")
 const VelocityCrossScript = preload("res://scripts/velocity_cross.gd")
 const NavballScript = preload("res://scripts/navball.gd")
 const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
+const BeaconMarkerScript = preload("res://scripts/beacon_marker.gd")
 
 # The ship's own exterior markers (nav-light spheres) sit on this visual
 # layer; the pilot camera, inside the hull, skips them.
@@ -115,11 +116,20 @@ func update_moon(readout: Dictionary) -> void:
 	var status := lines.get_node("StatusLabel") as Label
 	status.label_settings.font_color = APPROACH_COLORS[0] if readout.status == "LANDED" else APPROACH_COLORS[2]
 
+# Base Selene's marker: the beacon at `target` (world), `distance` away.
+func update_beacon(target: Vector3, distance: float, shown: bool) -> void:
+	var marker := get_node("Hud/BeaconMarker")
+	if shown and has_node("PilotCamera") and is_inside_tree():
+		marker.update_target(get_node("PilotCamera") as Camera3D, target, distance, true)
+	else:
+		marker.update_target(null, target, distance, false)
+
 # Shown only while the thrust is scaled down near a dock.
 func set_thrust_scale(scale: float) -> void:
 	var label := get_node("Hud/Panel/Lines/ThrustLabel") as Label
 	label.visible = scale < 1.0
-	label.text = THRUST_TEXT % scale
+	# Two decimals under 0.1 (low over the moon it goes down to ~0.013).
+	label.text = (THRUST_TEXT % scale) if scale >= 0.1 else "THRUST  %.2fx" % scale
 
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
@@ -264,6 +274,10 @@ func _build_hud() -> void:
 	var markers: Control = FlightMarkersScript.new()
 	markers.name = "FlightMarkers"
 	hud.add_child(markers)
+	# Base Selene's marker, over the whole view too.
+	var beacon: Control = BeaconMarkerScript.new()
+	beacon.name = "BeaconMarker"
+	hud.add_child(beacon)
 
 	update_hud(0.0, {})
 

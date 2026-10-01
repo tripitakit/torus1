@@ -18,6 +18,7 @@ func _init():
 	failures += _test_approach_panel_top_right_hidden_until_fed()
 	failures += _test_approach_panel_writes_and_colours_the_readout()
 	failures += _test_moon_panel_shows_the_landing_readout()
+	failures += _test_beacon_marker_in_the_hud()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_bottom_right()
 	failures += _test_hud_hosts_the_flight_markers_full_screen()
@@ -261,6 +262,11 @@ func _test_thrust_line_shows_the_scale_near_a_dock() -> int:
 	if not label.visible or label.text != "THRUST  0.4x":
 		print("FAIL _test_thrust_line_shows_the_scale_near_a_dock: 0.4 gave visible %s, '%s'" % [label.visible, label.text])
 		result = 1
+	# Low over the moon the scale goes down to ~0.013: two decimals there.
+	cockpit.set_thrust_scale(0.0133)
+	if label.text != "THRUST  0.01x":
+		print("FAIL _test_thrust_line_shows_the_scale_near_a_dock: 0.0133 gave '%s'" % label.text)
+		result = 1
 	cockpit.set_thrust_scale(1.0)
 	if label.visible:
 		print("FAIL _test_thrust_line_shows_the_scale_near_a_dock: full thrust still shown")
@@ -346,6 +352,16 @@ func _test_moon_panel_shows_the_landing_readout() -> int:
 	cockpit.update_moon({})
 	if panel.visible:
 		print("FAIL _test_moon_panel_shows_the_landing_readout: an empty readout left it shown")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_beacon_marker_in_the_hud() -> int:
+	var cockpit := _make_cockpit()
+	var marker := cockpit.get_node_or_null("Hud/BeaconMarker") as Control
+	var result := 0
+	if marker == null or marker.visible:
+		print("FAIL _test_beacon_marker_in_the_hud: missing or shown from the start")
 		result = 1
 	cockpit.free()
 	return result

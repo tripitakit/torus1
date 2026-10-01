@@ -52,6 +52,8 @@ func _initialize():
 	_failures += await _test_guide_points_at_the_nearest_pad()
 	_failures += await _test_altitude_reads_zero_landed_away_from_the_pads()
 	_failures += await _test_tilted_landing_rests_its_lowest_corner_on_the_ground()
+	_failures += await _test_idle_ship_levels_itself_low_over_the_moon()
+	_failures += await _test_thrust_eases_off_near_the_ground()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -221,8 +223,10 @@ func _test_landed_ship_stays_put_for_many_ticks() -> int:
 	return 0
 
 func _test_up_thrust_takes_off() -> int:
+	# Near the ground the thrust is eased to about 2 m/s2 (landing_assist):
+	# a lift-off is gentle, several seconds to 10 m.
 	Input.action_press("move_up")
-	for tick in range(60):
+	for tick in range(300):
 		await physics_frame
 	Input.action_release("move_up")
 	await physics_frame
@@ -342,5 +346,47 @@ func _test_tilted_landing_rests_its_lowest_corner_on_the_ground() -> int:
 				lowest = minf(lowest, _moon.altitude(_ship.global_transform * Vector3(x, y, z)))
 	if not _ship.is_landed or lowest < -0.05 or lowest > 0.1:
 		print("FAIL _test_tilted_landing_rests_its_lowest_corner_on_the_ground: landed %s, lowest corner %.2f m up" % [_ship.is_landed, lowest])
+		return 1
+	return 0
+
+const LandingAssist = preload("res://scripts/landing_assist.gd")
+
+func _test_idle_ship_levels_itself_low_over_the_moon() -> int:
+	# 100 m up, pitched 20 and rolled 15 degrees, hovering (brake), hands
+	# off: within 3 s it is level, its nose's heading unchanged.
+	if _ship.is_crashed:
+		_ship.restart_after_crash()
+	_place(_above(Vector3(-0.5, 0.7, 0.4), 100.0 + VoidCruiserScript.HALF_HEIGHT))
+	await _attached()
+	var up: Vector3 = _moon.up_at(_ship.global_position)
+	var hull: Basis = _ship.global_transform.basis
+	hull = hull.rotated(hull.x.normalized(), deg_to_rad(20.0))
+	hull = hull.rotated(hull.z.normalized(), deg_to_rad(15.0))
+	_ship.global_transform.basis = hull
+	_ship.brake_engaged = true
+	var heading_before: Vector3 = _moon.global_transform.basis.inverse() * LandingAssist.heading_of(hull, up)
+	for tick in range(180):
+		await physics_frame
+	up = _moon.up_at(_ship.global_position)
+	var tilt: float = rad_to_deg(acos(clampf(_ship.global_transform.basis.y.normalized().dot(up), -1.0, 1.0)))
+	var heading_after: Vector3 = _moon.global_transform.basis.inverse() * LandingAssist.heading_of(_ship.global_transform.basis, up)
+	var turned: float = rad_to_deg(heading_before.angle_to(heading_after))
+	_ship.brake_engaged = false
+	if tilt > 2.0 or turned > 1.0:
+		print("FAIL _test_idle_ship_levels_itself_low_over_the_moon: %.2f degrees off level, nose turned %.2f degrees" % [tilt, turned])
+		return 1
+	return 0
+
+func _test_thrust_eases_off_near_the_ground() -> int:
+	# 50 m up: the thrust scale follows the altitude (2 m/s2 near the floor,
+	# 1x from 300 m).
+	_place(_above(Vector3(0.4, 0.6, 0.6), 50.0 + VoidCruiserScript.HALF_HEIGHT))
+	await _attached()
+	_ship.brake_engaged = true
+	await physics_frame
+	var expected := LandingAssist.thrust_factor(_ship.landing_altitude())
+	_ship.brake_engaged = false
+	if absf(_ship.thrust_scale - expected) > 0.01 or _ship.thrust_scale > 0.3:
+		print("FAIL _test_thrust_eases_off_near_the_ground: scale %.3f at %.1f m, expected %.3f" % [_ship.thrust_scale, _ship.landing_altitude(), expected])
 		return 1
 	return 0
