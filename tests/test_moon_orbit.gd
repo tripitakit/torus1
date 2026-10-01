@@ -14,6 +14,7 @@ func _init():
 	failures += _test_spin_about_the_planet()
 	failures += _test_velocity_between_frames()
 	failures += _test_gravity()
+	failures += _test_marker_range()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -71,5 +72,15 @@ func _test_gravity() -> int:
 	var half := MoonOrbit.gravity(Vector3(0.0, MoonOrbit.RADIUS * 0.5, 0.0))
 	if not _close(surface.length(), 0.976, 0.01) or surface.x >= 0.0 or not _close(half.length(), surface.length() * 0.5, 1e-6) or half.y >= 0.0:
 		print("FAIL _test_gravity: surface %s, half way %s" % [surface, half])
+		return 1
+	return 0
+
+func _test_marker_range() -> int:
+	# From Torus1 (about 13,000 km from the moon's centre) no marker; inside
+	# MARKER_RANGE it shows.
+	var far := MoonOrbit.marker_in_range(Vector3(1.3e7, 0.0, 0.0))
+	var near := MoonOrbit.marker_in_range(Vector3(0.0, 4.0e6, 0.0))
+	if far or not near or MoonOrbit.MARKER_RANGE != 5.0e6:
+		print("FAIL _test_marker_range: far %s, near %s" % [far, near])
 		return 1
 	return 0

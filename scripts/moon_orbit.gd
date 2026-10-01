@@ -19,6 +19,14 @@ const DETACH_ALTITUDE := 32000.0
 # and the moon nearly full, about 45 degrees left of the ship's nose, clear
 # of the planet's disc.
 const START_ANGLE := 5.0 * PI / 6.0
+# Base Selene's HUD marker shows only this close to the moon's centre: the
+# moon about 6 degrees wide, Torus1 (about 13,000 km off) well outside.
+const MARKER_RANGE := 5.0e6
+
+# Whether a ship at `offset_from_moon` (from the moon's centre) sees Base
+# Selene's HUD marker.
+static func marker_in_range(offset_from_moon: Vector3) -> bool:
+	return offset_from_moon.length() < MARKER_RANGE
 
 static func moon_rate(planet_gm: float) -> float:
 	return OrbitalFrame.orbit_angular_velocity(planet_gm, ORBIT_RADIUS)
