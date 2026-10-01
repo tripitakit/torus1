@@ -11,7 +11,7 @@ const MoonBase = preload("res://scripts/moon_base.gd")
 const PortalScript = preload("res://scripts/portal.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
 
-const COLOR_PATH := "res://assets/textures/moon/color.png"
+const COLOR_PATH := "res://assets/textures/moon/color.jpg"
 const NORMAL_PATH := "res://assets/textures/moon/normal.png"
 # The surface mesh is laid out in rings round the base: DENSE_STEP apart up
 # to DENSE_REACH from it, then each GROWTH times farther than the last, up
@@ -43,9 +43,10 @@ varying vec3 local_pos;
 void vertex() {
 	local_dir = normalize(VERTEX);
 	local_pos = VERTEX;
-	// East and north, for the crater normal map (x east, y north).
-	TANGENT = normalize(cross(NORMAL, vec3(0.0, 1.0, 0.0)));
-	BINORMAL = cross(TANGENT, NORMAL);
+	// East (+Z at longitude 0) and north, for the normal map (x east, y
+	// north).
+	TANGENT = normalize(cross(vec3(0.0, 1.0, 0.0), NORMAL));
+	BINORMAL = cross(NORMAL, TANGENT);
 }
 
 float hash(vec3 p) {
@@ -63,10 +64,11 @@ float value_noise(vec3 x) {
 }
 
 void fragment() {
-	// Equirectangular by direction. The longitude jumps where it wraps: take
-	// the gradients of whichever of u and u + 0.5 is continuous here, so no
-	// seam line shows.
-	float u = atan(local_dir.z, local_dir.x) / TAU + 0.5;
+	// NASA's maps, equirectangular: longitude atan2(z, -x) (0 toward the
+	// planet, east +Z) in the middle, north up. The longitude jumps where it
+	// wraps (the far side): take the gradients of whichever of u and u + 0.5
+	// is continuous here, so no seam line shows.
+	float u = atan(local_dir.z, -local_dir.x) / TAU + 0.5;
 	float v = acos(clamp(local_dir.y, -1.0, 1.0)) / PI;
 	float shifted = fract(u + 0.5);
 	vec2 dx = vec2(dFdx(u), dFdx(v));
@@ -78,7 +80,7 @@ void fragment() {
 		dy = dy2;
 	}
 	vec2 uv = vec2(u, v);
-	// Fine grain for close-up flying: the maps are ~770 m a pixel.
+	// Fine grain for close-up flying: the colour map is ~190 m a pixel.
 	float grain = value_noise(local_pos / 40.0) * 0.6 + value_noise(local_pos / 9.0) * 0.4;
 	ALBEDO = textureGrad(surface_color, uv, dx, dy).rgb * (0.9 + 0.2 * grain);
 	NORMAL_MAP = textureGrad(surface_normal, uv, dx, dy).rgb;
