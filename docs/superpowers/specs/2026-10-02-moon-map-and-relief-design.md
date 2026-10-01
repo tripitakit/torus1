@@ -81,3 +81,25 @@ luna. Somma di:
 - Fisica: posa lontano dalla base all'altezza vera; schianto veloce sul fianco di un cratere; posa sulle
   piazzole ancora valida; i test di allunaggio esistenti verdi.
 - GPU: luna da 5.000 km, da 20 km (uscita dal portale), da 300 m sui crateri. Il gioco non si avvia.
+
+## Cambiato durante l'esecuzione
+
+- Mappe: il colore è JPG (7,6 MB) e le texture sono compresse per la scheda video (S3TC); senza compressione
+  la mappa 8k avrebbe occupato circa 180 MB di memoria video.
+- `MoonOrbit.START_ANGLE` a 130°: con la base in Platone il sole sulla base all'avvio scendeva a 0,27.
+- Posizione della base e conversione latitudine/longitudine in `moon_orbit.gd` (pure), per non far dipendere
+  `moon_terrain.gd` da `moon.gd`.
+- Crateri piccoli: un mescolamento a 64 bit per cella dà i numeri casuali (16 bit ciascuno), le celle
+  guardate dipendono da quanto il cratere arriva lontano: da 223 µs a 51 µs per campione.
+- Contatto col suolo: la nave controlla gli 8 angoli dello scafo sotto i 60 m. Conta se scende sotto terra o
+  se affonda (l'auto-livello può tenere fermo l'angolo più basso mentre scende).
+- La mesh della luna intera è in `moon_mesh.gd`, con `mesh_radius(direzione)`: l'anello esterno della toppa
+  sfuma fino a coincidere con quella superficie (senza questo, lontano dalla base dove i triangoli sono di
+  chilometri, restava un gradino lungo il bordo).
+- Il buco nella luna intera è tagliato con la stessa proiezione della toppa, 1 m dentro il suo bordo.
+- Ogni anello della toppa attenua verso il proprio bordo le classi di crateri che l'anello successivo non ha;
+  senza, l'anello interno si vedeva come un quadrato di crateri. I crateri da 20 a 50 m si vedono quindi pieni
+  solo nei 128 m attorno alla nave (dove la nave tocca: la collisione li usa sempre tutti).
+- Test di allunaggio: la nave si mette all'altezza voluta misurata dall'angolo più basso, e nei test inclinati
+  il "pilota" tiene l'inclinazione (l'auto-livello la raddrizzerebbe).
+- Prova GPU: 57–60 FPS sulla luna lontano dalla base, 38 FPS sopra la base a 600 m.
