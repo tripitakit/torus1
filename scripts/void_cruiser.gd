@@ -148,7 +148,7 @@ func _process(delta: float) -> void:
 		if moon != null and is_inside_tree():
 			var beacon: Vector3 = moon.beacon_position()
 			var distance := global_position.distance_to(beacon)
-			var shown := distance > BEACON_HIDE_DISTANCE and not is_landed and MoonOrbit.marker_in_range(global_position - moon.centre())
+			var shown := distance > BEACON_HIDE_DISTANCE and not is_landed and not in_transit and MoonOrbit.marker_in_range(global_position - moon.centre())
 			cockpit.update_beacon(beacon, distance, shown)
 		else:
 			cockpit.update_beacon(Vector3.ZERO, 0.0, false)

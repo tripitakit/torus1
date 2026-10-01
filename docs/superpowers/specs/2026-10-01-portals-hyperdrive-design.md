@@ -98,3 +98,13 @@ La nave all'uscita si allontana dal lato attivo, quindi non rientra se non torna
   schianto; da dietro nessun salto.
 - `test_cockpit`: pannello GATE e marcatore GATE presenti e nascosti all'avvio; tunnel spento all'avvio.
 - Prova sulla GPU con screenshot (portale da vicino e da lontano, tunnel). Il gioco non si avvia.
+
+## Cambiato durante l'esecuzione
+
+- Il tunnel è figlio della nave (all'altezza dell'occhio del pilota), non del cockpit: il cockpit per regola
+  non ha geometria 3D. I lampi sono un CanvasLayer dentro il tunnel.
+- All'uscita la nave appare `EXIT_CLEARANCE` = 20 m oltre l'apertura, così tutto lo scafo è già fuori.
+- Le 16 lampade stanno fra i blocchi, sul lato attivo, rivolte verso l'esterno di quel lato: da dietro non
+  si vedono, quindi indicano da che parte si entra.
+- Durante il transito il marcatore SELENE è nascosto, come quello GATE.
+- Prova sulla GPU: portale ben leggibile da 3 km; da 120 km (la partenza) si vede solo il marcatore GATE.
