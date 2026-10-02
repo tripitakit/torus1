@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bl8gmvikgnhe2"
-path.s3tc="res://.godot/imported/color.png-17429d6402a4f0e35c8eb346bf49f45e.s3tc.ctex"
+uid="uid://b0xkllo34vys1"
+path.s3tc="res://.godot/imported/lights.jpg-111b926438e14252ad873fb6ceef3593.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://assets/textures/planet/color.png"
-dest_files=["res://.godot/imported/color.png-17429d6402a4f0e35c8eb346bf49f45e.s3tc.ctex"]
+source_file="res://assets/textures/planet/lights.jpg"
+dest_files=["res://.godot/imported/lights.jpg-111b926438e14252ad873fb6ceef3593.s3tc.ctex"]
 
 [params]
 

@@ -9,6 +9,8 @@ func _init():
 	failures += _test_build_planet_sets_surface_material()
 	failures += _test_planet_has_clouds_and_atmosphere()
 	failures += _test_surface_mesh_is_fine_enough_to_land_on()
+	failures += _test_europe_and_africa_face_the_start()
+	failures += _test_city_lights_follow_the_sun()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -36,8 +38,9 @@ func _test_build_planet_sets_sphere_mesh() -> int:
 	return result
 
 func _test_build_planet_sets_surface_material() -> int:
-	# One surface shader: the Earth-like maps with the cloud layer on top
-	# (a separate cloud sphere z-fought the surface in the renders).
+	# One surface shader: NASA's Earth maps (tools/earth_maps.py) with the
+	# cloud layer and the city lights (a separate cloud sphere z-fought the
+	# surface in the renders).
 	var planet: MeshInstance3D = PlanetScript.new()
 	planet.planet_radius = 500.0
 	planet.build_planet()
@@ -49,7 +52,8 @@ func _test_build_planet_sets_surface_material() -> int:
 		return 1
 	var color: Texture2D = mat.get_shader_parameter("surface_color")
 	var clouds: Texture2D = mat.get_shader_parameter("clouds")
-	if color == null or not color.resource_path.ends_with("planet/color.png") or clouds == null or not clouds.resource_path.ends_with("clouds/clouds.png") or mat.get_shader_parameter("surface_normal") == null or mat.get_shader_parameter("surface_roughness") == null:
+	var lights: Texture2D = mat.get_shader_parameter("city_lights")
+	if color == null or not color.resource_path.ends_with("planet/color.jpg") or clouds == null or not clouds.resource_path.ends_with("clouds/clouds.jpg") or lights == null or not lights.resource_path.ends_with("planet/lights.jpg") or mat.get_shader_parameter("surface_normal") == null or mat.get_shader_parameter("surface_roughness") == null or mat.get_shader_parameter("longitude_offset") != PlanetScript.LONGITUDE_OFFSET:
 		print("FAIL _test_build_planet_sets_surface_material: the surface shader lacks its maps")
 		result = 1
 	planet.free()
@@ -111,6 +115,36 @@ func _test_surface_mesh_is_fine_enough_to_land_on() -> int:
 	var result := 0
 	if sag > 50.0:
 		print("FAIL _test_surface_mesh_is_fine_enough_to_land_on: faces sag up to %.0f m (%d segments, %d rings)" % [sag, sphere.radial_segments, sphere.rings])
+		result = 1
+	planet.free()
+	return result
+
+func _test_europe_and_africa_face_the_start() -> int:
+	# The ring's start lies along the planet's +Z, on the sunlit side: the
+	# maps turn so 15 E (Europe and Africa) faces it, east to its right
+	# (+X seen from +Z), north up.
+	var start := PlanetScript.longitude_at(Vector3(0.0, 0.0, 1.0))
+	var right := PlanetScript.longitude_at(Vector3(1.0, 0.0, 0.0))
+	if absf(start - 15.0) > 0.5 or absf(right - 105.0) > 0.5:
+		print("FAIL _test_europe_and_africa_face_the_start: +Z at %.1f, +X at %.1f degrees" % [start, right])
+		return 1
+	return 0
+
+func _test_city_lights_follow_the_sun() -> int:
+	# The lights glow on the night side only: the surface shader gets the
+	# sun's direction (as the atmosphere does) and lights by it.
+	var planet: MeshInstance3D = PlanetScript.new()
+	planet.planet_radius = 1000.0
+	planet.build_planet()
+	var surface := planet.material_override as ShaderMaterial
+	var result := 0
+	planet.set_sun_direction(Vector3(1.0, 0.0, 0.0))
+	var air := planet.get_node("Atmosphere").material_override as ShaderMaterial
+	if not surface.shader.code.contains("EMISSION") or surface.get_shader_parameter("sun_direction") != Vector3(1.0, 0.0, 0.0) or air.get_shader_parameter("sun_direction") != Vector3(1.0, 0.0, 0.0):
+		print("FAIL _test_city_lights_follow_the_sun: the surface does not glow by the sun's direction")
+		result = 1
+	if PlanetScript.night_share(0.5) > 0.0 or PlanetScript.night_share(-0.5) < 1.0 or PlanetScript.night_share(0.0) <= 0.0 or PlanetScript.night_share(0.0) >= 1.0:
+		print("FAIL _test_city_lights_follow_the_sun: night share day %.2f, night %.2f, terminator %.2f" % [PlanetScript.night_share(0.5), PlanetScript.night_share(-0.5), PlanetScript.night_share(0.0)])
 		result = 1
 	planet.free()
 	return result

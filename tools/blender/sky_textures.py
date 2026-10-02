@@ -1,5 +1,5 @@
 # The star dome (run inside Blender): an equirectangular map for the sky
-# shader, laid out like the planet's (tools/blender/planet_textures.py): a
+# shader, laid out like Godot's SphereMesh UVs (the planet's maps too): a
 # pixel (u, v) is the direction (sin 2 pi u sin pi v, cos pi v,
 # cos 2 pi u sin pi v), v = 0 straight up (+Y).
 #

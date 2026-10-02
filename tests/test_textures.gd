@@ -65,31 +65,56 @@ func _test_repeating_panel_sets_have_no_seams() -> int:
 			result = 1
 	return result
 
+# Pixel of (latitude, longitude) degrees on an equirectangular map with
+# longitude -180 at its left edge.
+func _at(image: Image, latitude: float, longitude: float) -> Color:
+	var x := int((longitude + 180.0) / 360.0 * image.get_width()) % image.get_width()
+	var y := clampi(int((90.0 - latitude) / 180.0 * image.get_height()), 0, image.get_height() - 1)
+	return image.get_pixelv(Vector2i(x, y))
+
 func _test_planet_maps() -> int:
-	# Surface maps and the cloud layer, 4096 x 2048 equirectangular; the
-	# clouds white with the cover as alpha, both clear and overcast skies
-	# along 20 degrees north (where the hurricane sits).
+	# NASA's Earth (tools/earth_maps.py): colour, city lights and clouds at
+	# 8192 x 4096, relief and roughness at 4096 x 2048. Oceans darker and
+	# glossier than land, Paris lit at night and the open Pacific not, the
+	# clouds a grey cover map with both clear and overcast skies.
 	var result := 0
-	for path in ["res://assets/textures/planet/color.png", "res://assets/textures/planet/roughness.png", "res://assets/textures/planet/normal.png", "res://assets/textures/clouds/clouds.png"]:
+	var sizes := {
+		"res://assets/textures/planet/color.jpg": Vector2i(8192, 4096),
+		"res://assets/textures/planet/lights.jpg": Vector2i(8192, 4096),
+		"res://assets/textures/clouds/clouds.jpg": Vector2i(8192, 4096),
+		"res://assets/textures/planet/roughness.png": Vector2i(4096, 2048),
+		"res://assets/textures/planet/normal.png": Vector2i(4096, 2048),
+	}
+	for path in sizes:
 		var image := _image(path)
-		if image == null or image.get_size() != Vector2i(4096, 2048):
-			print("FAIL _test_planet_maps: %s missing or not 4096x2048" % path)
-			result = 1
-	var clouds := _image("res://assets/textures/clouds/clouds.png")
-	if clouds == null:
-		return 1
-	if clouds.detect_alpha() == Image.ALPHA_NONE:
-		print("FAIL _test_planet_maps: the clouds have no alpha")
-		return 1
-	var row := int(clouds.get_height() * (90.0 - 20.0) / 180.0)
+		if image == null or image.get_size() != sizes[path]:
+			print("FAIL _test_planet_maps: %s missing or not %s" % [path, sizes[path]])
+			return 1
+	var colour := _image("res://assets/textures/planet/color.jpg")
+	var rough := _image("res://assets/textures/planet/roughness.png")
+	var lights := _image("res://assets/textures/planet/lights.jpg")
+	var pacific := Vector2(0.0, -150.0)
+	var sahara := Vector2(23.0, 13.0)
+	var paris := Vector2(48.86, 2.35)
+	if _at(colour, pacific.x, pacific.y).get_luminance() > _at(colour, sahara.x, sahara.y).get_luminance() - 0.2:
+		print("FAIL _test_planet_maps: the Pacific not darker than the Sahara")
+		result = 1
+	if _at(rough, pacific.x, pacific.y).r > _at(rough, sahara.x, sahara.y).r - 0.3:
+		print("FAIL _test_planet_maps: the Pacific not glossier than the Sahara")
+		result = 1
+	if _at(lights, paris.x, paris.y).get_luminance() < 0.3 or _at(lights, pacific.x, pacific.y).get_luminance() > 0.05:
+		print("FAIL _test_planet_maps: Paris %.2f, Pacific %.2f at night" % [_at(lights, paris.x, paris.y).get_luminance(), _at(lights, pacific.x, pacific.y).get_luminance()])
+		result = 1
+	var clouds := _image("res://assets/textures/clouds/clouds.jpg")
 	var clear := false
 	var cloudy := false
-	for x in range(0, clouds.get_width(), 8):
-		var a := clouds.get_pixel(x, row).a
-		clear = clear or a < 0.1
-		cloudy = cloudy or a > 0.9
+	for y in range(0, clouds.get_height(), 64):
+		for x in range(0, clouds.get_width(), 64):
+			var cover := clouds.get_pixel(x, y).r
+			clear = clear or cover < 0.1
+			cloudy = cloudy or cover > 0.9
 	if not clear or not cloudy:
-		print("FAIL _test_planet_maps: along 20 N clear %s, overcast %s" % [clear, cloudy])
+		print("FAIL _test_planet_maps: clear skies %s, overcast %s" % [clear, cloudy])
 		result = 1
 	return result
 
@@ -104,9 +129,11 @@ func _test_imported_compressed_with_mipmaps() -> int:
 	for folder in ["bridge", "interior_tube", "interior_cap"]:
 		for channel in ["color", "roughness", "normal", "emission"]:
 			paths.append("res://assets/textures/%s/%s.png" % [folder, channel])
-	for channel in ["color", "roughness", "normal"]:
+	paths.append("res://assets/textures/planet/color.jpg")
+	paths.append("res://assets/textures/planet/lights.jpg")
+	for channel in ["roughness", "normal"]:
 		paths.append("res://assets/textures/planet/%s.png" % channel)
-	paths.append("res://assets/textures/clouds/clouds.png")
+	paths.append("res://assets/textures/clouds/clouds.jpg")
 	paths.append("res://assets/textures/sky/stars.png")
 	paths.append("res://assets/textures/labels/atlas.png")
 	for path in paths:
