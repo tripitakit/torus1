@@ -14,6 +14,7 @@ func _init():
 	failures += _test_behind_goes_to_the_opposite_edge()
 	failures += _test_marker_node()
 	failures += _test_tiny_screen()
+	failures += _test_labels_kept_apart_on_leader_lines()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -67,4 +68,25 @@ func _test_tiny_screen() -> int:
 	if place.point.x < 0.0 or place.point.x > tiny.x or place.point.y < 0.0 or place.point.y > tiny.y:
 		print("FAIL _test_tiny_screen: %s on a 50 px screen" % place.point)
 		return 1
+	return 0
+
+func _test_labels_kept_apart_on_leader_lines() -> int:
+	# Several markers on one spot (the gate and the flight computer's point
+	# 500 m in front of it, seen from afar): each label sits out at its own
+	# corner at the end of a diagonal line from the diamond, so they never
+	# cover each other or the diamond.
+	var point := Vector2(800.0, 450.0)
+	var size := Vector2(170.0, 22.0)
+	var rects := []
+	for offset in [BeaconMarker.LABEL_UP_LEFT, BeaconMarker.LABEL_DOWN_RIGHT, BeaconMarker.LABEL_UP_RIGHT]:
+		var rect := BeaconMarker.label_rect(point, offset, size)
+		var line := BeaconMarker.leader_line(point, offset)
+		if rect.has_point(point) or line[0].distance_to(point) > BeaconMarker.DIAMOND + 1.0 or absf(absf((line[1] - line[0]).angle()) - PI * 0.5) < 0.3 or absf((line[1] - line[0]).angle()) < 0.3 or absf(absf((line[1] - line[0]).angle()) - PI) < 0.3:
+			print("FAIL _test_labels_kept_apart_on_leader_lines: %s: label %s, line %s" % [offset, rect, line])
+			return 1
+		for other in rects:
+			if rect.intersects(other):
+				print("FAIL _test_labels_kept_apart_on_leader_lines: %s overlaps %s" % [rect, other])
+				return 1
+		rects.append(rect)
 	return 0

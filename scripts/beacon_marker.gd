@@ -14,10 +14,18 @@ const OUTLINE_WIDTH := 4.0
 const FONT_SIZE := 18
 # Off-screen the arrow waits this far inside the edge (px).
 const EDGE_MARGIN := 40.0
+# On screen the label sits at the end of a diagonal line from the diamond,
+# out at a corner of its own, so markers on one spot (a gate and the flight
+# computer's point in front of it, seen from afar) keep their labels apart.
+const LABEL_UP_LEFT := Vector2(-70.0, -45.0)
+const LABEL_UP_RIGHT := Vector2(70.0, -45.0)
+const LABEL_DOWN_RIGHT := Vector2(70.0, 45.0)
+const LABEL_GAP := 4.0
 
 # The marker's colour and the name written before the distance.
 var color := COLOR
 var prefix := "SELENE"
+var label_offset := LABEL_UP_RIGHT
 var _place := {}
 var _text := ""
 
@@ -57,6 +65,17 @@ func update_target(camera: Camera3D, target: Vector3, distance: float, shown: bo
 	_text = "%s  %s" % [prefix, _distance(distance)]
 	queue_redraw()
 
+# The diagonal from the diamond's edge out to where the label hangs.
+static func leader_line(point: Vector2, offset: Vector2) -> Array:
+	return [point + offset.normalized() * DIAMOND, point + offset]
+
+# The label's box at the end of the line: beside it, on the line's side,
+# centred on its height.
+static func label_rect(point: Vector2, offset: Vector2, size: Vector2) -> Rect2:
+	var end := point + offset
+	var left := end.x + LABEL_GAP if offset.x >= 0.0 else end.x - LABEL_GAP - size.x
+	return Rect2(Vector2(left, end.y - size.y * 0.5), size)
+
 static func _distance(metres: float) -> String:
 	if metres >= 100000.0:
 		return "%d km" % roundi(metres / 1000.0)
@@ -78,8 +97,14 @@ func _draw() -> void:
 	draw_polyline(outline, OUTLINE_COLOR, OUTLINE_WIDTH)
 	draw_polyline(outline, color, LINE_WIDTH)
 	var font := get_theme_default_font()
-	var at := point + Vector2(DIAMOND + 6.0, FONT_SIZE * 0.35)
-	if not _place.on_screen:
+	var at: Vector2
+	if _place.on_screen:
+		var line := leader_line(point, label_offset)
+		draw_line(line[0], line[1], OUTLINE_COLOR, OUTLINE_WIDTH)
+		draw_line(line[0], line[1], color, LINE_WIDTH)
+		var rect := label_rect(point, label_offset, font.get_string_size(_text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE))
+		at = Vector2(rect.position.x, rect.position.y + rect.size.y * 0.5 + FONT_SIZE * 0.35)
+	else:
 		# Keep the label inside the screen, on the side away from the edge.
 		at = point - Vector2.from_angle(_place.angle) * (ARROW + 90.0) + Vector2(-60.0, FONT_SIZE * 0.35)
 	draw_string_outline(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, OUTLINE_COLOR)

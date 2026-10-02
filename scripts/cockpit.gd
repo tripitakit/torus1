@@ -401,12 +401,14 @@ func _build_hud() -> void:
 	nav_marker.name = "NavMarker"
 	nav_marker.color = NAV_MARKER_COLOR
 	nav_marker.prefix = "NAV"
+	nav_marker.label_offset = BeaconMarkerScript.LABEL_DOWN_RIGHT
 	hud.add_child(nav_marker)
 	# And the nearest portal's.
 	var gate_marker: Control = BeaconMarkerScript.new()
 	gate_marker.name = "GateMarker"
 	gate_marker.color = GATE_MARKER_COLOR
 	gate_marker.prefix = "GATE"
+	gate_marker.label_offset = BeaconMarkerScript.LABEL_UP_LEFT
 	hud.add_child(gate_marker)
 
 	update_hud(0.0, {})
