@@ -32,19 +32,34 @@ uniform sampler2D surface_normal : hint_normal, filter_linear_mipmap, repeat_ena
 uniform vec3 offset = vec3(0.0);
 uniform float normal_depth = 1.0;
 // The whole moon leaves a hole where the patch is: the square of points
-// whose direction falls within `hole_half` metres each way along hole_x and
-// hole_z of the plane touching the sphere (radius `hole_radius`) at
-// hole_up, as the patch lays its points out (0: no hole).
+// whose direction falls on the plane touching the sphere (radius
+// `hole_radius`) at hole_up within `hole_half` metres each way of
+// hole_centre along hole_x and hole_z, as the patch lays its points out
+// (the cube face's plane; 0: no hole).
 uniform vec3 hole_up = vec3(0.0, 1.0, 0.0);
 uniform float hole_radius = 250000.0;
 uniform vec3 hole_x = vec3(1.0, 0.0, 0.0);
 uniform vec3 hole_z = vec3(0.0, 0.0, 1.0);
+uniform vec2 hole_centre = vec2(0.0);
 uniform float hole_half = 0.0;
+// The patch's rings (moon_patch.gd): each vertex moves toward the next
+// surface (CUSTOM0.xyz; CUSTOM1 its normal) with its distance from the
+// camera, between MORPH_START and MORPH_END of the ring's half width
+// (CUSTOM0.w).
+uniform bool morph = false;
+uniform float morph_start = 0.55;
+uniform float morph_end = 0.85;
 
 varying vec3 local_dir;
 varying vec3 local_pos;
 
 void vertex() {
+	if (morph) {
+		vec3 camera = transpose(mat3(MODEL_MATRIX)) * (CAMERA_POSITION_WORLD - MODEL_MATRIX[3].xyz);
+		float t = smoothstep(CUSTOM0.w * morph_start, CUSTOM0.w * morph_end, length(VERTEX - camera));
+		VERTEX += CUSTOM0.xyz * t;
+		NORMAL = normalize(mix(NORMAL, CUSTOM1.xyz, t));
+	}
 	local_pos = VERTEX + offset;
 	local_dir = normalize(local_pos);
 	// East (+Z at longitude 0) and north, for the normal map (x east, y
@@ -86,7 +101,7 @@ void fragment() {
 	if (hole_half > 0.0) {
 		float facing = dot(local_dir, hole_up);
 		if (facing > 0.99) {
-			vec2 on_plane = vec2(dot(local_dir, hole_x), dot(local_dir, hole_z)) * hole_radius / facing;
+			vec2 on_plane = vec2(dot(local_dir, hole_x), dot(local_dir, hole_z)) * hole_radius / facing - hole_centre;
 			if (abs(on_plane.x) < hole_half && abs(on_plane.y) < hole_half) {
 				discard;
 			}
@@ -238,6 +253,9 @@ func build() -> void:
 	patch.name = "Patch"
 	var patch_material := material.duplicate() as ShaderMaterial
 	patch_material.set_shader_parameter("normal_depth", 0.0)
+	patch_material.set_shader_parameter("morph", true)
+	patch_material.set_shader_parameter("morph_start", MoonPatch.MORPH_START)
+	patch_material.set_shader_parameter("morph_end", MoonPatch.MORPH_END)
 	patch.set_material(patch_material)
 	patch.visible = false
 	patch.rebuilt.connect(_on_patch_rebuilt.bind(patch, material, patch_material))
@@ -267,26 +285,27 @@ func build() -> void:
 
 # The ship at `point` (world): the fine ground under it while `active` (in
 # the moon's frame), none otherwise.
-func follow_patch(point: Vector3, active: bool) -> void:
+func follow_patch(point: Vector3, active: bool, velocity := Vector3.ZERO) -> void:
 	var patch := get_node_or_null("Patch")
 	if patch == null:
 		return
 	if active:
-		patch.follow(global_transform.affine_inverse() * point)
+		patch.follow(global_transform.affine_inverse() * point, global_transform.basis.inverse() * velocity)
 	elif patch.visible or patch.built:
 		patch.stop()
 		((get_node("Surface") as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("hole_half", 0.0)
 
 # New rings in place: the whole moon's hole and the patch's offset follow.
 func _on_patch_rebuilt(patch: Node3D, material: ShaderMaterial, patch_material: ShaderMaterial) -> void:
-	var frame: Transform3D = MoonPatch.tangent_frame(patch.centre)
-	patch_material.set_shader_parameter("offset", frame.origin)
-	material.set_shader_parameter("hole_up", frame.basis.y)
+	var axes: Dictionary = MoonPatch.face_axes(patch.face)
+	patch_material.set_shader_parameter("offset", patch.origin())
+	material.set_shader_parameter("hole_up", axes.axis)
 	material.set_shader_parameter("hole_radius", MoonOrbit.RADIUS)
-	material.set_shader_parameter("hole_x", frame.basis.x)
-	material.set_shader_parameter("hole_z", frame.basis.z)
+	material.set_shader_parameter("hole_x", axes.e1)
+	material.set_shader_parameter("hole_z", axes.e2)
+	material.set_shader_parameter("hole_centre", patch.hole_centre)
 	# A metre short of the patch's edge: the two overlap rather than gap.
-	material.set_shader_parameter("hole_half", MoonPatch.SPACINGS[-1] * MoonPatch.CELLS * 0.5 - 1.0)
+	material.set_shader_parameter("hole_half", patch.hole_half - 1.0)
 
 # Base Selene's beacon, over the tower (world).
 func beacon_position() -> Vector3:
