@@ -13,6 +13,8 @@ const LandingAssist = preload("res://scripts/landing_assist.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
 const SubspaceTunnel = preload("res://scripts/subspace_tunnel.gd")
 const SpeedLimit = preload("res://scripts/speed_limit.gd")
+const FlightComputer = preload("res://scripts/flight_computer.gd")
+const NavTargets = preload("res://scripts/nav_targets.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -108,6 +110,10 @@ var in_transit := false
 var speed_limit := SpeedLimit.OPEN_LIMIT
 var limit_braking := false
 var _speed_before := 0.0
+# The flight computer: the target T picked ("" for none) and the arrival
+# under way or done (FlightComputer.Auto), G to start it.
+var nav_target := ""
+var autopilot: int = FlightComputer.Auto.OFF
 var _transit_left := 0.0
 var _transit_to: Node3D
 # The ship (at the crossing point) and its velocity, and the entry portal,
@@ -207,16 +213,30 @@ func _unhandled_input(event: InputEvent) -> void:
 	super(event)
 	if event.is_echo():
 		return
-	if event.is_action_pressed("cruise"):
+	if event.is_action_pressed("nav_target"):
+		nav_target = FlightComputer.next_target(nav_target)
+		autopilot = FlightComputer.Auto.OFF
+	elif event.is_action_pressed("autopilot"):
+		# On toward the current leg's point, or off again.
+		if autopilot == FlightComputer.Auto.ARRIVING or nav_target == "" or nav_point().is_empty():
+			autopilot = FlightComputer.Auto.OFF
+		else:
+			autopilot = FlightComputer.Auto.ARRIVING
+			brake_engaged = false
+			cruise_locked = false
+	elif event.is_action_pressed("cruise"):
 		cruise_locked = not cruise_locked
 		brake_engaged = false
+		autopilot = FlightComputer.Auto.OFF
 	elif event.is_action_pressed("brake"):
 		brake_engaged = not brake_engaged
 		cruise_locked = false
+		autopilot = FlightComputer.Auto.OFF
 	else:
 		for action in BRAKE_RELEASE_ACTIONS:
 			if event.is_action_pressed(action):
 				brake_engaged = false
+				autopilot = FlightComputer.Auto.OFF
 				if action in CRUISE_RELEASE_ACTIONS:
 					cruise_locked = false
 
@@ -271,8 +291,50 @@ func _fly(delta: float) -> void:
 	var torque := _read_torque_input(delta) * LandingAssist.torque_factor(altitude)
 	_level_near_the_moon(altitude, torque)
 	speed_limit = current_speed_limit()
+	if autopilot == FlightComputer.Auto.ARRIVING:
+		thrust_input = _arrival_thrust()
 	_speed_before = velocity.length()
 	_apply_physics_step(delta, thrust_input, torque)
+
+# The current leg's arrival point (NavTargets), or empty.
+func nav_point() -> Dictionary:
+	if nav_target == "" or not is_inside_tree():
+		return {}
+	return NavTargets.point(FlightComputer.leg(nav_target, NavTargets.near_moon(self)), self)
+
+# The braking acceleration here (the brake's: 10x the base thrust, eased off
+# near a dock or the moon's ground).
+func brake_acceleration() -> float:
+	return thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale
+
+# The thrust (ship axes, in units of thrust_power) the flight computer gives
+# toward the leg's point, the outside pulls cancelled; at the point it stops
+# there, brake on.
+func _arrival_thrust() -> Vector3:
+	var target := nav_point()
+	if target.is_empty():
+		autopilot = FlightComputer.Auto.OFF
+		return Vector3.ZERO
+	var offset: Vector3 = target.point - _world_position()
+	if FlightComputer.arrived(offset, velocity - target.velocity):
+		autopilot = FlightComputer.Auto.ARRIVED
+		brake_engaged = true
+		return Vector3.ZERO
+	var accel := FlightComputer.command(offset, velocity, target.velocity, speed_limit, brake_acceleration())
+	return _world_basis().inverse() * (accel - _external_acceleration()) / thrust_power
+
+# The NAV panel's readout for the picked target: {lines, point}; empty with
+# none.
+func nav_readout() -> Dictionary:
+	var target := nav_point()
+	if target.is_empty():
+		return {}
+	var offset: Vector3 = target.point - _world_position()
+	var distance := offset.length()
+	var closing: float = 0.0 if distance == 0.0 else (velocity - target.velocity).dot(offset / distance)
+	var leg_name: String = target.name
+	var r := FlightComputer.readout(distance, closing, brake_acceleration())
+	return {"lines": FlightComputer.lines(nav_target, leg_name, r, autopilot), "point": target.point, "distance": distance, "leg": leg_name}
 
 # The limit for where the ship is: near Torus1 or a gate, in the moon's
 # frame, or in open space (SpeedLimit).
