@@ -49,3 +49,15 @@ sotto 0,5 m/s rispetto al punto): si spegne, inserisce il freno, mostra ARRIVED.
 - `test_nav_physics` (scena vera): T scorre i bersagli; G dalla partenza porta al punto del GATE TERRA,
   fermo entro 5 m; un tasto di movimento spegne l'arrivo automatico.
 - `test_cockpit`: pannello NAV e marcatore.
+
+## Cambiato durante l'esecuzione
+
+- Etichette dei marcatori (richiesta dell'utente durante il lavoro): da lontano GATE e NAV indicavano quasi lo
+  stesso punto e le scritte si coprivano. Ogni marcatore ora scrive la sua etichetta in un angolo suo, in
+  fondo a una linea diagonale dal rombo: GATE in alto a sinistra, NAV in basso a destra, SELENE in alto a
+  destra (`BeaconMarker.label_offset`, `leader_line`, `label_rect`).
+- Il marcatore NAV porta il nome della tappa (es. `GATE TERRA 120 km`).
+- Prova GPU: dalla partenza, G con bersaglio GATE TERRA arriva al punto in circa 105 s (500 m/s vicino
+  all'anello e al gate, 3 km/s in mezzo), fermo a 0,6 m. In un primo volo l'arrivo automatico si era spento a
+  500 m dal punto: nessun tasto risultava premuto dallo script, quindi con ogni probabilità un input vero
+  arrivato alla finestra di prova (che lo spegne, come voluto); non si è ripetuto.
