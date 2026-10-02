@@ -14,6 +14,7 @@ func _init():
 	failures += _test_dock_prompt_hidden_until_docking_is_possible()
 	failures += _test_cruise_line_shown_only_while_cruising()
 	failures += _test_brake_line_shown_only_while_braking()
+	failures += _test_limit_line_shows_the_speed_limit()
 	failures += _test_thrust_line_shows_the_scale_near_a_dock()
 	failures += _test_approach_panel_top_right_hidden_until_fed()
 	failures += _test_approach_panel_writes_and_colours_the_readout()
@@ -108,7 +109,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "CruiseLabel", "BrakeLabel", "ThrustLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
+	var expected := ["SpeedLabel", "LimitLabel", "CruiseLabel", "BrakeLabel", "ThrustLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
@@ -393,6 +394,24 @@ func _test_gate_panel_and_marker() -> int:
 	cockpit.update_gate({})
 	if panel.visible:
 		print("FAIL _test_gate_panel_and_marker: an empty readout left it shown")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_limit_line_shows_the_speed_limit() -> int:
+	# Under the speed line: the zone's limit, orange while the flight
+	# computer brakes the ship down to it.
+	var cockpit := _make_cockpit()
+	var label := cockpit.get_node("Hud/Panel/Lines/LimitLabel") as Label
+	var result := 0
+	cockpit.set_speed_limit(500.0, false)
+	var calm := label.label_settings.font_color
+	if label.text != "LIMIT  500 m/s" or not label.visible:
+		print("FAIL _test_limit_line_shows_the_speed_limit: '%s'" % label.text)
+		result = 1
+	cockpit.set_speed_limit(3000.0, true)
+	if label.text != "LIMIT  3000 m/s" or label.label_settings.font_color == calm:
+		print("FAIL _test_limit_line_shows_the_speed_limit: braking not shown ('%s')" % label.text)
 		result = 1
 	cockpit.free()
 	return result

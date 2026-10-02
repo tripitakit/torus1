@@ -1,5 +1,6 @@
 extends SceneTree
 
+const SpeedLimit = preload("res://scripts/speed_limit.gd")
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 const VoidCruiserPhysics = preload("res://scripts/void_cruiser_physics.gd")
 const FlyingCraftScript = preload("res://scripts/flying_craft.gd")
@@ -23,7 +24,7 @@ func _init():
 	failures += _test_roll_mouse_and_up_down_leave_cruise_on()
 	failures += _test_process_shows_cruise_on_hud()
 	failures += _test_speed_does_not_fade_but_spin_does()
-	failures += _test_ramp_without_drag_reaches_about_45_km_s_in_10_s()
+	failures += _test_ramp_without_drag_stops_at_the_speed_limit()
 	failures += _test_cruise_holds_instead_of_pushing()
 	failures += _test_one_flight_mode_and_no_orbit_line()
 	failures += _test_circular_orbit_holds()
@@ -649,18 +650,22 @@ func _test_speed_does_not_fade_but_spin_does() -> int:
 	cruiser.free()
 	return result
 
-func _test_ramp_without_drag_reaches_about_45_km_s_in_10_s() -> int:
-	# 150 m/s^2 ramped 1x -> 10x -> 100x over 10 s, nothing to slow it:
-	# 150 * (5 * 5.5 + 5 * 55) = 45 375 m/s.
+func _test_ramp_without_drag_stops_at_the_speed_limit() -> int:
+	# 150 m/s^2 ramped from 1x toward 10x over the first 5 s, nothing to slow
+	# it: 150 * (1 + 2.8) / 2 = 285 m/s after 1 s. By 10 s the open-space
+	# speed limit (3000 m/s) holds it there.
 	var cruiser: Node3D = VoidCruiserScript.new()
 	Input.action_press("move_forward")
-	for i in range(600):
+	for i in range(60):
+		cruiser._physics_process(1.0 / 60.0)
+	var at_one: float = cruiser.velocity.length()
+	for i in range(540):
 		cruiser._physics_process(1.0 / 60.0)
 	Input.action_release("move_forward")
 	var result := 0
 	var speed: float = cruiser.velocity.length()
-	if speed < 44500.0 or speed > 46000.0 or cruiser.velocity.z >= 0.0:
-		print("FAIL _test_ramp_without_drag_reaches_about_45_km_s_in_10_s: velocity %s (speed %.0f)" % [cruiser.velocity, speed])
+	if absf(at_one - 285.0) > 10.0 or absf(speed - SpeedLimit.OPEN_LIMIT) > 0.5 or cruiser.velocity.z >= 0.0:
+		print("FAIL _test_ramp_without_drag_stops_at_the_speed_limit: %.0f m/s at 1 s, velocity %s (speed %.0f) at 10 s" % [at_one, cruiser.velocity, speed])
 		result = 1
 	cruiser.free()
 	return result

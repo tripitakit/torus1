@@ -32,6 +32,7 @@ const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
 const BRAKE_TEXT := "BRAKE"
 const BRAKE_COLOR := Color(1.0, 0.45, 0.3)
 const THRUST_TEXT := "THRUST  %.1fx"
+const LIMIT_COLOR_BRAKING := Color(1.0, 0.65, 0.2)
 # The approach panel, top right: readout key -> label, in display order.
 const APPROACH_LINES := {
 	"dist": "DistLabel",
@@ -82,6 +83,12 @@ func update_hud(speed: float, distances: Dictionary) -> void:
 		var entry: Array = DISTANCE_LABELS[key]
 		var distance: float = distances.get(key, -1.0)
 		(lines.get_node(entry[0]) as Label).text = "%s  %s" % [entry[1], CockpitHudFormat.format_distance(distance)]
+
+# The zone's speed limit; orange while the flight computer brakes down to it.
+func set_speed_limit(limit: float, braking: bool) -> void:
+	var label := get_node("Hud/Panel/Lines/LimitLabel") as Label
+	label.text = "LIMIT  " + CockpitHudFormat.format_speed(limit)
+	label.label_settings.font_color = LIMIT_COLOR_BRAKING if braking else HUD_TEXT_COLOR
 
 func set_dock_prompt(available: bool) -> void:
 	(get_node("Hud/Panel/Lines/DockLabel") as Label).visible = available
@@ -208,6 +215,11 @@ func _build_hud() -> void:
 	label_settings.font_size = HUD_FONT_SIZE
 	label_settings.font_color = HUD_TEXT_COLOR
 	_add_hud_label(lines, "SpeedLabel", label_settings)
+	# Its own settings: it turns orange.
+	var limit_settings := LabelSettings.new()
+	limit_settings.font_size = HUD_FONT_SIZE
+	limit_settings.font_color = HUD_TEXT_COLOR
+	_add_hud_label(lines, "LimitLabel", limit_settings)
 	var cruise_settings := LabelSettings.new()
 	cruise_settings.font_size = HUD_FONT_SIZE
 	cruise_settings.font_color = CRUISE_COLOR

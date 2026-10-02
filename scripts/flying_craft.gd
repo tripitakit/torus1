@@ -82,6 +82,7 @@ func _external_acceleration() -> Vector3:
 func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque_input: Vector3) -> void:
 	var outside := _external_acceleration()
 	velocity = VoidCruiserPhysics.compute_new_velocity(velocity, local_thrust_input, transform.basis, thrust_power, _linear_damping_now(), delta) + outside * delta
+	velocity = _limit_velocity(velocity, delta)
 	angular_velocity = VoidCruiserPhysics.compute_new_angular_velocity(angular_velocity, local_torque_input, torque_power, _angular_damping_now(), delta)
 
 	_move(delta)
@@ -89,6 +90,11 @@ func _apply_physics_step(delta: float, local_thrust_input: Vector3, local_torque
 	rotate_object_local(Vector3.RIGHT, angular_velocity.x * delta)
 	rotate_object_local(Vector3.UP, angular_velocity.y * delta)
 	rotate_object_local(Vector3.FORWARD, angular_velocity.z * delta)
+
+# The tick's new velocity, before the move: a craft with a speed limit holds
+# it here.
+func _limit_velocity(new_velocity: Vector3, _delta: float) -> Vector3:
+	return new_velocity
 
 func _move(delta: float) -> void:
 	# move_and_collide needs a live physics space, which only exists once

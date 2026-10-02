@@ -12,6 +12,7 @@ const LandingGuide = preload("res://scripts/landing_guide.gd")
 const LandingAssist = preload("res://scripts/landing_assist.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
 const SubspaceTunnel = preload("res://scripts/subspace_tunnel.gd")
+const SpeedLimit = preload("res://scripts/speed_limit.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -102,6 +103,11 @@ var _level_heading := Vector3.ZERO
 signal transit_started
 signal transit_finished
 var in_transit := false
+# The speed limit here (SpeedLimit, relative to the frame the ship flies
+# in), and whether the flight computer is braking the ship down to it.
+var speed_limit := SpeedLimit.OPEN_LIMIT
+var limit_braking := false
+var _speed_before := 0.0
 var _transit_left := 0.0
 var _transit_to: Node3D
 # The ship (at the crossing point) and its velocity, and the entry portal,
@@ -134,6 +140,7 @@ func _process(delta: float) -> void:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
 		cockpit.set_cruise(cruise_locked)
 		cockpit.set_brake(brake_engaged)
+		cockpit.set_speed_limit(speed_limit, limit_braking)
 		cockpit.set_thrust_scale(thrust_scale)
 		cockpit.update_velocity(VelocityCross.ship_components(_world_basis(), velocity), cruise_locked)
 		cockpit.update_attitude(attitude_matrix())
@@ -263,7 +270,25 @@ func _fly(delta: float) -> void:
 		velocity = DockingAssist.brake_velocity(velocity, Vector3.ZERO, thrust_power * DockingAssist.BRAKE_MULTIPLIER * thrust_scale, delta)
 	var torque := _read_torque_input(delta) * LandingAssist.torque_factor(altitude)
 	_level_near_the_moon(altitude, torque)
+	speed_limit = current_speed_limit()
+	_speed_before = velocity.length()
 	_apply_physics_step(delta, thrust_input, torque)
+
+# The limit for where the ship is: near Torus1 or a gate, in the moon's
+# frame, or in open space (SpeedLimit).
+func current_speed_limit() -> float:
+	var from_ring := INF
+	if has_planet:
+		var station := get_node_or_null(station_path) if is_inside_tree() else null
+		var section_radius: float = station.section_radius if station != null and "section_radius" in station else 2000.0
+		from_ring = SpeedLimit.ring_distance(_world_position() - planet_center, planet_axis, ring_radius, section_radius)
+	var gate := nearest_portal()
+	return SpeedLimit.limit(from_ring, gate.get("distance", INF), in_moon_frame)
+
+# Held to the speed limit; over it, braked down at the brake's strength.
+func _limit_velocity(new_velocity: Vector3, delta: float) -> Vector3:
+	limit_braking = SpeedLimit.braking(_speed_before, speed_limit)
+	return SpeedLimit.cap(new_velocity, _speed_before, speed_limit, thrust_power * DockingAssist.BRAKE_MULTIPLIER, delta)
 
 # Low over the moon with hands off the mouse and the roll keys, the ship
 # turns itself level, keeping the heading its nose had when levelling began.
