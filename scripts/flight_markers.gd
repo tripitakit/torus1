@@ -7,6 +7,9 @@ extends Control
 #   flight path marker (a ring with wings and a tail); when the motion is
 #   behind the camera, a ring with an X at the opposite point (retrograde).
 #   Off the screen it waits on the edge on its side. Hidden under MIN_SPEED.
+# - the acceleration marker, orange, where the net acceleration points: a
+#   triangle, upside down at the opposite point when it points behind the
+#   camera. Hidden under MIN_ACCEL.
 
 enum Motion { NONE, PROGRADE, RETROGRADE }
 
@@ -25,6 +28,9 @@ const LINE_WIDTH := 2.0
 const OUTLINE_COLOR := Color(0.0, 0.0, 0.0, 0.75)
 const OUTLINE_WIDTH := 4.0
 const MIN_SPEED := 0.5
+const ACCEL_COLOR := Color(1.0, 0.6, 0.2, 0.95)
+const MIN_ACCEL := 0.05
+const TRIANGLE := 9.0
 # How far along the motion the projected point is taken (m).
 const PROJECT_DISTANCE := 1000.0
 # Off-screen motion waits this far inside the screen's edge (px).
@@ -32,6 +38,8 @@ const EDGE_MARGIN := 24.0
 
 var motion: Motion = Motion.NONE
 var motion_point := Vector2.ZERO
+var accel: Motion = Motion.NONE
+var accel_point := Vector2.ZERO
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -44,10 +52,18 @@ func _init() -> void:
 # (a strafe from rest), waits on the screen's edge on its side, EDGE_MARGIN
 # in. In-tree camera only.
 static func motion_marker(camera: Camera3D, velocity: Vector3) -> Dictionary:
-	if velocity.length() < MIN_SPEED:
+	return direction_marker(camera, velocity, MIN_SPEED)
+
+# The acceleration marker: placed like the motion marker (see there).
+static func accel_marker(camera: Camera3D, acceleration: Vector3) -> Dictionary:
+	return direction_marker(camera, acceleration, MIN_ACCEL)
+
+# Where a marker for `vector`'s direction goes, hidden under `least`.
+static func direction_marker(camera: Camera3D, vector: Vector3, least: float) -> Dictionary:
+	if vector.length() < least:
 		return {"kind": Motion.NONE, "point": Vector2.ZERO}
 	var view: Basis = camera.global_transform.basis.orthonormalized()
-	var d: Vector3 = view.inverse() * velocity.normalized()
+	var d: Vector3 = view.inverse() * vector.normalized()
 	var kind := Motion.PROGRADE
 	if d.z > 1e-6:
 		d = -d
@@ -74,9 +90,25 @@ func update_motion(camera: Camera3D, velocity: Vector3) -> void:
 	motion_point = marker.point
 	queue_redraw()
 
+func update_accel(camera: Camera3D, acceleration: Vector3) -> void:
+	var marker := accel_marker(camera, acceleration)
+	accel = marker.kind
+	accel_point = marker.point
+	queue_redraw()
+
 func _draw() -> void:
+	_draw_accel(OUTLINE_COLOR, OUTLINE_WIDTH)
+	_draw_accel(ACCEL_COLOR, LINE_WIDTH)
 	_draw_markers(OUTLINE_COLOR, OUTLINE_COLOR, OUTLINE_WIDTH)
 	_draw_markers(BORESIGHT_COLOR, MOTION_COLOR, LINE_WIDTH)
+
+func _draw_accel(color: Color, width: float) -> void:
+	if accel == Motion.NONE:
+		return
+	var flip := 1.0 if accel == Motion.PROGRADE else -1.0
+	var p := accel_point
+	var points := PackedVector2Array([p + Vector2(0.0, -TRIANGLE) * flip, p + Vector2(TRIANGLE * 0.87, TRIANGLE * 0.5) * flip, p + Vector2(-TRIANGLE * 0.87, TRIANGLE * 0.5) * flip, p + Vector2(0.0, -TRIANGLE) * flip])
+	draw_polyline(points, color, width, true)
 
 func _draw_markers(boresight_color: Color, motion_color: Color, width: float) -> void:
 	var centre := size * 0.5

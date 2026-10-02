@@ -10,6 +10,7 @@ var _failures := 0
 func _initialize():
 	_failures += await _test_motion_marker_placement()
 	_failures += _test_two_contrasting_colours()
+	_failures += await _test_acceleration_marker()
 	_failures += await _test_void_cruiser_marker_centred_flying_straight()
 	_failures += await _test_off_screen_motion_stays_on_the_edge()
 	_failures += await _test_internal_cruiser_builds_and_feeds_its_markers()
@@ -51,6 +52,26 @@ func _test_motion_marker_placement() -> int:
 		result = 1
 	if FlightMarkers.motion_marker(camera, Vector3(0.3, 0.0, 0.0)).kind != FlightMarkers.Motion.NONE:
 		print("FAIL _test_motion_marker_placement: a marker under 0.5 m/s")
+		result = 1
+	camera.get_parent().queue_free()
+	await process_frame
+	return result
+
+func _test_acceleration_marker() -> int:
+	# An orange triangle where the net acceleration points (inverted at the
+	# opposite point when it points behind), hidden under 0.05 m/s2.
+	var camera := _screen_camera()
+	await process_frame
+	var centre := Vector2(1280.0, 720.0) * 0.5
+	var result := 0
+	var up: Dictionary = FlightMarkers.accel_marker(camera, Vector3(0.0, 9.0, -9.0))
+	var behind: Dictionary = FlightMarkers.accel_marker(camera, Vector3(0.0, 0.0, 1500.0))
+	var tiny: Dictionary = FlightMarkers.accel_marker(camera, Vector3(0.0, 0.03, 0.0))
+	if up.kind != FlightMarkers.Motion.PROGRADE or up.point.y >= centre.y - 10.0 or behind.kind != FlightMarkers.Motion.RETROGRADE or behind.point.distance_to(centre) > 1.0 or tiny.kind != FlightMarkers.Motion.NONE:
+		print("FAIL _test_acceleration_marker: up %s, behind %s, tiny %s" % [up, behind, tiny])
+		result = 1
+	if FlightMarkers.ACCEL_COLOR == FlightMarkers.MOTION_COLOR:
+		print("FAIL _test_acceleration_marker: same colour as the motion marker")
 		result = 1
 	camera.get_parent().queue_free()
 	await process_frame
