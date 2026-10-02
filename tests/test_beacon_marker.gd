@@ -15,6 +15,7 @@ func _init():
 	failures += _test_marker_node()
 	failures += _test_tiny_screen()
 	failures += _test_labels_kept_apart_on_leader_lines()
+	failures += _test_edge_labels_kept_apart()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -89,4 +90,16 @@ func _test_labels_kept_apart_on_leader_lines() -> int:
 				print("FAIL _test_labels_kept_apart_on_leader_lines: %s overlaps %s" % [rect, other])
 				return 1
 		rects.append(rect)
+	return 0
+
+func _test_edge_labels_kept_apart() -> int:
+	# Off the screen two markers can wait at one arrow (the gate and the
+	# flight computer's point behind the ship): their labels go up or down
+	# by their corner, far enough apart.
+	var point := Vector2(SCREEN.x - BeaconMarker.EDGE_MARGIN, 450.0)
+	var up := BeaconMarker.edge_label_at(point, 0.0, BeaconMarker.LABEL_UP_LEFT)
+	var down := BeaconMarker.edge_label_at(point, 0.0, BeaconMarker.LABEL_DOWN_RIGHT)
+	if absf(up.y - down.y) < BeaconMarker.FONT_SIZE * 2.0 or up.y >= down.y:
+		print("FAIL _test_edge_labels_kept_apart: %s and %s" % [up, down])
+		return 1
 	return 0

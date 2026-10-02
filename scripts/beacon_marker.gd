@@ -76,6 +76,11 @@ static func label_rect(point: Vector2, offset: Vector2, size: Vector2) -> Rect2:
 	var left := end.x + LABEL_GAP if offset.x >= 0.0 else end.x - LABEL_GAP - size.x
 	return Rect2(Vector2(left, end.y - size.y * 0.5), size)
 
+# Off the screen: the label inside the screen, on the side away from the
+# edge, up or down by the marker's corner (so labels at one arrow part).
+static func edge_label_at(point: Vector2, angle: float, offset: Vector2) -> Vector2:
+	return point - Vector2.from_angle(angle) * (ARROW + 90.0) + Vector2(-60.0, FONT_SIZE * 0.35 + offset.y)
+
 static func _distance(metres: float) -> String:
 	if metres >= 100000.0:
 		return "%d km" % roundi(metres / 1000.0)
@@ -105,7 +110,6 @@ func _draw() -> void:
 		var rect := label_rect(point, label_offset, font.get_string_size(_text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE))
 		at = Vector2(rect.position.x, rect.position.y + rect.size.y * 0.5 + FONT_SIZE * 0.35)
 	else:
-		# Keep the label inside the screen, on the side away from the edge.
-		at = point - Vector2.from_angle(_place.angle) * (ARROW + 90.0) + Vector2(-60.0, FONT_SIZE * 0.35)
+		at = edge_label_at(point, _place.angle, label_offset)
 	draw_string_outline(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, 4, OUTLINE_COLOR)
 	draw_string(font, at, _text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, color)
