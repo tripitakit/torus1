@@ -35,3 +35,16 @@ sotto 0,05 m/s².
 - `test_cockpit`: posizioni dei pannelli, NAV sempre visibile, sensori nascosti oltre 2 km.
 - Fisica: frenando la risultante è opposta alla velocità; posata sulla luna risultante zero ed esterne ~0,1 g.
 - GPU: partenza, gate, allunaggio.
+
+## Cambiato durante l'esecuzione
+
+- I tre pannelli di contesto restano nodi separati (ApproachPanel, GatePanel, MoonPanel) nello stesso posto in
+  alto al centro: la nave passa il contenuto solo a quello scelto da `HudLayout.context`, vuoto agli altri.
+- CRUISE e BRAKE restano righe separate nel pannello della nave (AUTO è nel pannello NAV), per non toccare i
+  comandi e i test che già li usano.
+- Le accelerazioni si registrano nell'aggancio `_limit_velocity` (subito dopo il passo di velocità e prima del
+  moto), così un contatto col suolo non appare come una spinta enorme.
+- Anche le etichette dei marcatori fuori schermo si separano: sopra o sotto la freccia secondo il loro angolo
+  (in volo verso un gate alle spalle, GATE e NAV aspettano sulla stessa freccia).
+- Prova GPU: partenza (pannello attracco, NAV, croce ACCEL con la spinta), gate a 2 km (pannello gate),
+  allunaggio a 300 m (pannello lunare, EXT 0,98 m/s² = 0,10 g).
