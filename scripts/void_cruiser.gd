@@ -116,6 +116,13 @@ var _speed_before := 0.0
 # under way or done (FlightComputer.Auto), G to start it.
 var nav_target := ""
 var autopilot: int = FlightComputer.Auto.OFF
+# Last tick's accelerations (world, m/s2): the outside pulls, the net change
+# of velocity, and the ship's own share (engines, brake, flight computer,
+# speed limit): net minus outside. Landed: all held, the pulls still read.
+var accel_external := Vector3.ZERO
+var accel_net := Vector3.ZERO
+var accel_thrust := Vector3.ZERO
+var _velocity_at_tick_start := Vector3.ZERO
 var _transit_left := 0.0
 var _transit_to: Node3D
 # The ship (at the crossing point) and its velocity, and the entry portal,
@@ -252,7 +259,14 @@ func _linear_damping_now() -> float:
 
 func _external_acceleration() -> Vector3:
 	# Holding velocity or braking: the thrusters cancel the orbital pulls.
-	if not has_planet or cruise_locked or brake_engaged or is_landed:
+	if cruise_locked or brake_engaged or is_landed:
+		return Vector3.ZERO
+	return outside_pulls()
+
+# Gravity (planet, moon) and the turning frame's pulls on the ship, as they
+# are whatever the thrusters do about them (world, m/s2).
+func outside_pulls() -> Vector3:
+	if not has_planet:
 		return Vector3.ZERO
 	var omega := ring_omega()
 	var pull := Vector3.ZERO
@@ -267,6 +281,10 @@ func _external_acceleration() -> Vector3:
 # ramp. The brake stops the ship at up to BRAKE_MULTIPLIER times the base
 # thrust, scaled too.
 func _fly(delta: float) -> void:
+	_velocity_at_tick_start = velocity
+	accel_net = Vector3.ZERO
+	accel_thrust = Vector3.ZERO
+	accel_external = outside_pulls()
 	if is_crashed:
 		# Nothing the pilot does meanwhile carries over to the restart.
 		_mouse_delta = Vector2.ZERO
@@ -355,7 +373,12 @@ func current_speed_limit() -> float:
 # Held to the speed limit; over it, braked down at the brake's strength.
 func _limit_velocity(new_velocity: Vector3, delta: float) -> Vector3:
 	limit_braking = SpeedLimit.braking(_speed_before, speed_limit)
-	return SpeedLimit.cap(new_velocity, _speed_before, speed_limit, thrust_power * DockingAssist.BRAKE_MULTIPLIER, delta)
+	var held := SpeedLimit.cap(new_velocity, _speed_before, speed_limit, thrust_power * DockingAssist.BRAKE_MULTIPLIER, delta)
+	# The tick's accelerations, before the move (a touch-down stops the ship
+	# there, not its engines).
+	accel_net = (held - _velocity_at_tick_start) / delta
+	accel_thrust = accel_net - accel_external
+	return held
 
 # Low over the moon with hands off the mouse and the roll keys, the ship
 # turns itself level, keeping the heading its nose had when levelling began.

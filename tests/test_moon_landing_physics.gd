@@ -234,8 +234,13 @@ func _test_lands_in_a_crater() -> int:
 func _test_soft_level_touch_lands() -> int:
 	var direction := Vector3(0.1, 0.8, -0.6)
 	await _drop(direction, 5.0, Vector2(0.0, -1.0))
-	# Resting on its lowest corner (the ground may slope under it).
+	# Resting on its lowest corner (the ground may slope under it), no net
+	# acceleration, the moon's pull (0.1 g) still read as the outside one.
 	var height: float = _ship.lowest_clearance(_ship.global_transform)
+	await physics_frame
+	if not _ship.accel_net.is_zero_approx() or not _ship.accel_thrust.is_zero_approx() or absf(_ship.accel_external.length() - 0.98) > 0.05 or _ship.accel_external.dot(_moon.up_at(_ship.global_position)) > 0.0:
+		print("FAIL _test_soft_level_touch_lands: landed accelerations net %s, thrust %s, external %s" % [_ship.accel_net, _ship.accel_thrust, _ship.accel_external])
+		return 1
 	if not _ship.is_landed or _crashes != 0 or absf(height) > 0.05 or _ship.velocity != Vector3.ZERO:
 		print("FAIL _test_soft_level_touch_lands: landed %s, crashes %d, lowest corner %.3f m up, velocity %s" % [_ship.is_landed, _crashes, height, _ship.velocity])
 		return 1

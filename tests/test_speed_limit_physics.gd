@@ -60,6 +60,13 @@ func _test_coming_near_the_ring_brakes_down() -> int:
 	_ship.velocity = Vector3.RIGHT * 3000.0
 	await physics_frame
 	var braking: bool = _ship.limit_braking
+	# Braking: the net acceleration against the motion, at the brake's
+	# strength; the engines' share all of it (the pulls here are tiny).
+	var net: Vector3 = _ship.accel_net
+	var thrust: Vector3 = _ship.accel_thrust
+	if net.normalized().dot(-_ship.velocity.normalized()) < 0.999 or absf(net.length() - 1500.0) > 20.0 or thrust.distance_to(net - _ship.accel_external) > 0.001 or _ship.accel_external.length() > 1.0:
+		print("FAIL _test_coming_near_the_ring_brakes_down: accelerations net %s, thrust %s, external %s" % [net, thrust, _ship.accel_external])
+		return 1
 	for tick in range(180):
 		await physics_frame
 	var speed := _ship.velocity.length()
