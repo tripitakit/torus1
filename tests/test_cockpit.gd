@@ -21,6 +21,7 @@ func _init():
 	failures += _test_moon_panel_shows_the_landing_readout()
 	failures += _test_beacon_marker_in_the_hud()
 	failures += _test_gate_panel_and_marker()
+	failures += _test_nav_panel_and_marker()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
 	failures += _test_hud_hosts_the_navball_bottom_right()
 	failures += _test_hud_hosts_the_flight_markers_full_screen()
@@ -412,6 +413,35 @@ func _test_limit_line_shows_the_speed_limit() -> int:
 	cockpit.set_speed_limit(3000.0, true)
 	if label.text != "LIMIT  3000 m/s" or label.label_settings.font_color == calm:
 		print("FAIL _test_limit_line_shows_the_speed_limit: braking not shown ('%s')" % label.text)
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_nav_panel_and_marker() -> int:
+	# Right, under the other panels, hidden with no target; the brake line
+	# red when it is time to brake; a green marker of its own.
+	const FlightComputer = preload("res://scripts/flight_computer.gd")
+	var cockpit := _make_cockpit()
+	var result := 0
+	var panel := cockpit.get_node_or_null("Hud/NavPanel") as Control
+	var marker := cockpit.get_node_or_null("Hud/NavMarker") as Control
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or panel.offset_top <= cockpit.HUD_MARGIN or marker == null or marker.visible or marker.color != cockpit.NAV_MARKER_COLOR:
+		print("FAIL _test_nav_panel_and_marker: missing, shown from the start or misplaced")
+		cockpit.free()
+		return 1
+	cockpit.update_nav(FlightComputer.lines("SELENE", "GATE TERRA", FlightComputer.readout(2000.0, 3000.0, 1500.0), FlightComputer.Auto.ARRIVING))
+	var lines := panel.get_node("Lines")
+	var brake := lines.get_node("BrakeLabel") as Label
+	if not panel.visible or (lines.get_node("NavLabel") as Label).text != "NAV  SELENE via GATE TERRA" or brake.text != "BRAKE NOW" or not brake.label_settings.font_color.is_equal_approx(FlightComputer.BAD) or not (lines.get_node("AutoLabel") as Label).visible:
+		print("FAIL _test_nav_panel_and_marker: readout not shown as expected")
+		result = 1
+	cockpit.update_nav(FlightComputer.lines("DOCK", "DOCK", FlightComputer.readout(2000.0, 10.0, 1500.0), FlightComputer.Auto.OFF))
+	if (lines.get_node("AutoLabel") as Label).visible or brake.label_settings.font_color.is_equal_approx(FlightComputer.BAD):
+		print("FAIL _test_nav_panel_and_marker: an idle computer still shows AUTO, or the brake still red")
+		result = 1
+	cockpit.update_nav({})
+	if panel.visible:
+		print("FAIL _test_nav_panel_and_marker: an empty readout left it shown")
 		result = 1
 	cockpit.free()
 	return result

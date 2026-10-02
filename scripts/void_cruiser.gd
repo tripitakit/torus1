@@ -69,6 +69,8 @@ const HALF_HEIGHT := 3.75  # HULL_SIZE.y / 2
 # Under this height (centre over the ground) the hull's corners are checked
 # against the ground: more than the hull's half diagonal plus a fast tick.
 const GROUND_CHECK_HEIGHT := 60.0
+# The flight computer's marker hides this close to its point.
+const NAV_MARKER_HIDE := 50.0
 # Base Selene's HUD marker hides this close to the beacon.
 const BEACON_HIDE_DISTANCE := 1000.0
 # The wreck comes to rest this far above the planet's surface.
@@ -157,6 +159,9 @@ func _process(delta: float) -> void:
 		cockpit.update_approach(readout)
 		cockpit.update_moon(moon_readout())
 		cockpit.update_gate(gate_readout())
+		var nav := nav_readout() if not in_transit else {}
+		cockpit.update_nav(nav.get("lines", {}))
+		cockpit.update_nav_marker(nav.get("leg", ""), nav.get("point", Vector3.ZERO), nav.get("distance", 0.0), not nav.is_empty() and nav.distance > NAV_MARKER_HIDE)
 		var gate := nearest_portal()
 		var gate_shown: bool = not gate.is_empty() and not in_transit and gate.distance > PortalRules.MARKER_HIDE and gate.distance < PortalRules.MARKER_RANGE
 		cockpit.update_gate_marker(gate.get("centre", Vector3.ZERO), gate.get("distance", 0.0), gate_shown)

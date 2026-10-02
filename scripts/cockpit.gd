@@ -50,6 +50,19 @@ const GATE_LINES := {
 }
 const GATE_PANEL_WIDTH := 340.0
 const GATE_MARKER_COLOR := Color(0.45, 0.75, 1.0, 0.95)
+# The flight computer's panel, right, under the approach and moon panels:
+# readout key -> label (FlightComputer.lines).
+const NAV_LINES := {
+	"nav": "NavLabel",
+	"dist": "DistLabel",
+	"closing": "ClosingLabel",
+	"eta": "EtaLabel",
+	"stop": "StopLabel",
+	"brake": "BrakeLabel",
+	"auto": "AutoLabel",
+}
+const NAV_PANEL_TOP := 300.0
+const NAV_MARKER_COLOR := Color(0.35, 1.0, 0.45, 0.95)
 # The moon panel (same place as the approach panel): readout key -> label.
 const MOON_LINES := {
 	"pad": "PadLabel",
@@ -144,6 +157,29 @@ func update_gate(readout: Dictionary) -> void:
 		label.visible = readout[key] != ""
 		if readout.colors.has(key):
 			label.label_settings.font_color = readout.colors[key]
+
+# The flight computer's panel: FlightComputer.lines(), or empty to hide it.
+func update_nav(lines: Dictionary) -> void:
+	var panel := get_node("Hud/NavPanel") as Control
+	panel.visible = not lines.is_empty()
+	if lines.is_empty():
+		return
+	var labels := panel.get_node("Lines")
+	for key in NAV_LINES:
+		var label := labels.get_node(NAV_LINES[key]) as Label
+		label.text = lines[key]
+		label.visible = lines[key] != ""
+		label.label_settings.font_color = lines.colors.get(key, HUD_TEXT_COLOR)
+
+# The flight computer's leg marker: `name` at `target` (world), `distance`
+# away.
+func update_nav_marker(marker_name: String, target: Vector3, distance: float, shown: bool) -> void:
+	var marker := get_node("Hud/NavMarker")
+	marker.prefix = marker_name
+	if shown and has_node("PilotCamera") and is_inside_tree():
+		marker.update_target(get_node("PilotCamera") as Camera3D, target, distance, true)
+	else:
+		marker.update_target(null, target, distance, false)
 
 # The nearest portal's marker, at `target` (world), `distance` away.
 func update_gate_marker(target: Vector3, distance: float, shown: bool) -> void:
@@ -300,6 +336,26 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(moon_lines, MOON_LINES[key], settings)
+	# Right, under the approach and moon panels: the flight computer.
+	var nav := PanelContainer.new()
+	nav.name = "NavPanel"
+	nav.anchor_left = 1.0
+	nav.anchor_right = 1.0
+	nav.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
+	nav.offset_right = -HUD_MARGIN
+	nav.offset_top = NAV_PANEL_TOP
+	nav.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	nav.add_theme_stylebox_override("panel", background)
+	nav.visible = false
+	hud.add_child(nav)
+	var nav_lines := VBoxContainer.new()
+	nav_lines.name = "Lines"
+	nav.add_child(nav_lines)
+	for key in NAV_LINES:
+		var settings := LabelSettings.new()
+		settings.font_size = HUD_FONT_SIZE
+		settings.font_color = HUD_TEXT_COLOR
+		_add_hud_label(nav_lines, NAV_LINES[key], settings)
 	# Top centre: the approach to a portal.
 	var gate := PanelContainer.new()
 	gate.name = "GatePanel"
@@ -340,6 +396,12 @@ func _build_hud() -> void:
 	var beacon: Control = BeaconMarkerScript.new()
 	beacon.name = "BeaconMarker"
 	hud.add_child(beacon)
+	# The flight computer's leg.
+	var nav_marker: Control = BeaconMarkerScript.new()
+	nav_marker.name = "NavMarker"
+	nav_marker.color = NAV_MARKER_COLOR
+	nav_marker.prefix = "NAV"
+	hud.add_child(nav_marker)
 	# And the nearest portal's.
 	var gate_marker: Control = BeaconMarkerScript.new()
 	gate_marker.name = "GateMarker"
