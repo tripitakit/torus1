@@ -5,6 +5,8 @@ const VelocityCrossScript = preload("res://scripts/velocity_cross.gd")
 const NavballScript = preload("res://scripts/navball.gd")
 const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
 const BeaconMarkerScript = preload("res://scripts/beacon_marker.gd")
+const AccelCrossScript = preload("res://scripts/accel_cross.gd")
+const HudLayout = preload("res://scripts/hud_layout.gd")
 
 # The ship's own exterior markers (nav-light spheres) sit on this visual
 # layer; the pilot camera, inside the hull, skips them.
@@ -20,6 +22,10 @@ const PILOT_HFOV := 90.0
 const PILOT_NEAR := 2.0
 const PILOT_FAR := 69496000.0
 
+# The HUD in zones: top left the ship (speed, limit, modes, near sensors),
+# top right the flight computer, top centre one context panel at a time
+# (docking, gate or landing: the ship picks it, see hud_layout.gd), along
+# the bottom the instruments (velocity and acceleration crosses, navball).
 const HUD_MARGIN := 24.0
 const HUD_PADDING := 12.0
 const HUD_FONT_SIZE := 22
@@ -42,16 +48,19 @@ const APPROACH_LINES := {
 	"status": "StatusLabel",
 }
 const APPROACH_PANEL_WIDTH := 300.0
+# The context panels (docking, gate, landing) share the top centre.
+const CONTEXT_PANEL_WIDTH := 340.0
+const NAV_HINT := "T  TARGET"
+const INSTRUMENT_GAP := 16.0
 # The gate panel, top centre, near a portal: readout key -> label.
 const GATE_LINES := {
 	"gate": "GateLabel",
 	"approach": "ApproachLabel",
 	"side": "SideLabel",
 }
-const GATE_PANEL_WIDTH := 340.0
 const GATE_MARKER_COLOR := Color(0.45, 0.75, 1.0, 0.95)
-# The flight computer's panel, right, under the approach and moon panels:
-# readout key -> label (FlightComputer.lines).
+# The flight computer's panel, top right: readout key -> label
+# (FlightComputer.lines).
 const NAV_LINES := {
 	"nav": "NavLabel",
 	"dist": "DistLabel",
@@ -61,9 +70,8 @@ const NAV_LINES := {
 	"brake": "BrakeLabel",
 	"auto": "AutoLabel",
 }
-const NAV_PANEL_TOP := 300.0
 const NAV_MARKER_COLOR := Color(0.35, 1.0, 0.45, 0.95)
-# The moon panel (same place as the approach panel): readout key -> label.
+# The landing panel (a context panel): readout key -> label.
 const MOON_LINES := {
 	"pad": "PadLabel",
 	"alt": "AltLabel",
@@ -92,10 +100,13 @@ func build() -> void:
 func update_hud(speed: float, distances: Dictionary) -> void:
 	var lines := get_node("Hud/Panel/Lines")
 	(lines.get_node("SpeedLabel") as Label).text = "SPEED  " + CockpitHudFormat.format_speed(speed)
+	# A line only for a sensor with something near (HudLayout.SENSOR_RANGE).
+	var near := HudLayout.near_sensors(distances)
 	for key in DISTANCE_LABELS:
 		var entry: Array = DISTANCE_LABELS[key]
-		var distance: float = distances.get(key, -1.0)
-		(lines.get_node(entry[0]) as Label).text = "%s  %s" % [entry[1], CockpitHudFormat.format_distance(distance)]
+		var label := lines.get_node(entry[0]) as Label
+		label.visible = near.has(key)
+		label.text = "%s  %s" % [entry[1], CockpitHudFormat.format_distance(near.get(key, -1.0))]
 
 # The zone's speed limit; orange while the flight computer brakes down to it.
 func set_speed_limit(limit: float, braking: bool) -> void:
@@ -158,13 +169,18 @@ func update_gate(readout: Dictionary) -> void:
 		if readout.colors.has(key):
 			label.label_settings.font_color = readout.colors[key]
 
-# The flight computer's panel: FlightComputer.lines(), or empty to hide it.
+# The flight computer's panel: FlightComputer.lines(), or empty for no
+# target (only the T TARGET hint).
 func update_nav(lines: Dictionary) -> void:
 	var panel := get_node("Hud/NavPanel") as Control
-	panel.visible = not lines.is_empty()
-	if lines.is_empty():
-		return
 	var labels := panel.get_node("Lines")
+	if lines.is_empty():
+		for key in NAV_LINES:
+			var label := labels.get_node(NAV_LINES[key]) as Label
+			label.visible = key == "nav"
+			label.text = NAV_HINT if key == "nav" else ""
+			label.label_settings.font_color = HUD_TEXT_COLOR
+		return
 	for key in NAV_LINES:
 		var label := labels.get_node(NAV_LINES[key]) as Label
 		label.text = lines[key]
@@ -203,6 +219,16 @@ func set_thrust_scale(scale: float) -> void:
 	label.visible = scale < 1.0
 	# Two decimals under 0.1 (low over the moon it goes down to ~0.013).
 	label.text = (THRUST_TEXT % scale) if scale >= 0.1 else "THRUST  %.2fx" % scale
+
+# The accelerations along the ship's axes (starboard, dorsal, forward),
+# m/s2: its own share, the outside pulls, the net.
+func update_accelerations(thrust: Vector3, outside: Vector3, net: Vector3) -> void:
+	(get_node("Hud/AccelCross") as Control).set_accelerations(thrust, outside, net)
+
+# The net acceleration's marker (world, m/s2) seen by the pilot camera.
+# In-tree only.
+func update_accel_marker(net: Vector3) -> void:
+	(get_node("Hud/FlightMarkers") as Control).update_accel(get_node("PilotCamera") as Camera3D, net)
 
 # Velocity along the ship's axes (starboard, dorsal, forward), in m/s.
 func update_velocity(components: Vector3, cruise: bool) -> void:
@@ -295,17 +321,22 @@ func _build_hud() -> void:
 	cross.offset_top = -HUD_MARGIN - VelocityCrossScript.PANEL_SIZE.y
 	cross.offset_bottom = -HUD_MARGIN
 	hud.add_child(cross)
-	# Top right, growing leftward: the approach to the nearest dock.
+	# Beside it: the accelerations.
+	var accel: Control = AccelCrossScript.new()
+	accel.name = "AccelCross"
+	accel.anchor_left = 0.0
+	accel.anchor_right = 0.0
+	accel.anchor_top = 1.0
+	accel.anchor_bottom = 1.0
+	accel.offset_left = cross.offset_right + INSTRUMENT_GAP
+	accel.offset_right = accel.offset_left + AccelCrossScript.PANEL_SIZE.x
+	accel.offset_top = -HUD_MARGIN - AccelCrossScript.PANEL_SIZE.y
+	accel.offset_bottom = -HUD_MARGIN
+	hud.add_child(accel)
+	# Top centre, a context panel: the approach to the nearest dock.
 	var approach := PanelContainer.new()
 	approach.name = "ApproachPanel"
-	approach.anchor_left = 1.0
-	approach.anchor_right = 1.0
-	approach.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
-	approach.offset_right = -HUD_MARGIN
-	approach.offset_top = HUD_MARGIN
-	approach.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	approach.add_theme_stylebox_override("panel", background)
-	approach.visible = false
+	_place_context_panel(approach)
 	hud.add_child(approach)
 	var approach_lines := VBoxContainer.new()
 	approach_lines.name = "Lines"
@@ -316,17 +347,10 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(approach_lines, APPROACH_LINES[key], settings)
-	# Top right too, instead of the approach panel near the moon.
+	# Top centre too: landing on the moon.
 	var moon := PanelContainer.new()
 	moon.name = "MoonPanel"
-	moon.anchor_left = 1.0
-	moon.anchor_right = 1.0
-	moon.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
-	moon.offset_right = -HUD_MARGIN
-	moon.offset_top = HUD_MARGIN
-	moon.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	moon.add_theme_stylebox_override("panel", background)
-	moon.visible = false
+	_place_context_panel(moon)
 	hud.add_child(moon)
 	var moon_lines := VBoxContainer.new()
 	moon_lines.name = "Lines"
@@ -336,17 +360,16 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(moon_lines, MOON_LINES[key], settings)
-	# Right, under the approach and moon panels: the flight computer.
+	# Top right, always there: the flight computer.
 	var nav := PanelContainer.new()
 	nav.name = "NavPanel"
 	nav.anchor_left = 1.0
 	nav.anchor_right = 1.0
 	nav.offset_left = -HUD_MARGIN - APPROACH_PANEL_WIDTH
 	nav.offset_right = -HUD_MARGIN
-	nav.offset_top = NAV_PANEL_TOP
+	nav.offset_top = HUD_MARGIN
 	nav.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	nav.add_theme_stylebox_override("panel", background)
-	nav.visible = false
 	hud.add_child(nav)
 	var nav_lines := VBoxContainer.new()
 	nav_lines.name = "Lines"
@@ -356,17 +379,10 @@ func _build_hud() -> void:
 		settings.font_size = HUD_FONT_SIZE
 		settings.font_color = HUD_TEXT_COLOR
 		_add_hud_label(nav_lines, NAV_LINES[key], settings)
-	# Top centre: the approach to a portal.
+	# Top centre too: the approach to a portal.
 	var gate := PanelContainer.new()
 	gate.name = "GatePanel"
-	gate.anchor_left = 0.5
-	gate.anchor_right = 0.5
-	gate.offset_left = -GATE_PANEL_WIDTH * 0.5
-	gate.offset_right = GATE_PANEL_WIDTH * 0.5
-	gate.offset_top = HUD_MARGIN
-	gate.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	gate.add_theme_stylebox_override("panel", background)
-	gate.visible = false
+	_place_context_panel(gate)
 	hud.add_child(gate)
 	var gate_lines := VBoxContainer.new()
 	gate_lines.name = "Lines"
@@ -412,6 +428,26 @@ func _build_hud() -> void:
 	hud.add_child(gate_marker)
 
 	update_hud(0.0, {})
+	update_nav({})
+
+# A context panel's place: top centre, CONTEXT_PANEL_WIDTH wide, hidden
+# until the ship picks it.
+func _place_context_panel(panel: PanelContainer) -> void:
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.offset_left = -CONTEXT_PANEL_WIDTH * 0.5
+	panel.offset_right = CONTEXT_PANEL_WIDTH * 0.5
+	panel.offset_top = HUD_MARGIN
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.add_theme_stylebox_override("panel", _background())
+	panel.visible = false
+
+func _background() -> StyleBoxFlat:
+	var background := StyleBoxFlat.new()
+	background.bg_color = HUD_BACKGROUND_COLOR
+	background.set_corner_radius_all(6)
+	background.set_content_margin_all(HUD_PADDING)
+	return background
 
 func _add_hud_label(parent: Node, label_name: String, label_settings: LabelSettings) -> void:
 	var label := Label.new()

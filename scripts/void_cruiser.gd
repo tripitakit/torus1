@@ -15,6 +15,7 @@ const SubspaceTunnel = preload("res://scripts/subspace_tunnel.gd")
 const SpeedLimit = preload("res://scripts/speed_limit.gd")
 const FlightComputer = preload("res://scripts/flight_computer.gd")
 const NavTargets = preload("res://scripts/nav_targets.gd")
+const HudLayout = preload("res://scripts/hud_layout.gd")
 
 # The planet the ship orbits, and the ring's circular orbit around it. The
 # ship flies in the frame turning with the ring (see orbital_frame.gd); the
@@ -163,9 +164,16 @@ func _process(delta: float) -> void:
 			cockpit.update_motion(velocity)
 	var readout := _update_approach_guide()
 	if cockpit:
-		cockpit.update_approach(readout)
-		cockpit.update_moon(moon_readout())
-		cockpit.update_gate(gate_readout())
+		# One context panel at the top centre: the most pressing (HudLayout).
+		var landing := moon_readout()
+		var at_gate := gate_readout()
+		var context := HudLayout.context(landing, landing_altitude(), at_gate, readout)
+		cockpit.update_approach(readout if context == HudLayout.Context.DOCK else {})
+		cockpit.update_moon(landing if context == HudLayout.Context.LANDING else {})
+		cockpit.update_gate(at_gate if context == HudLayout.Context.GATE else {})
+		cockpit.update_accelerations(VelocityCross.ship_components(_world_basis(), accel_thrust), VelocityCross.ship_components(_world_basis(), accel_external), VelocityCross.ship_components(_world_basis(), accel_net))
+		if is_inside_tree():
+			cockpit.update_accel_marker(accel_net)
 		var nav := nav_readout() if not in_transit else {}
 		cockpit.update_nav(nav.get("lines", {}))
 		cockpit.update_nav_marker(nav.get("leg", ""), nav.get("point", Vector3.ZERO), nav.get("distance", 0.0), not nav.is_empty() and nav.distance > NAV_MARKER_HIDE)

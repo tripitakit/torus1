@@ -46,6 +46,7 @@ func _initialize():
 
 	_failures += _test_portals_in_place()
 	_failures += _test_gate_readout()
+	_failures += await _test_one_context_panel()
 	_failures += await _test_earth_to_moon()
 	_failures += await _test_moon_to_earth()
 	_failures += await _test_too_fast_crashes()
@@ -205,3 +206,31 @@ func _test_gate_readout() -> int:
 		print("FAIL _test_gate_readout: near %s, far %s" % [near, far])
 		return 1
 	return 0
+
+func _test_one_context_panel() -> int:
+	# Near the earth gate: the gate panel alone at the top centre. Out of the
+	# moon gate (20 km up, in the moon's frame): the gate still comes first;
+	# low over the moon away from the gate: the landing panel.
+	var result := 0
+	var hud := _ship.get_node("Cockpit/Hud")
+	_aim(_earth, 2000.0, 0.0, 0.0, false)
+	await process_frame
+	await process_frame
+	if not (hud.get_node("GatePanel") as Control).visible or (hud.get_node("MoonPanel") as Control).visible or (hud.get_node("ApproachPanel") as Control).visible:
+		print("FAIL _test_one_context_panel: near the earth gate")
+		result = 1
+	_aim(_lunar(), 2000.0, 0.0, 0.0, true)
+	await process_frame
+	await process_frame
+	if not (hud.get_node("GatePanel") as Control).visible or (hud.get_node("MoonPanel") as Control).visible:
+		print("FAIL _test_one_context_panel: by the moon gate")
+		result = 1
+	var low: Vector3 = _moon.to_global(MoonScript.direction_of(-20.0, 40.0) * (MoonOrbit.RADIUS + 2500.0))
+	_ship.global_position = low
+	_ship.velocity = Vector3.ZERO
+	await process_frame
+	await process_frame
+	if (hud.get_node("GatePanel") as Control).visible or not (hud.get_node("MoonPanel") as Control).visible:
+		print("FAIL _test_one_context_panel: low over the moon")
+		result = 1
+	return result

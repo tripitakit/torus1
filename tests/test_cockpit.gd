@@ -16,13 +16,14 @@ func _init():
 	failures += _test_brake_line_shown_only_while_braking()
 	failures += _test_limit_line_shows_the_speed_limit()
 	failures += _test_thrust_line_shows_the_scale_near_a_dock()
-	failures += _test_approach_panel_top_right_hidden_until_fed()
+	failures += _test_approach_panel_top_centre_hidden_until_fed()
 	failures += _test_approach_panel_writes_and_colours_the_readout()
 	failures += _test_moon_panel_shows_the_landing_readout()
 	failures += _test_beacon_marker_in_the_hud()
 	failures += _test_gate_panel_and_marker()
 	failures += _test_nav_panel_and_marker()
 	failures += _test_hud_hosts_the_velocity_cross_bottom_left()
+	failures += _test_hud_hosts_the_accel_cross_beside_it()
 	failures += _test_hud_hosts_the_navball_bottom_right()
 	failures += _test_hud_hosts_the_flight_markers_full_screen()
 
@@ -118,22 +119,20 @@ func _test_hud_lines_in_display_order() -> int:
 	return result
 
 func _test_update_hud_writes_speed_and_distances() -> int:
+	# Only the sensors with something within 2 km get a line.
 	var cockpit := _make_cockpit()
 	cockpit.update_hud(1240.4, {"bow": 819.6, "stern": -1.0, "port": 3140.0, "starboard": -1.0, "dorsal": 410.0, "ventral": -1.0})
 	var result := 0
-	var expected := {
-		"SpeedLabel": "SPEED  1240 m/s",
-		"BowLabel": "BOW  820 m",
-		"SternLabel": "STERN  —",
-		"PortLabel": "PORT  3.1 km",
-		"StarboardLabel": "STARBOARD  —",
-		"DorsalLabel": "DORSAL  410 m",
-		"VentralLabel": "VENTRAL  —",
-	}
-	for label_name in expected:
-		var label: Label = cockpit.get_node("Hud/Panel/Lines/" + label_name)
-		if label.text != expected[label_name]:
-			print("FAIL _test_update_hud_writes_speed_and_distances: %s='%s' expected '%s'" % [label_name, label.text, expected[label_name]])
+	var lines := cockpit.get_node("Hud/Panel/Lines")
+	var shown := {"SpeedLabel": "SPEED  1240 m/s", "BowLabel": "BOW  820 m", "DorsalLabel": "DORSAL  410 m"}
+	for label_name in shown:
+		var label: Label = lines.get_node(label_name)
+		if label.text != shown[label_name] or not label.visible:
+			print("FAIL _test_update_hud_writes_speed_and_distances: %s='%s' (shown %s) expected '%s'" % [label_name, label.text, label.visible, shown[label_name]])
+			result = 1
+	for label_name in ["SternLabel", "PortLabel", "StarboardLabel", "VentralLabel"]:
+		if (lines.get_node(label_name) as Label).visible:
+			print("FAIL _test_update_hud_writes_speed_and_distances: %s shown with nothing within 2 km" % label_name)
 			result = 1
 	cockpit.free()
 	return result
@@ -142,10 +141,10 @@ func _test_update_hud_missing_distances_show_no_reading() -> int:
 	var cockpit := _make_cockpit()
 	cockpit.update_hud(0.0, {})
 	var result := 0
-	var label: Label = cockpit.get_node("Hud/Panel/Lines/BowLabel")
-	if label.text != "BOW  —":
-		print("FAIL _test_update_hud_missing_distances_show_no_reading: BowLabel='%s' expected 'BOW  —'" % label.text)
-		result = 1
+	for key in cockpit.DISTANCE_LABELS:
+		if (cockpit.get_node("Hud/Panel/Lines/" + cockpit.DISTANCE_LABELS[key][0]) as Label).visible:
+			print("FAIL _test_update_hud_missing_distances_show_no_reading: %s shown with no reading" % key)
+			result = 1
 	cockpit.free()
 	return result
 
@@ -277,19 +276,20 @@ func _test_thrust_line_shows_the_scale_near_a_dock() -> int:
 	cockpit.free()
 	return result
 
-func _test_approach_panel_top_right_hidden_until_fed() -> int:
+func _test_approach_panel_top_centre_hidden_until_fed() -> int:
 	var cockpit := _make_cockpit()
 	var result := 0
 	var panel := cockpit.get_node_or_null("Hud/ApproachPanel") as Control
-	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or not is_equal_approx(panel.anchor_right, 1.0) or not is_equal_approx(panel.offset_right, -cockpit.HUD_MARGIN) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
-		print("FAIL _test_approach_panel_top_right_hidden_until_fed: missing, shown from the start, or not top right")
+	# Top centre: the one context panel's place (see hud_layout.gd).
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 0.5) or not is_equal_approx(panel.anchor_right, 0.5) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
+		print("FAIL _test_approach_panel_top_centre_hidden_until_fed: missing, shown from the start, or not top centre")
 		cockpit.free()
 		return 1
 	var names: Array = []
 	for child in panel.get_node("Lines").get_children():
 		names.append(String(child.name))
 	if names != ["DistLabel", "RelSpeedLabel", "AdvisedLabel", "EtaLabel", "StatusLabel"]:
-		print("FAIL _test_approach_panel_top_right_hidden_until_fed: lines %s" % [names])
+		print("FAIL _test_approach_panel_top_centre_hidden_until_fed: lines %s" % [names])
 		result = 1
 	cockpit.free()
 	return result
@@ -330,14 +330,14 @@ func _test_hud_hosts_the_flight_markers_full_screen() -> int:
 	return result
 
 func _test_moon_panel_shows_the_landing_readout() -> int:
-	# Top right like the approach panel, hidden until fed; lines coloured by
-	# the readout.
+	# Top centre like the approach panel (one context panel at a time),
+	# hidden until fed; lines coloured by the readout.
 	const LandingReadout = preload("res://scripts/landing_readout.gd")
 	var cockpit := _make_cockpit()
 	var result := 0
 	var panel := cockpit.get_node_or_null("Hud/MoonPanel") as Control
-	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
-		print("FAIL _test_moon_panel_shows_the_landing_readout: missing, shown from the start, or not top right")
+	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 0.5) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN):
+		print("FAIL _test_moon_panel_shows_the_landing_readout: missing, shown from the start, or not top centre")
 		cockpit.free()
 		return 1
 	cockpit.update_moon(LandingReadout.readout(120.0, -6.0, 0.5, 3.0, 4, false))
@@ -418,14 +418,14 @@ func _test_limit_line_shows_the_speed_limit() -> int:
 	return result
 
 func _test_nav_panel_and_marker() -> int:
-	# Right, under the other panels, hidden with no target; the brake line
-	# red when it is time to brake; a green marker of its own.
+	# Top right, always there: with no target only the T TARGET hint; the
+	# brake line red when it is time to brake; a green marker of its own.
 	const FlightComputer = preload("res://scripts/flight_computer.gd")
 	var cockpit := _make_cockpit()
 	var result := 0
 	var panel := cockpit.get_node_or_null("Hud/NavPanel") as Control
 	var marker := cockpit.get_node_or_null("Hud/NavMarker") as Control
-	if panel == null or panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or panel.offset_top <= cockpit.HUD_MARGIN or marker == null or marker.visible or marker.color != cockpit.NAV_MARKER_COLOR:
+	if panel == null or not panel.visible or not is_equal_approx(panel.anchor_left, 1.0) or not is_equal_approx(panel.offset_top, cockpit.HUD_MARGIN) or (panel.get_node("Lines/NavLabel") as Label).text != "T  TARGET" or (panel.get_node("Lines/DistLabel") as Label).visible or marker == null or marker.visible or marker.color != cockpit.NAV_MARKER_COLOR:
 		print("FAIL _test_nav_panel_and_marker: missing, shown from the start or misplaced")
 		cockpit.free()
 		return 1
@@ -440,8 +440,26 @@ func _test_nav_panel_and_marker() -> int:
 		print("FAIL _test_nav_panel_and_marker: an idle computer still shows AUTO, or the brake still red")
 		result = 1
 	cockpit.update_nav({})
-	if panel.visible:
-		print("FAIL _test_nav_panel_and_marker: an empty readout left it shown")
+	if not panel.visible or (lines.get_node("NavLabel") as Label).text != "T  TARGET" or brake.visible:
+		print("FAIL _test_nav_panel_and_marker: no target should leave only the hint")
+		result = 1
+	cockpit.free()
+	return result
+
+func _test_hud_hosts_the_accel_cross_beside_it() -> int:
+	# Bottom, right of the velocity cross; the cockpit passes it the three
+	# accelerations and the marker its net one.
+	var cockpit := _make_cockpit()
+	var result := 0
+	var cross := cockpit.get_node_or_null("Hud/AccelCross") as Control
+	var velocity := cockpit.get_node("Hud/VelocityCross") as Control
+	if cross == null or not is_equal_approx(cross.anchor_top, 1.0) or cross.offset_left < velocity.offset_right:
+		print("FAIL _test_hud_hosts_the_accel_cross_beside_it: missing or misplaced")
+		cockpit.free()
+		return 1
+	cockpit.update_accelerations(Vector3(0.0, 0.0, 1500.0), Vector3(0.0, -0.98, 0.0), Vector3(0.0, -0.98, 1500.0))
+	if not (cross.vectors[0] as Vector3).is_equal_approx(Vector3(0.0, 0.0, 1500.0)) or not (cross.vectors[1] as Vector3).is_equal_approx(Vector3(0.0, -0.98, 0.0)):
+		print("FAIL _test_hud_hosts_the_accel_cross_beside_it: the values did not reach it")
 		result = 1
 	cockpit.free()
 	return result
