@@ -6,6 +6,8 @@ const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 const Clock = preload("res://scripts/interior_clock.gd")
 const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
+const SpineTrain = preload("res://scripts/spine_train.gd")
+const AirTraffic = preload("res://scripts/air_traffic.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -40,6 +42,11 @@ func _init():
 	failures += _test_ambient_dims_at_night_and_comes_back()
 	failures += _test_windows_follow_the_hour_only_inside()
 	failures += _test_cars_in_the_chunks_and_dots_in_the_section()
+	failures += _test_spine_through_sections_and_bridges()
+	failures += _test_stations_with_pylons_from_the_ground()
+	failures += _test_trains_where_the_timetable_says()
+	failures += _test_lifts_move()
+	failures += _test_cruisers_and_strobes_in_each_section()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -464,8 +471,9 @@ func _test_every_lit_object_gets_at_most_eight_lights() -> int:
 		light_boxes.append(AABB(_world_transform(light).origin - reach, reach * 2.0))
 	var result := 0
 	for node in world.find_children("*", "GeometryInstance3D", true, false):
-		if node.name == "Globe" or node.name == "TrafficFar" or node is Label3D:
-			continue  # unshaded sun globes, far car dots and the signs are not lit
+		var override := (node as GeometryInstance3D).material_override as ShaderMaterial
+		if node.name == "Globe" or node is Label3D or (override != null and override.shader.code.contains("unshaded")):
+			continue  # unshaded objects (sun globes, cars, spine...) and the signs are not lit
 		var geometry := node as GeometryInstance3D
 		var local: AABB = geometry.custom_aabb if geometry.custom_aabb.has_volume() else geometry.get_aabb()
 		var box: AABB = _world_transform(geometry) * local
@@ -608,5 +616,125 @@ func _test_cars_in_the_chunks_and_dots_in_the_section() -> int:
 	if far == null or far.multimesh.instance_count != total or total < 1000:
 		print("FAIL _test_cars_in_the_chunks_and_dots_in_the_section: far %s, %d cars" % [far, total])
 		result = 1
+	world.free()
+	return result
+
+func _radial(angle: float) -> Vector3:
+	return Vector3(cos(angle), sin(angle), 0.0)
+
+# Distance of a point from the axis.
+func _radius(p: Vector3) -> float:
+	return Vector2(p.x, p.y).length()
+
+func _box_of(body: CollisionObject3D) -> BoxShape3D:
+	for child in body.get_children():
+		if child is CollisionShape3D and (child as CollisionShape3D).shape is BoxShape3D:
+			return (child as CollisionShape3D).shape
+	return null
+
+func _test_spine_through_sections_and_bridges() -> int:
+	var world := _make_world()
+	var result := 0
+	var angle := SpineTrain.spine_angle()
+	var pieces := []
+	for slot in world.get_loaded_section_slots():
+		pieces.append([world.get_node_or_null("Chain/Section_%d/Spine" % slot), LENGTH])
+	for slot in world.get_bridge_slots():
+		pieces.append([world.get_node_or_null("Chain/Bridge_%d/Spine" % slot), BRIDGE_LENGTH])
+	for piece in pieces:
+		var body := piece[0] as StaticBody3D
+		var box := _box_of(body) if body != null else null
+		if body == null or box == null or absf(box.size.z - piece[1]) > 0.01 or not body.position.is_equal_approx(_radial(angle) * SpineTrain.SPINE_RADIUS):
+			print("FAIL _test_spine_through_sections_and_bridges: spine piece %s" % body)
+			result = 1
+			break
+		# Light rings round core and trains every RING_SPACING, one MultiMesh.
+		var rings := body.get_node_or_null("Rings") as MultiMeshInstance3D
+		if rings == null or rings.multimesh.instance_count != floori(piece[1] / SpineTrain.RING_SPACING):
+			print("FAIL _test_spine_through_sections_and_bridges: %s rings %s" % [body.get_path(), rings.multimesh.instance_count if rings != null else -1])
+			result = 1
+			break
+	world.free()
+	return result
+
+func _test_stations_with_pylons_from_the_ground() -> int:
+	# Two stations a section at the plan's station lots; each pylon stands on
+	# the ground there and reaches the platform under the spine; no building
+	# left in its lot.
+	var world := _make_world()
+	var result := 0
+	var angle := SpineTrain.spine_angle()
+	for slot in world.get_loaded_section_slots():
+		var plan = world.get_section_plan(slot)
+		var zs := SpineTrain.station_z(plan)
+		var lots := SpineTrain.station_lots(plan)
+		for k in range(2):
+			var station := world.get_node_or_null("Chain/Section_%d/Station_%d" % [slot, k]) as Node3D
+			var pylon := station.get_node_or_null("Pylon") as StaticBody3D if station != null else null
+			if station == null or pylon == null or _box_of(pylon) == null or station.get_node_or_null("Platform") == null or station.get_node_or_null("Hall") == null:
+				print("FAIL _test_stations_with_pylons_from_the_ground: section %d station %d incomplete" % [slot, k])
+				world.free()
+				return 1
+			var ground: float = RADIUS - plan.height_at((SpineTrain.STATION_COLUMN + 0.5) * plan.lot_width, zs[k])
+			var base: Vector3 = pylon.position
+			var top: Vector3 = pylon.transform * Vector3(0.0, _box_of(pylon).size.y, 0.0)
+			if absf(base.z - (zs[k] - LENGTH * 0.5)) > 0.01 or absf(_radius(base) - ground) > 0.5 or absf(_radius(top) - SpineTrain.platform_radius()) > 0.5 or _radial(angle).dot(Vector3(base.x, base.y, 0.0).normalized()) < 0.9999:
+				print("FAIL _test_stations_with_pylons_from_the_ground: section %d pylon %d from radius %.1f (ground %.1f) to %.1f at z %.1f" % [slot, k, _radius(base), ground, _radius(top), base.z])
+				result = 1
+			var lot: int = plan.lot_index(SpineTrain.STATION_COLUMN, lots[k])
+			for indices in world._sections[slot].groups.values():
+				for b in indices:
+					if plan.building_lot[b] == lot:
+						print("FAIL _test_stations_with_pylons_from_the_ground: building %d still in station lot" % b)
+						world.free()
+						return 1
+	world.free()
+	return result
+
+func _test_trains_where_the_timetable_says() -> int:
+	var world := _make_world()
+	var result := 0
+	var total := SpineTrain.period_time(PERIOD)
+	for t in [10.0, 333.3]:
+		world.update_trains(t)
+		for slot in world.get_loaded_section_slots():
+			var plan = world.get_section_plan(slot)
+			for way in [SpineTrain.AHEAD, SpineTrain.BACK]:
+				var train := world.get_node_or_null("Chain/Section_%d/%s" % [slot, "TrainAhead" if way == SpineTrain.AHEAD else "TrainBack"]) as AnimatableBody3D
+				var u := SpineTrain.progress(SpineTrain.train_tau(t, way, total), SpineTrain.stops(way, SpineTrain.station_z(plan), LENGTH, BRIDGE_LENGTH), PERIOD)
+				var z := SpineTrain.train_node_z(way, u, LENGTH, BRIDGE_LENGTH)
+				if train == null or _box_of(train) == null or absf(train.position.z - z) > 0.01 or absf(_radius(train.position) - SpineTrain.SPINE_RADIUS) > 20.0 or train.sync_to_physics:
+					print("FAIL _test_trains_where_the_timetable_says: section %d way %d train %s at %s, expected z %.1f" % [slot, way, train, train.position if train != null else Vector3.ZERO, z])
+					result = 1
+	world.free()
+	return result
+
+func _test_lifts_move() -> int:
+	var world := _make_world()
+	var lift := world.get_node_or_null("Chain/Section_0/Station_0/Lift_0") as Node3D
+	if lift == null:
+		print("FAIL _test_lifts_move: no lift")
+		world.free()
+		return 1
+	world.update_lifts(0.0)
+	var a := lift.position
+	world.update_lifts(30.0)
+	var result := 0
+	if a.distance_to(lift.position) < 100.0:
+		print("FAIL _test_lifts_move: moved %.1f m in 30 s" % a.distance_to(lift.position))
+		result = 1
+	world.free()
+	return result
+
+func _test_cruisers_and_strobes_in_each_section() -> int:
+	var world := _make_world()
+	var result := 0
+	for slot in world.get_loaded_section_slots():
+		var count := AirTraffic.cruiser_count(AirTraffic.lanes(world.get_section_plan(slot)))
+		for node_name in ["AirTraffic", "AirLights"]:
+			var node := world.get_node_or_null("Chain/Section_%d/%s" % [slot, node_name]) as MultiMeshInstance3D
+			if node == null or node.multimesh.instance_count != count or count < 60 or not node.custom_aabb.has_volume():
+				print("FAIL _test_cruisers_and_strobes_in_each_section: section %d %s %s (%d cruisers)" % [slot, node_name, node, count])
+				result = 1
 	world.free()
 	return result

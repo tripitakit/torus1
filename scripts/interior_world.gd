@@ -12,6 +12,8 @@ const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 const Clock = preload("res://scripts/interior_clock.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
+const SpineTrain = preload("res://scripts/spine_train.gd")
+const AirTraffic = preload("res://scripts/air_traffic.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -64,6 +66,11 @@ const SUN_ENERGY := 1.5
 # of its energy and the interior reads black.
 const AXIS_LIGHT_ATTENUATION := 0.0
 const SUN_COLOR := Color(1.0, 0.93, 0.8)
+# The spine and its stations and trains (SpineTrain).
+const SPINE_COLOR := Color(0.55, 0.57, 0.62)
+const STATION_COLOR := Color(0.82, 0.84, 0.88)
+const TRAIN_COLOR := Color(0.9, 0.91, 0.93)
+const ACCENT_COLOR := Color(0.3, 0.9, 1.0)
 const SUN_GLOBE_RADIUS := 30.0
 # The suns' globes: their colour and brightness follow the hour where they
 # hang (interior_hour.gdshaderinc), like their lights (update_daylight).
@@ -122,6 +129,13 @@ class SectionLoad:
 	# in the section's frame, made with the plan.
 	var traffic := {}
 	var far_traffic := PackedFloat32Array()
+	# The two stations' plan z (SpineTrain.station_z), the trains (AHEAD,
+	# BACK) and the lifts: [cabin, foot point, up, run length, phase].
+	var station_zs := []
+	# The cruisers' lanes in the air (AirTraffic.lanes), made with the plan.
+	var air := PackedFloat32Array()
+	var trains := []
+	var lifts := []
 	var task_id := -1
 	# The group task building every chunk's ground, after the plan.
 	var ground_task := -1
@@ -135,6 +149,9 @@ class SectionLoad:
 	func generate() -> void:
 		plan = SectionGeneratorScript.generate(ring_index, radius, length)
 		groups = plan.group_buildings_by_chunk()
+		station_zs = SpineTrain.station_z(plan)
+		air = AirTraffic.instance_buffer(AirTraffic.lanes(plan), plan)
+		SpineTrain.drop_station_buildings(plan, groups)
 		traffic = RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
 		far_traffic = RoadTraffic.section_buffer(plan, traffic)
 
@@ -167,6 +184,19 @@ var _car_mesh: ArrayMesh
 var _car_material: ShaderMaterial
 var _dot_mesh: QuadMesh
 var _dot_material: ShaderMaterial
+var _spine_mesh: ArrayMesh
+var _spine_material: ShaderMaterial
+var _station_material: ShaderMaterial
+var _train_mesh: ArrayMesh
+var _train_material: ShaderMaterial
+var _ring_mesh: ArrayMesh
+var _hall_mesh: ArrayMesh
+var _platform_mesh: ArrayMesh
+var _lift_mesh: ArrayMesh
+var _cruiser_mesh: ArrayMesh
+var _cruiser_material: ShaderMaterial
+var _strobe_mesh: QuadMesh
+var _strobe_material: ShaderMaterial
 var _sections := {}
 var _bridges := {}
 # 0..24 forces section 0's hour (tests and probes); below 0 the clock runs.
@@ -198,6 +228,19 @@ func build() -> void:
 	_car_material = RoadTraffic.car_material(section_radius)
 	_dot_mesh = RoadTraffic.dot_mesh()
 	_dot_material = RoadTraffic.dot_material(section_radius)
+	_spine_mesh = SpineTrain.spine_mesh()
+	_spine_material = SpineTrain.structure_material(SPINE_COLOR, ACCENT_COLOR)
+	_station_material = SpineTrain.structure_material(STATION_COLOR, ACCENT_COLOR)
+	_train_mesh = SpineTrain.train_mesh()
+	_train_material = SpineTrain.structure_material(TRAIN_COLOR, ACCENT_COLOR)
+	_ring_mesh = SpineTrain.ring_mesh()
+	_hall_mesh = SpineTrain.hall_mesh()
+	_platform_mesh = SpineTrain.platform_mesh()
+	_lift_mesh = SpineTrain.lift_mesh()
+	_cruiser_mesh = AirTraffic.cruiser_mesh()
+	_cruiser_material = AirTraffic.cruiser_material()
+	_strobe_mesh = AirTraffic.strobe_mesh()
+	_strobe_material = AirTraffic.strobe_material()
 	_chain = Node3D.new()
 	_chain.name = "Chain"
 	add_child(_chain)
@@ -243,6 +286,7 @@ func _process(_delta: float) -> void:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)
 	if _chain != null:
 		update_daylight(get_world_3d().environment if is_inside_tree() else null)
+		update_lifts(game_seconds())
 
 func _exit_tree() -> void:
 	restore_ambient()
@@ -290,6 +334,26 @@ func _physics_process(_delta: float) -> void:
 	var craft := get_node_or_null("InternalCruiser") as Node3D
 	if craft != null and _chain != null:
 		rebase_around(craft)
+	update_trains(game_seconds())
+
+# The game's clock (the hour's and the trains' timetable's).
+func game_seconds() -> float:
+	return Time.get_ticks_msec() / 1000.0
+
+# Every loaded section's two trains where the timetable puts them at t.
+func update_trains(t: float) -> void:
+	var total := SpineTrain.period_time(period())
+	for state: SectionLoad in _sections.values():
+		for way in range(state.trains.size()):
+			var stops := SpineTrain.stops(way, state.station_zs, section_length, bridge_length)
+			var u := SpineTrain.progress(SpineTrain.train_tau(t, way, total), stops, period())
+			(state.trains[way] as Node3D).transform = SpineTrain.train_transform(way, SpineTrain.train_node_z(way, u, section_length, bridge_length))
+
+# Every loaded station's lift cabins where they are at t.
+func update_lifts(t: float) -> void:
+	for state: SectionLoad in _sections.values():
+		for lift: Array in state.lifts:
+			(lift[0] as Node3D).position = (lift[1] as Vector3) + (lift[2] as Vector3) * SpineTrain.lift_height(t, lift[3], lift[4])
 
 func period() -> float:
 	return InteriorLayout.chain_period(section_length, bridge_length)
@@ -394,11 +458,18 @@ func _start_section(slot: int) -> void:
 func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 	WorkerThreadPool.wait_for_task_completion(state.task_id)
 	state.task_id = -1
+	_build_stations_and_trains(state)
 	# The far cars: one MultiMesh for the whole section, its frame the node's.
 	if not state.far_traffic.is_empty():
 		var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
 		state.node.add_child(RoadTraffic.multimesh_instance("TrafficFar", state.far_traffic, _dot_mesh, _dot_material, bounds))
 		state.far_traffic = PackedFloat32Array()
+	# The cruisers and their strobes: the shader flies them (AirTraffic).
+	if not state.air.is_empty():
+		var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
+		state.node.add_child(AirTraffic.multimesh_instance("AirTraffic", state.air, _cruiser_mesh, _cruiser_material, bounds))
+		state.node.add_child(AirTraffic.multimesh_instance("AirLights", state.air, _strobe_mesh, _strobe_material, bounds))
+		state.air = PackedFloat32Array()
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []
@@ -471,6 +542,7 @@ func _build_section_shell(slot: int) -> Node3D:
 	# is always open.
 	section.add_child(_build_cap("CapBehind", section_length * 0.5, -1.0))
 	section.add_child(_build_cap("CapAhead", -section_length * 0.5, 1.0))
+	section.add_child(_build_spine(section_length))
 	var suns: PackedVector3Array = InteriorLayout.sun_positions(0.0, section_length, SUN_SPACING)
 	for k in range(suns.size()):
 		section.add_child(_build_sun("Sun_%02d" % k, suns[k]))
@@ -543,7 +615,113 @@ func _build_bridge(slot: int) -> Node3D:
 		_add_mesh_and_collision(segment, _tube_mesh, _tube_shape, _tube_material)
 		bridge.add_child(segment)
 	bridge.add_child(_build_dock())
+	bridge.add_child(_build_spine(bridge_length))
 	return bridge
+
+# A piece of the axis spine `length` long, centred on its parent along z.
+func _build_spine(length: float) -> StaticBody3D:
+	var spine := StaticBody3D.new()
+	spine.name = "Spine"
+	spine.transform = SpineTrain.spine_frame(SpineTrain.spine_angle(), SpineTrain.SPINE_RADIUS, 0.0)
+	var mesh := MeshInstance3D.new()
+	mesh.name = "Mesh"
+	mesh.mesh = _spine_mesh
+	mesh.scale = Vector3(1.0, 1.0, length)
+	mesh.material_override = _spine_material
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spine.add_child(mesh)
+	# Solid: the core and the four rails; the rings are too thin to matter.
+	_add_box(spine, Vector3(2.0 * SpineTrain.CORE_HALF, 2.0 * SpineTrain.CORE_HALF, length), Vector3.ZERO)
+	for side: float in [-1.0, 1.0]:
+		for y: float in [-SpineTrain.TRAIN_HALF_HEIGHT - SpineTrain.RAIL_GAP - 0.25, SpineTrain.TRAIN_HALF_HEIGHT + SpineTrain.RAIL_GAP + 0.2]:
+			_add_box(spine, Vector3(1.2, 0.5, length), Vector3(SpineTrain.TRACK_OFFSET * side, y, 0.0))
+	var count := floori(length / SpineTrain.RING_SPACING)
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = _ring_mesh
+	multimesh.instance_count = count
+	var first := -(count - 1) * 0.5 * SpineTrain.RING_SPACING
+	for k in range(count):
+		multimesh.set_instance_transform(k, Transform3D(Basis(), Vector3(0.0, 0.0, first + k * SpineTrain.RING_SPACING)))
+	var rings := MultiMeshInstance3D.new()
+	rings.name = "Rings"
+	rings.multimesh = multimesh
+	rings.material_override = _spine_material
+	rings.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spine.add_child(rings)
+	return spine
+
+func _add_box(body: CollisionObject3D, size: Vector3, centre: Vector3) -> void:
+	var shape := BoxShape3D.new()
+	shape.size = size
+	var collision := CollisionShape3D.new()
+	collision.name = "Collision"
+	collision.shape = shape
+	collision.position = centre
+	body.add_child(collision)
+
+func _structure_mesh(node_name: String, mesh: Mesh, material: Material) -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	node.name = node_name
+	node.mesh = mesh
+	node.material_override = material
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return node
+
+# The section's two stations (platform on the spine, pylon down to the
+# ground with its two lifts, hall at its foot) and its two trains.
+func _build_stations_and_trains(state: SectionLoad) -> void:
+	var angle := SpineTrain.spine_angle()
+	var column_x: float = (SpineTrain.STATION_COLUMN + 0.5) * state.plan.lot_width
+	for k in range(state.station_zs.size()):
+		var plan_z: float = state.station_zs[k]
+		var z: float = plan_z - section_length * 0.5
+		var ground: float = section_radius - state.plan.height_at(column_x, plan_z)
+		var top := SpineTrain.platform_radius()
+		var station := Node3D.new()
+		station.name = "Station_%d" % k
+		var platform := StaticBody3D.new()
+		platform.name = "Platform"
+		platform.transform = SpineTrain.spine_frame(angle, top - SpineTrain.PLATFORM_SIZE.y * 0.5, z)
+		platform.add_child(_structure_mesh("Mesh", _platform_mesh, _station_material))
+		_add_box(platform, SpineTrain.PLATFORM_SIZE, Vector3.ZERO)
+		station.add_child(platform)
+		var length := ground - top
+		var pylon := StaticBody3D.new()
+		pylon.name = "Pylon"
+		pylon.transform = SpineTrain.spine_frame(angle, ground, z)
+		pylon.add_child(_structure_mesh("Mesh", SpineTrain.pylon_mesh(length), _station_material))
+		_add_box(pylon, Vector3(2.0 * SpineTrain.PYLON_BASE, length, 2.0 * SpineTrain.PYLON_BASE), Vector3(0.0, length * 0.5, 0.0))
+		station.add_child(pylon)
+		var hall := StaticBody3D.new()
+		hall.name = "Hall"
+		hall.transform = pylon.transform
+		hall.add_child(_structure_mesh("Mesh", _hall_mesh, _station_material))
+		_add_box(hall, Vector3(2.0 * SpineTrain.HALL_RADIUS, SpineTrain.HALL_HEIGHT, 2.0 * SpineTrain.HALL_RADIUS), Vector3(0.0, SpineTrain.HALL_HEIGHT * 0.5, 0.0))
+		station.add_child(hall)
+		# Lifts on the pylon's two flanks, from the hall's roof to the platform.
+		var up: Vector3 = pylon.transform.basis.y
+		var across: Vector3 = pylon.transform.basis.x
+		var run: float = length - SpineTrain.HALL_HEIGHT - SpineTrain.LIFT_SIZE.y
+		for side in range(2):
+			var cabin := _structure_mesh("Lift_%d" % side, _lift_mesh, _station_material)
+			cabin.transform = Transform3D(Basis(across * (1.0 if side == 0 else -1.0), up, across.cross(up) * (1.0 if side == 0 else -1.0)), Vector3.ZERO)
+			var foot: Vector3 = pylon.position + across * SpineTrain.LIFT_OFFSET * (1.0 if side == 0 else -1.0) + up * (SpineTrain.HALL_HEIGHT + SpineTrain.LIFT_SIZE.y * 0.5)
+			cabin.position = foot
+			station.add_child(cabin)
+			state.lifts.append([cabin, foot, up, run, 0.5 * side])
+		state.node.add_child(station)
+	for way in [SpineTrain.AHEAD, SpineTrain.BACK]:
+		var train := AnimatableBody3D.new()
+		train.name = "TrainAhead" if way == SpineTrain.AHEAD else "TrainBack"
+		# Moved, never pushed: a kinematic body that jumps (the chain's
+		# rebase) would sweep its collision over the whole jump.
+		train.sync_to_physics = false
+		train.add_child(_structure_mesh("Mesh", _train_mesh, _train_material))
+		_add_box(train, SpineTrain.TRAIN_SIZE, Vector3.ZERO)
+		state.node.add_child(train)
+		state.trains.append(train)
+	update_trains(game_seconds())
 
 func _build_dock() -> Node3D:
 	var dock := Node3D.new()
