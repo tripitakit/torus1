@@ -10,6 +10,8 @@ const InteriorLayout = preload("res://scripts/interior_layout.gd")
 const SectionGeneratorScript = preload("res://scripts/section_generator.gd")
 const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
+const Clock = preload("res://scripts/interior_clock.gd")
+const RoadTraffic = preload("res://scripts/road_traffic.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -63,6 +65,28 @@ const SUN_ENERGY := 1.5
 const AXIS_LIGHT_ATTENUATION := 0.0
 const SUN_COLOR := Color(1.0, 0.93, 0.8)
 const SUN_GLOBE_RADIUS := 30.0
+# The suns' globes: their colour and brightness follow the hour where they
+# hang (interior_hour.gdshaderinc), like their lights (update_daylight).
+const SUN_GLOBE_SHADER := """
+shader_type spatial;
+render_mode unshaded;
+
+#include "res://shaders/interior_hour.gdshaderinc"
+
+varying float hour;
+
+void vertex() {
+	hour = interior_hour(MODEL_MATRIX[3].z);
+}
+
+void fragment() {
+	float n = interior_night(hour);
+	float twilight = 1.0 - abs(n * 2.0 - 1.0);
+	vec3 color = mix(vec3(1.0, 0.93, 0.8), vec3(0.55, 0.65, 1.0), smoothstep(0.5, 1.0, n));
+	color = mix(color, vec3(1.0, 0.55, 0.25), twilight * 0.6);
+	ALBEDO = color * mix(1.0, 0.35, n);
+}
+"""
 # Bridges have no suns of their own: the nearest suns of the sections on
 # either side (500 m inside them) reach the whole tube. With 3 sections and
 # 4 bridges loaded that is 64 lights (60 suns, 4 dock lights), the most the
@@ -94,17 +118,25 @@ class SectionLoad:
 	var node: Node3D
 	var plan = null
 	var groups := {}
+	# Car instances per chunk (RoadTraffic.chunk_instances) and all of them
+	# in the section's frame, made with the plan.
+	var traffic := {}
+	var far_traffic := PackedFloat32Array()
 	var task_id := -1
 	# The group task building every chunk's ground, after the plan.
 	var ground_task := -1
 	var grounds := []
 	var pending_chunks := []
 	var unloading := false
+	# The OmniLight3D of every sun, for update_daylight.
+	var suns := []
 
 	# Runs on a worker thread: touches nothing but this object.
 	func generate() -> void:
 		plan = SectionGeneratorScript.generate(ring_index, radius, length)
 		groups = plan.group_buildings_by_chunk()
+		traffic = RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
+		far_traffic = RoadTraffic.section_buffer(plan, traffic)
 
 	# Runs on worker threads, one call per chunk: writes only its own slot.
 	@warning_ignore("integer_division")
@@ -124,15 +156,24 @@ var _chain: Node3D
 var _tube_material: StandardMaterial3D
 var _cap_material: StandardMaterial3D
 var _sun_mesh: SphereMesh
-var _sun_material: StandardMaterial3D
+var _sun_material: ShaderMaterial
 var _chunk_shape: Shape3D
 var _cap_mesh: ArrayMesh
 var _cap_shape: Shape3D
 var _tube_mesh: ArrayMesh
 var _tube_shape: Shape3D
 var _dressing
+var _car_mesh: ArrayMesh
+var _car_material: ShaderMaterial
+var _dot_mesh: QuadMesh
+var _dot_material: ShaderMaterial
 var _sections := {}
 var _bridges := {}
+# 0..24 forces section 0's hour (tests and probes); below 0 the clock runs.
+var forced_hour := -1.0
+# The environment whose ambient light update_daylight dims, and its own level.
+var _ambient_env: Environment
+var _ambient_energy := 0.0
 
 func build() -> void:
 	_tube_material = _panel_material(TUBE_TEXTURE_DIR)
@@ -140,9 +181,9 @@ func build() -> void:
 	_sun_mesh = SphereMesh.new()
 	_sun_mesh.radius = SUN_GLOBE_RADIUS
 	_sun_mesh.height = SUN_GLOBE_RADIUS * 2.0
-	_sun_material = StandardMaterial3D.new()
-	_sun_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_sun_material.albedo_color = SUN_COLOR
+	_sun_material = ShaderMaterial.new()
+	_sun_material.shader = Shader.new()
+	_sun_material.shader.code = SUN_GLOBE_SHADER
 	# Every chunk's floor collides as the same piece of wall, turned and
 	# shifted: one collision shape for all of them. What is drawn on it comes
 	# from the section's plan.
@@ -153,6 +194,10 @@ func build() -> void:
 	_tube_mesh = _build_band_mesh(bridge_radius, TAU, piece, TUBE_ARC_SEGMENTS, 1, maxf(1.0, roundf(TAU * bridge_radius / TUBE_TILE_SIZE)), maxf(1.0, roundf(piece / TUBE_TILE_SIZE)))
 	_tube_shape = _tube_mesh.create_trimesh_shape()
 	_dressing = TerrainDressingScript.new()
+	_car_mesh = RoadTraffic.car_mesh()
+	_car_material = RoadTraffic.car_material(section_radius)
+	_dot_mesh = RoadTraffic.dot_mesh()
+	_dot_material = RoadTraffic.dot_material(section_radius)
 	_chain = Node3D.new()
 	_chain.name = "Chain"
 	add_child(_chain)
@@ -196,6 +241,48 @@ func _process(_delta: float) -> void:
 	var craft := get_node_or_null("InternalCruiser") as Node3D
 	if craft != null and _chain != null:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)
+	if _chain != null:
+		update_daylight(get_world_3d().environment if is_inside_tree() else null)
+
+func _exit_tree() -> void:
+	restore_ambient()
+
+# Section 0's hour now (see InteriorClock).
+func base_hour() -> float:
+	if forced_hour >= 0.0:
+		return forced_hour
+	return Clock.base_hour(Time.get_ticks_msec() / 1000.0)
+
+# The hour at a point in this node's coordinates: time zones round the ring.
+func hour_at(point: Vector3) -> float:
+	return Clock.hour_at(base_hour(), Clock.ring_position(chain_z(point), docked_bridge_index, period()), ring_sections)
+
+# The hour of the moment along z for the shaders (interior_hour.gdshaderinc),
+# every sun's light and colour from the hour where it hangs, and the ambient
+# light of `env` (when given) from the hour where the craft is.
+func update_daylight(env: Environment) -> void:
+	var line := Clock.hour_line(base_hour(), docked_bridge_index, period(), _chain.position.z, ring_sections)
+	RenderingServer.global_shader_parameter_set("interior_hour_origin", line.x)
+	RenderingServer.global_shader_parameter_set("interior_hour_slope", line.y)
+	for state: SectionLoad in _sections.values():
+		var section_z: float = _chain.position.z + state.node.position.z
+		for light: OmniLight3D in state.suns:
+			var hour := fposmod(line.x + line.y * (section_z + light.get_parent().position.z), 24.0)
+			light.light_energy = SUN_ENERGY * Clock.daylight(hour)
+			light.light_color = Clock.sun_color(hour)
+	if env != null:
+		if _ambient_env != env:
+			restore_ambient()
+			_ambient_env = env
+			_ambient_energy = env.ambient_light_energy
+		var craft := get_node_or_null("InternalCruiser") as Node3D
+		env.ambient_light_energy = _ambient_energy * Clock.daylight(hour_at(craft.position if craft != null else Vector3.ZERO))
+
+# Gives the environment its own ambient light back (on leaving the interior).
+func restore_ambient() -> void:
+	if _ambient_env != null:
+		_ambient_env.ambient_light_energy = _ambient_energy
+		_ambient_env = null
 
 # Before the craft moves this tick (a parent runs before its children); the
 # static bodies follow their moved parent.
@@ -296,6 +383,8 @@ func _start_section(slot: int) -> void:
 	state.length = section_length
 	state.chunks_around = CHUNKS_AROUND
 	state.node = _build_section_shell(slot)
+	for sun in state.node.find_children("Sun_*", "Node3D", false, false):
+		state.suns.append(sun.get_node("Light"))
 	_chain.add_child(state.node)
 	state.task_id = WorkerThreadPool.add_task(state.generate)
 	_sections[slot] = state
@@ -305,6 +394,11 @@ func _start_section(slot: int) -> void:
 func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 	WorkerThreadPool.wait_for_task_completion(state.task_id)
 	state.task_id = -1
+	# The far cars: one MultiMesh for the whole section, its frame the node's.
+	if not state.far_traffic.is_empty():
+		var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
+		state.node.add_child(RoadTraffic.multimesh_instance("TrafficFar", state.far_traffic, _dot_mesh, _dot_material, bounds))
+		state.far_traffic = PackedFloat32Array()
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []
@@ -394,6 +488,11 @@ func _build_chunk(state: SectionLoad, around: int, along: int) -> void:
 	var ground_slot: GroundSlot = state.grounds[along * CHUNKS_AROUND + around]
 	_dressing.dress_chunk(chunk, state.plan, around, along, state.groups.get(Vector2i(around, along), []), ground_slot.ground)
 	ground_slot.ground = []
+	var cars: PackedFloat32Array = state.traffic.get(Vector2i(around, along), PackedFloat32Array())
+	if not cars.is_empty():
+		var traffic := RoadTraffic.multimesh_instance("Traffic", cars, _car_mesh, _car_material, _dressing._chunk_bounds(state.plan, 3.0))
+		traffic.visibility_range_end = RoadTraffic.NEAR_END
+		chunk.add_child(traffic)
 	state.node.add_child(chunk)
 
 func _build_cap(cap_name: String, z: float, facing: float) -> StaticBody3D:

@@ -3,6 +3,9 @@ extends SceneTree
 const InteriorWorldScript = preload("res://scripts/interior_world.gd")
 const SectionGenerator = preload("res://scripts/section_generator.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
+const Clock = preload("res://scripts/interior_clock.gd")
+const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
+const RoadTraffic = preload("res://scripts/road_traffic.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -32,6 +35,11 @@ func _init():
 	failures += _test_every_lit_object_gets_at_most_eight_lights()
 	failures += _test_building_at_docking_takes_under_three_seconds()
 	failures += _test_tube_and_caps_are_textured()
+	failures += _test_hour_at_a_point_follows_the_ring()
+	failures += _test_suns_follow_the_hour()
+	failures += _test_ambient_dims_at_night_and_comes_back()
+	failures += _test_windows_follow_the_hour_only_inside()
+	failures += _test_cars_in_the_chunks_and_dots_in_the_section()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -456,8 +464,8 @@ func _test_every_lit_object_gets_at_most_eight_lights() -> int:
 		light_boxes.append(AABB(_world_transform(light).origin - reach, reach * 2.0))
 	var result := 0
 	for node in world.find_children("*", "GeometryInstance3D", true, false):
-		if node.name == "Globe" or node is Label3D:
-			continue  # unshaded sun globes and the signs are not lit
+		if node.name == "Globe" or node.name == "TrafficFar" or node is Label3D:
+			continue  # unshaded sun globes, far car dots and the signs are not lit
 		var geometry := node as GeometryInstance3D
 		var local: AABB = geometry.custom_aabb if geometry.custom_aabb.has_volume() else geometry.get_aabb()
 		var box: AABB = _world_transform(geometry) * local
@@ -514,5 +522,91 @@ func _test_tube_and_caps_are_textured() -> int:
 		if m == null or m.albedo_texture == null or m.normal_texture == null or not m.emission_enabled:
 			print("FAIL _test_tube_and_caps_are_textured: material %s lacks its textures" % m)
 			result = 1
+	world.free()
+	return result
+
+func _test_hour_at_a_point_follows_the_ring() -> int:
+	var world := _make_world(5)
+	world.forced_hour = 3.0
+	var result := 0
+	for z in [0.0, -10917.0, 15000.0]:
+		var expected := Clock.hour_at(3.0, Clock.ring_position(z, 5, PERIOD), 2000)
+		if absf(world.hour_at(Vector3(0.0, -1900.0, z)) - expected) > 0.0001:
+			print("FAIL _test_hour_at_a_point_follows_the_ring: z %.0f gives %.4f, expected %.4f" % [z, world.hour_at(Vector3(0.0, -1900.0, z)), expected])
+			result = 1
+	world.free()
+	return result
+
+func _test_suns_follow_the_hour() -> int:
+	var world := _make_world()
+	var result := 0
+	for hour in [0.0, 12.0, 18.5]:
+		world.forced_hour = hour
+		world.update_daylight(null)
+		for light: OmniLight3D in _axis_lights(world):
+			var h: float = world.hour_at(_world_transform(light).origin)
+			if absf(light.light_energy - InteriorWorldScript.SUN_ENERGY * Clock.daylight(h)) > 0.001 or not light.light_color.is_equal_approx(Clock.sun_color(h)):
+				print("FAIL _test_suns_follow_the_hour: at %.1f h %s has %.3f %s" % [h, light.name, light.light_energy, light.light_color])
+				world.free()
+				return 1
+	world.forced_hour = 0.0
+	world.update_daylight(null)
+	var dim: OmniLight3D = world.get_node("Chain/Section_0/Sun_00/Light")
+	if dim.light_energy > InteriorWorldScript.SUN_ENERGY * 0.2:
+		print("FAIL _test_suns_follow_the_hour: midnight sun at %.3f" % dim.light_energy)
+		result = 1
+	world.free()
+	return result
+
+func _test_ambient_dims_at_night_and_comes_back() -> int:
+	var world := _make_world()
+	var env := Environment.new()
+	env.ambient_light_energy = 0.25
+	world.forced_hour = 0.0
+	world.update_daylight(env)
+	var result := 0
+	if env.ambient_light_energy > 0.25 * 0.5:
+		print("FAIL _test_ambient_dims_at_night_and_comes_back: night ambient %.3f" % env.ambient_light_energy)
+		result = 1
+	world.restore_ambient()
+	if not is_equal_approx(env.ambient_light_energy, 0.25):
+		print("FAIL _test_ambient_dims_at_night_and_comes_back: restored to %.3f" % env.ambient_light_energy)
+		result = 1
+	world.free()
+	return result
+
+func _test_windows_follow_the_hour_only_inside() -> int:
+	# The interior's buildings read the hour; the moon base's (same shader,
+	# its own material) keep their fixed glow.
+	var dressing = TerrainDressingScript.new()
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = Shader.new()
+	shader_material.shader.code = TerrainDressingScript.BUILDING_SHADER
+	if dressing.building_material.get_shader_parameter("use_hour") != true or shader_material.get_shader_parameter("use_hour") == true:
+		print("FAIL _test_windows_follow_the_hour_only_inside: use_hour %s inside, %s by default" % [dressing.building_material.get_shader_parameter("use_hour"), shader_material.get_shader_parameter("use_hour")])
+		return 1
+	return 0
+
+func _test_cars_in_the_chunks_and_dots_in_the_section() -> int:
+	# Every chunk with road carries its cars (near, up to NEAR_END); the
+	# section carries all of them as far dots.
+	var world := _make_world()
+	var plan = world.get_section_plan(0)
+	var by_chunk := RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
+	var section := world.get_node("Chain/Section_0")
+	var total := 0
+	for key: Vector2i in by_chunk:
+		var node := section.get_node_or_null("Chunk_%02d_%02d/Traffic" % [key.x, key.y]) as MultiMeshInstance3D
+		var count: int = (by_chunk[key] as PackedFloat32Array).size() / RoadTraffic.FLOATS
+		total += count
+		if node == null or node.multimesh.instance_count != count or not is_equal_approx(node.visibility_range_end, RoadTraffic.NEAR_END) or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			print("FAIL _test_cars_in_the_chunks_and_dots_in_the_section: chunk %s traffic %s" % [key, node])
+			world.free()
+			return 1
+	var far := section.get_node_or_null("TrafficFar") as MultiMeshInstance3D
+	var result := 0
+	if far == null or far.multimesh.instance_count != total or total < 1000:
+		print("FAIL _test_cars_in_the_chunks_and_dots_in_the_section: far %s, %d cars" % [far, total])
+		result = 1
 	world.free()
 	return result
