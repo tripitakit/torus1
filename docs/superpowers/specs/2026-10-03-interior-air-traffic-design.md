@@ -53,3 +53,9 @@ chiesto di procedere senza domande: i punti sotto sono default scelti da Claude,
   con; volo basso 131–139 contro 139–141; dall'alto 144–147 contro 141–142; in mezzo al traffico aereo 117–118
   contro 114–117. Il costo resta dentro il rumore delle misure (0–4%).
 - **Tempo di costruzione all'attracco**: 2,55 s (limite del test: 3 s); le rotte si calcolano nel worker.
+- **Cruiser più sci-fi, con ali corte** (richiesta dell'utente). Dardo sfaccettato di 9,4 m, apertura sotto i
+  5,5 m (`MAX_SPAN`, controllato dal test): ali tozze piegate in giù con una gondola a ogni estremità (luce
+  rossa a sinistra e verde a destra, scarico luminoso dietro), due derive inclinate con il bordo luminoso, un
+  grande ugello esagonale luminoso in coda, strisce d'accento sui fianchi.
+- **Numero di cruiser** (richiesta dell'utente: 96 erano troppi). Per sezione un numero casuale fra 30 e 60
+  (`CRAFT`, dal numero della sezione), diviso fra le rotte in proporzione alla lunghezza, almeno 2 per rotta.

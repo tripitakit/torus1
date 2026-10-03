@@ -25,6 +25,8 @@ func _initialize():
 	_failures += _test_cruisers_spread_and_moving()
 	_failures += _test_bank_in_turns_only()
 	_failures += _test_instance_data_gives_the_same_pose()
+	_failures += _test_short_wings()
+	_failures += _test_cruiser_counts_vary()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -43,8 +45,10 @@ func _test_lanes_per_section() -> int:
 		if circuits < 3 or circuits > AirTraffic.CIRCUITS or _count(lanes, AirTraffic.RING) != AirTraffic.RINGS:
 			print("FAIL _test_lanes_per_section: %d circuits, %d rings" % [circuits, _count(lanes, AirTraffic.RING)])
 			return 1
-		if AirTraffic.cruiser_count(lanes) != circuits * AirTraffic.CIRCUIT_CRAFT + AirTraffic.RINGS * AirTraffic.RING_CRAFT:
-			print("FAIL _test_lanes_per_section: %d cruisers" % AirTraffic.cruiser_count(lanes))
+		# A random number of cruisers a section, at least two a lane.
+		var count := AirTraffic.cruiser_count(lanes)
+		if count < AirTraffic.CRAFT.x or count > AirTraffic.CRAFT.y or lanes.any(func(l: Dictionary) -> bool: return l.craft < 2):
+			print("FAIL _test_lanes_per_section: %d cruisers" % count)
 			return 1
 		# The same plan gives the same lanes.
 		if str(AirTraffic.lanes(plan)) != str(lanes):
@@ -179,4 +183,22 @@ func _test_instance_data_gives_the_same_pose() -> int:
 		if AirTraffic.pose_from_data(data, i, 12.0).origin.distance_to(AirTraffic.pose_from_data(data, i, 3612.0).origin) > 0.05:
 			print("FAIL _test_instance_data_gives_the_same_pose: cruiser %d moved after an hour" % i)
 			return 1
+	return 0
+
+func _test_short_wings() -> int:
+	# A compact sci-fi craft: about 9 m long, wings spanning at most
+	# MAX_SPAN (stubs, not an airliner's).
+	var box := AirTraffic.cruiser_mesh().get_aabb()
+	if box.size.x > AirTraffic.MAX_SPAN or box.size.z < 8.0 or box.size.z > 10.5:
+		print("FAIL _test_short_wings: %.1f m span, %.1f m long" % [box.size.x, box.size.z])
+		return 1
+	return 0
+
+func _test_cruiser_counts_vary() -> int:
+	var counts := {}
+	for plan in _plans:
+		counts[AirTraffic.cruiser_count(AirTraffic.lanes(plan))] = true
+	if counts.size() < 2:
+		print("FAIL _test_cruiser_counts_vary: every section has %s cruisers" % counts.keys())
+		return 1
 	return 0
