@@ -20,6 +20,10 @@ func _initialize():
 	_failures += _test_lakes_are_water_and_connected()
 	_failures += _test_boats_stay_on_the_water()
 	_failures += _test_counts()
+	_failures += _test_piers_from_the_shore_to_the_route()
+	_failures += _test_boats_stop_at_their_pier()
+	_failures += _test_life_on_the_piers()
+	_failures += _test_no_wake()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -80,4 +84,82 @@ func _test_counts() -> int:
 		if boats.size() > LakeBoats.MAX_BOATS or (not lakes.is_empty() and boats.is_empty()):
 			print("FAIL _test_counts: %d boats on %d lakes" % [boats.size(), lakes.size()])
 			return 1
+	return 0
+
+# Plan x is unrolled and may run past the circumference: compare round it.
+func _round_distance(a: Vector2, b: Vector2) -> float:
+	var circumference := TAU * RADIUS
+	var dx := fposmod(a.x - b.x + circumference * 0.5, circumference) - circumference * 0.5
+	return Vector2(dx, a.y - b.y).length()
+
+func _zone(plan, p: Vector2) -> int:
+	return plan.zone_at(floori(p.x / plan.lot_width), floori(p.y / plan.lot_length))
+
+func _test_piers_from_the_shore_to_the_route() -> int:
+	var any := false
+	for plan in _plans:
+		for pier: Dictionary in LakeBoats.piers(plan):
+			any = true
+			var deck: Rect2 = pier.deck
+			var platform: Rect2 = pier.platform
+			# The deck's far end is over water, the platform on flat land.
+			if _zone(plan, pier.end) != SectionPlan.Zone.WATER or _zone(plan, platform.get_center()) == SectionPlan.Zone.WATER or SectionPlan.is_raised(_zone(plan, platform.get_center())):
+				print("FAIL _test_piers_from_the_shore_to_the_route: pier %s on the wrong ground" % pier)
+				return 1
+			if not deck.intersects(platform) or deck.size.x < 10.0 or deck.size.y < 10.0:
+				print("FAIL _test_piers_from_the_shore_to_the_route: deck %s, platform %s" % [deck, platform])
+				return 1
+	if not any:
+		print("FAIL _test_piers_from_the_shore_to_the_route: no piers at all")
+		return 1
+	return 0
+
+func _test_boats_stop_at_their_pier() -> int:
+	for plan in _plans:
+		var piers := LakeBoats.piers(plan)
+		for loop: Dictionary in LakeBoats.routes(plan):
+			if loop.stop < 0.0:
+				continue
+			var p := LoopTraffic.pose(loop, loop.stop).origin
+			var x: float = fposmod(atan2(p.y, p.x), TAU) * RADIUS
+			var at := Vector2(x, p.z + LENGTH * 0.5)
+			var nearest := INF
+			for pier: Dictionary in piers:
+				nearest = minf(nearest, _round_distance(at, pier.end))
+			if nearest > 6.0:
+				print("FAIL _test_boats_stop_at_their_pier: stop %.1f m from the nearest pier's end" % nearest)
+				return 1
+	return 0
+
+func _test_life_on_the_piers() -> int:
+	# People on the platform, carts on the deck and platform, drones above
+	# them: every point within the pier's footprint (plan x, z), at its height.
+	for plan in _plans:
+		for pier: Dictionary in LakeBoats.piers(plan):
+			var footprint: Rect2 = (pier.deck as Rect2).merge(pier.platform).grow(1.0)
+			for part in [["people", LakeBoats.pier_people(plan, pier)], ["carts", LakeBoats.pier_carts(plan, pier)], ["drones", LakeBoats.pier_drones(plan, pier)]]:
+				if (part[1] as Array).is_empty():
+					print("FAIL _test_life_on_the_piers: no %s" % part[0])
+					return 1
+				for loop: Dictionary in part[1]:
+					var s := 0.0
+					while s < LoopTraffic.loop_length(loop):
+						var p := LoopTraffic.pose(loop, s).origin
+						var radius := Vector2(p.x, p.y).length()
+						var at := Vector2(fposmod(atan2(p.y, p.x), TAU) * RADIUS, p.z + LENGTH * 0.5)
+						var height := RADIUS - radius
+						var wanted_height: float = LakeBoats.DECK_HEIGHT if part[0] != "drones" else LakeBoats.DRONE_HEIGHT
+						var inside := footprint.has_point(at) or footprint.has_point(at + Vector2(TAU * RADIUS, 0.0)) or footprint.has_point(at - Vector2(TAU * RADIUS, 0.0))
+						if not inside or absf(height - wanted_height) > 0.05:
+							print("FAIL _test_life_on_the_piers: %s at %s, %.2f m up, outside %s" % [part[0], at, height, footprint])
+							return 1
+						s += 1.0
+	return 0
+
+func _test_no_wake() -> int:
+	# Nothing flat on the water behind the stern (it flickered).
+	var box := LakeBoats.boat_mesh().get_aabb()
+	if box.position.z < -5.5:
+		print("FAIL _test_no_wake: the boat reaches %.1f m behind" % -box.position.z)
+		return 1
 	return 0

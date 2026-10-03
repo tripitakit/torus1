@@ -14,6 +14,8 @@ func _initialize():
 	_failures += _test_reverse_goes_the_other_way()
 	_failures += _test_data_matches_pose()
 	_failures += _test_same_an_hour_later()
+	_failures += _test_stops_at_its_stop_each_lap()
+	_failures += _test_stop_data_matches_pose()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -83,4 +85,50 @@ func _test_same_an_hour_later() -> int:
 		if LoopTraffic.pose_from_data(data, i, 5.0, loops[i].corner).origin.distance_to(LoopTraffic.pose_from_data(data, i, 3605.0, loops[i].corner).origin) > 0.02:
 			print("FAIL _test_same_an_hour_later: loop %d" % i)
 			return 1
+	return 0
+
+func _stopping() -> Dictionary:
+	var loop := LoopTraffic.make_loop(LoopTraffic.CYLINDER, 9000.0, -3000.0, 500.0, 300.0, 30.0, 10.0, 0.0, 2000.0, 11)
+	return LoopTraffic.with_stop(loop, 123.0, 10.0, 17.0)
+
+func _test_stops_at_its_stop_each_lap() -> int:
+	# Over one lap: still at the stop for STOP_DWELL, never jumping, the lap
+	# a whole fraction of an hour.
+	var loop := _stopping()
+	var lap := LoopTraffic.lap_time(loop)
+	if absf(3600.0 / lap - roundf(3600.0 / lap)) > 0.0001:
+		print("FAIL _test_stops_at_its_stop_each_lap: lap of %.3f s" % lap)
+		return 1
+	var stop_point := LoopTraffic.pose(loop, loop.stop).origin
+	var still := 0.0
+	var step := 0.1
+	var last := LoopTraffic.pose_at(loop, 0.0).origin
+	var t := step
+	var top := LoopTraffic.cruise_speed(loop)
+	while t <= lap:
+		var now := LoopTraffic.pose_at(loop, t).origin
+		if now.distance_to(last) > top * step * 1.02 + 0.001:
+			print("FAIL _test_stops_at_its_stop_each_lap: jump %.2f m at %.1f s" % [now.distance_to(last), t])
+			return 1
+		if now.distance_to(stop_point) < 0.001:
+			still += step
+		last = now
+		t += step
+	if absf(still - LoopTraffic.STOP_DWELL) > 0.3 or top < 5.0 or top > 10.0:
+		print("FAIL _test_stops_at_its_stop_each_lap: still %.1f s, cruising at %.1f m/s" % [still, top])
+		return 1
+	return 0
+
+func _test_stop_data_matches_pose() -> int:
+	var loops := [_stopping()]
+	var data := LoopTraffic.instance_buffer(loops)
+	for t in [3.0, 80.0, 400.0]:
+		var expected := LoopTraffic.pose_at(loops[0], t)
+		var got := LoopTraffic.pose_from_data(data, 0, t, loops[0].corner)
+		if got.origin.distance_to(expected.origin) > 0.01:
+			print("FAIL _test_stop_data_matches_pose: %.1f s: %s against %s" % [t, got.origin, expected.origin])
+			return 1
+	if LoopTraffic.pose_from_data(data, 0, 7.0, 30.0).origin.distance_to(LoopTraffic.pose_from_data(data, 0, 3607.0, 30.0).origin) > 0.02:
+		print("FAIL _test_stop_data_matches_pose: moved after an hour")
+		return 1
 	return 0

@@ -9,7 +9,7 @@ const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const SpineTrain = preload("res://scripts/spine_train.gd")
 const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
-const DockCrowd = preload("res://scripts/dock_crowd.gd")
+const TownWalkers = preload("res://scripts/town_walkers.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -50,7 +50,9 @@ func _init():
 	failures += _test_lifts_move()
 	failures += _test_cruisers_and_strobes_in_each_section()
 	failures += _test_boats_on_the_lakes()
-	failures += _test_life_on_every_dock()
+	failures += _test_bridge_docks_stay_clear()
+	failures += _test_piers_with_their_life()
+	failures += _test_walkers_in_the_town_chunks()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -760,14 +762,63 @@ func _test_boats_on_the_lakes() -> int:
 	world.free()
 	return result
 
-func _test_life_on_every_dock() -> int:
+func _test_bridge_docks_stay_clear() -> int:
+	# The craft's dock in the bridge has no crowd (the life is on the lakes'
+	# piers).
 	var world := _make_world()
 	var result := 0
 	for slot in world.get_bridge_slots():
-		for part in [["People", DockCrowd.PEOPLE], ["Carts", DockCrowd.CARTS], ["Drones", DockCrowd.DRONES]]:
-			var node := world.get_node_or_null("Chain/Bridge_%d/Dock/%s" % [slot, part[0]]) as MultiMeshInstance3D
-			if node == null or node.multimesh.instance_count != part[1] or not is_equal_approx(node.visibility_range_end, DockCrowd.VISIBLE_TO):
-				print("FAIL _test_life_on_every_dock: bridge %d %s %s" % [slot, part[0], node])
-				result = 1
+		if world.get_node("Chain/Bridge_%d/Dock" % slot).find_children("*", "MultiMeshInstance3D", true, false).size() > 0:
+			print("FAIL _test_bridge_docks_stay_clear: bridge %d dock has a crowd" % slot)
+			result = 1
+	world.free()
+	return result
+
+func _test_piers_with_their_life() -> int:
+	var world := _make_world()
+	var result := 0
+	for slot in world.get_loaded_section_slots():
+		var plan = world.get_section_plan(slot)
+		var piers := LakeBoats.piers(plan)
+		var people := 0
+		for k in range(piers.size()):
+			var pier := world.get_node_or_null("Chain/Section_%d/Pier_%d" % [slot, k]) as StaticBody3D
+			if pier == null or _box_of(pier) == null:
+				print("FAIL _test_piers_with_their_life: section %d pier %d %s" % [slot, k, pier])
+				world.free()
+				return 1
+			people += LakeBoats.pier_people(plan, piers[k]).size()
+		var crowd := world.get_node_or_null("Chain/Section_%d/PierPeople" % slot) as MultiMeshInstance3D
+		if not piers.is_empty() and (crowd == null or crowd.multimesh.instance_count != people or world.get_node_or_null("Chain/Section_%d/PierCarts" % slot) == null or world.get_node_or_null("Chain/Section_%d/PierDrones" % slot) == null):
+			print("FAIL _test_piers_with_their_life: section %d crowd %s for %d people" % [slot, crowd, people])
+			result = 1
+		# No building left on a pier's land lot.
+		var lots := LakeBoats.pier_lots(plan)
+		for indices in world._sections[slot].groups.values():
+			for b in indices:
+				if lots.has(plan.building_lot[b]):
+					print("FAIL _test_piers_with_their_life: building %d on a pier's lot" % b)
+					world.free()
+					return 1
+	world.free()
+	return result
+
+func _test_walkers_in_the_town_chunks() -> int:
+	var world := _make_world()
+	var result := 0
+	var plan = world.get_section_plan(0)
+	var by_chunk := TownWalkers.loops_by_chunk(plan)
+	if by_chunk.is_empty():
+		print("FAIL _test_walkers_in_the_town_chunks: no walkers")
+		world.free()
+		return 1
+	for key: Vector2i in by_chunk:
+		# On the section's node, not the chunk's: the loop shader reads its data
+		# from the instance basis and needs a frame that is never turned.
+		var node := world.get_node_or_null("Chain/Section_0/Walkers_%02d_%02d" % [key.x, key.y]) as MultiMeshInstance3D
+		if node == null or node.multimesh.instance_count != (by_chunk[key] as Array).size() or not is_equal_approx(node.visibility_range_end, TownWalkers.VISIBLE_TO) or not _world_transform(node).basis.is_equal_approx(Basis()):
+			print("FAIL _test_walkers_in_the_town_chunks: chunk %s %s" % [key, node])
+			result = 1
+			break
 	world.free()
 	return result
