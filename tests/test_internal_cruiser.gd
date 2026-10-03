@@ -4,6 +4,7 @@ const InternalCruiserScript = preload("res://scripts/internal_cruiser.gd")
 const VoidCruiserScript = preload("res://scripts/void_cruiser.gd")
 const InteriorWorldScript = preload("res://scripts/interior_world.gd")
 const SectionLabelScript = preload("res://scripts/section_label.gd")
+const Clock = preload("res://scripts/interior_clock.gd")
 
 func _init():
 	var failures := 0
@@ -70,10 +71,16 @@ func _test_section_id_panel_shows_the_current_section() -> int:
 	cruiser._process(0.0)
 	var slot: int = world.nearest_section_slot(cruiser.position)
 	var expected: String = SectionLabelScript.format_id(world.get_section_ring_index(slot))
-	var label := cruiser.get_node_or_null("Hud/SectionPanel/SectionLabel") as Label
+	var label := cruiser.get_node_or_null("Hud/SectionPanel/Rows/SectionLabel") as Label
 	var result := 0
 	if label == null or label.text != expected:
 		print("FAIL _test_section_id_panel_shows_the_current_section: got '%s', expected '%s'" % [label.text if label != null else "<missing>", expected])
+		result = 1
+	# Under it, that section's time of day.
+	var time_label := cruiser.get_node_or_null("Hud/SectionPanel/Rows/TimeLabel") as Label
+	var hour_text: String = Clock.format(world.hour_at(cruiser.position))
+	if time_label == null or time_label.text != hour_text:
+		print("FAIL _test_section_id_panel_shows_the_current_section: time '%s', expected '%s'" % [time_label.text if time_label != null else "<missing>", hour_text])
 		result = 1
 	world.free()
 	return result

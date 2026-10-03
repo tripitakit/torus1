@@ -3,10 +3,11 @@ extends "res://scripts/flying_craft.gd"
 # The small craft flown inside the station: same controls as the
 # void-cruiser, a shorter thrust ramp (it stops at 10x, about 1 km/s), no
 # gravity, and a minimal HUD: the boresight and motion marker plus the
-# current section's ID.
+# current section's ID and time of day.
 
 const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
 const SectionLabelScript = preload("res://scripts/section_label.gd")
+const Clock = preload("res://scripts/interior_clock.gd")
 const HULL_SIZE := Vector3(4.0, 2.0, 8.0)
 const CAMERA_POSITION := Vector3(0.0, 0.3, -2.0)
 const CAMERA_HFOV := 90.0
@@ -52,7 +53,7 @@ func build_camera() -> void:
 	add_child(camera)
 
 # The boresight, the motion marker (see flight_markers.gd) and, top right,
-# which section of the ring the craft is currently inside of.
+# which section of the ring the craft is currently inside of and its hour.
 func build_hud() -> void:
 	var hud := CanvasLayer.new()
 	hud.name = "Hud"
@@ -75,14 +76,18 @@ func build_hud() -> void:
 	background.set_content_margin_all(HUD_PADDING)
 	panel.add_theme_stylebox_override("panel", background)
 	hud.add_child(panel)
-	var label := Label.new()
-	label.name = "SectionLabel"
+	var rows := VBoxContainer.new()
+	rows.name = "Rows"
+	panel.add_child(rows)
 	var settings := LabelSettings.new()
 	settings.font_size = HUD_FONT_SIZE
 	settings.font_color = HUD_TEXT_COLOR
-	label.label_settings = settings
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	panel.add_child(label)
+	for label_name in ["SectionLabel", "TimeLabel"]:
+		var label := Label.new()
+		label.name = label_name
+		label.label_settings = settings
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		rows.add_child(label)
 
 func _process(_delta: float) -> void:
 	var markers := get_node_or_null("Hud/FlightMarkers") as Control
@@ -94,12 +99,13 @@ func _process(_delta: float) -> void:
 # Only needs this node's own `position` (local to the interior world, the
 # chain's frame), so it works whether or not the craft is in the live tree.
 func _update_section_panel() -> void:
-	var label := get_node_or_null("Hud/SectionPanel/SectionLabel") as Label
+	var label := get_node_or_null("Hud/SectionPanel/Rows/SectionLabel") as Label
 	var interior := get_parent()
 	if label == null or interior == null or not interior.has_method("nearest_section_slot"):
 		return
 	var slot: int = interior.nearest_section_slot(position)
 	label.text = SectionLabelScript.format_id(interior.get_section_ring_index(slot))
+	(get_node("Hud/SectionPanel/Rows/TimeLabel") as Label).text = Clock.format(interior.hour_at(position))
 
 func _physics_process(delta: float) -> void:
 	_fly(delta)

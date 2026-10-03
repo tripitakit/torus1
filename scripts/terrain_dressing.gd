@@ -35,10 +35,19 @@ const FOLD_TOLERANCE := 0.000001
 # One shader for every building (see BUILDING_SHADER): facades only on walls,
 # driven by each instance's colour and custom data (building_custom).
 const BUILDING_GLOW_ENERGY := 1.2
+# Inside the station (use_hour) the windows follow the hour where they stand
+# (interior_hour.gdshaderinc): dimmer by day, brighter by night, and more of
+# them lit in the evening. The moon base keeps the fixed glow_energy.
 const BUILDING_SHADER := """
 shader_type spatial;
 
+#include "res://shaders/interior_hour.gdshaderinc"
+
 uniform float glow_energy = 1.2;
+uniform bool use_hour = false;
+uniform float day_glow = 0.6;
+uniform float night_glow = 2.0;
+uniform float evening_lit = 0.2;
 
 // Filled in vertex(): position in metres in the building's own frame (base
 // centre at the origin), the surface normal after the stretch, and the
@@ -48,6 +57,7 @@ varying vec3 local_normal;
 varying vec4 look;
 varying float half_width;
 varying float height;
+varying float night;
 
 // Warm white, cool white, cyan, amber, magenta.
 const vec3 ACCENTS[5] = vec3[5](
@@ -68,13 +78,14 @@ void vertex() {
 	half_width = 0.25 * (scale.x + scale.z);
 	height = scale.y;
 	look = INSTANCE_CUSTOM;
+	night = use_hour ? interior_night(interior_hour((MODEL_MATRIX * vec4(VERTEX, 1.0)).z)) : 0.0;
 }
 
 void fragment() {
 	vec3 wall = COLOR.rgb;
 	int facade = int(look.x + 0.5);
 	vec3 accent = ACCENTS[clamp(int(look.y + 0.5), 0, 4)];
-	float lit_share = look.z;
+	float lit_share = look.z + evening_lit * night;
 	float seed = look.w;
 	// Metres round the building and up from its base: the same window size
 	// on any shape, and no seams on the round ones.
@@ -120,7 +131,7 @@ void fragment() {
 	ALBEDO = albedo;
 	METALLIC = metal;
 	ROUGHNESS = rough;
-	EMISSION = accent * glow * glow_energy;
+	EMISSION = accent * glow * (use_hour ? mix(day_glow, night_glow, night) : glow_energy);
 }
 """
 const BUILDING_VISIBILITY_END := 12000.0
@@ -422,6 +433,7 @@ func _init() -> void:
 	building_material = ShaderMaterial.new()
 	building_material.shader = shader
 	building_material.set_shader_parameter("glow_energy", BUILDING_GLOW_ENERGY)
+	building_material.set_shader_parameter("use_hour", true)
 	conifer_mesh = TreeShapesScript.conifer()
 	broadleaf_mesh = TreeShapesScript.broadleaf()
 	far_conifer_mesh = TreeShapesScript.far_conifer()
