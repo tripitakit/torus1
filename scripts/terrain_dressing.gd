@@ -95,6 +95,14 @@ void fragment() {
 	float glow = 0.0;
 	float metal = 0.1;
 	float rough = 0.8;
+	// Window cells smaller than a few pixels shimmer as the view moves (it
+	// reads like z-fighting): fade them to the facade's average (detail 0)
+	// from 3 pixels a cell down to 1.5. cell: the pattern's size in metres
+	// (around, up); flat_albedo / flat_glow: its average.
+	vec2 pixel = max(vec2(fwidth(around), fwidth(up)), vec2(1e-4));
+	vec2 cell = vec2(1e6);
+	vec3 flat_albedo = wall;
+	float flat_glow = 0.0;
 	if (abs(local_normal.y) >= 0.5) {
 		// Roofs, ledges and the tops of domes: plain, never windows.
 		albedo = wall * 0.7;
@@ -105,21 +113,30 @@ void fragment() {
 		float lit = step(hash(vec2(floor(around / 8.0), floor(up / period)) + seed), 0.3 + lit_share);
 		albedo = mix(wall, vec3(0.08, 0.1, 0.12), band);
 		glow = band * lit;
+		cell = vec2(1e6, 1.2);
+		flat_albedo = mix(wall, vec3(0.08, 0.1, 0.12), 1.2 / period);
+		flat_glow = 1.2 / period * clamp(0.3 + lit_share, 0.0, 1.0);
 	} else if (facade == 1) {
 		// Sparse square windows, 1.5 m every 6 m across and 4 m up.
-		vec2 cell = vec2(floor(around / 6.0), floor(up / 4.0));
+		vec2 grid = vec2(floor(around / 6.0), floor(up / 4.0));
 		float pane = step(mod(around, 6.0), 1.5) * step(1.5, mod(up, 4.0)) * step(mod(up, 4.0), 3.0) * step(2.0, up);
-		float lit = step(hash(cell + seed), lit_share);
+		float lit = step(hash(grid + seed), lit_share);
 		albedo = mix(wall, vec3(0.08, 0.1, 0.12), pane);
 		glow = pane * lit;
+		cell = vec2(1.5, 1.5);
+		flat_albedo = mix(wall, vec3(0.08, 0.1, 0.12), 0.094);
+		flat_glow = 0.094 * clamp(lit_share, 0.0, 1.0);
 	} else if (facade == 2) {
 		// Dark glass all over, a light here and there.
-		vec2 cell = vec2(floor(around / 3.0), floor(up / 4.0));
+		vec2 grid = vec2(floor(around / 3.0), floor(up / 4.0));
 		float spot = step(0.3, fract(around / 3.0)) * step(fract(around / 3.0), 0.7) * step(0.3, fract(up / 4.0)) * step(fract(up / 4.0), 0.7);
 		albedo = vec3(0.05, 0.07, 0.09) + wall * 0.05;
 		metal = 0.8;
 		rough = 0.15;
-		glow = spot * step(hash(cell + seed), 0.05);
+		glow = spot * step(hash(grid + seed), 0.05);
+		flat_albedo = albedo;
+		flat_glow = 0.16 * 0.05;
+		cell = vec2(1.2, 1.6);
 	} else {
 		// Blind panels with seams, and a thin glowing band under the roof.
 		float seam = max(step(mod(around, 4.0), 0.15), step(mod(up, 4.0), 0.15));
@@ -127,7 +144,14 @@ void fragment() {
 		metal = 0.5;
 		rough = 0.5;
 		glow = step(height - 2.0, up) * step(up, height - 1.4);
+		cell = vec2(0.15, 0.15);
+		flat_albedo = wall * 0.97;
+		flat_glow = glow;
 	}
+	float pixels = min(cell.x / pixel.x, cell.y / pixel.y);
+	float detail = smoothstep(1.5, 3.0, pixels);
+	albedo = mix(flat_albedo, albedo, detail);
+	glow = mix(flat_glow, glow, detail);
 	ALBEDO = albedo;
 	METALLIC = metal;
 	ROUGHNESS = rough;

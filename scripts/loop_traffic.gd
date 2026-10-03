@@ -10,16 +10,21 @@ extends RefCounted
 # - CYLINDER: on the inside of a cylinder of radius `level` round the Z
 #   axis, x being the arc there (a lake on the section's ground).
 # The GPU reads each loop from its instance basis (9 full-precision floats:
-# (x0, z0, width), (height, phase, laps), (id, level, mode)); the node only
+# (x0, z0, width), (height, phase, laps), (stop or -1, level, mode)); with a
+# stop, phase is in seconds into the lap, else in metres. The node only
 # ever moves by translation, which comes through MODEL_MATRIX[3]. pose and
 # pose_from_data are the GDScript copies (tests).
 
 enum { FLAT, CYLINDER }
 
 const INSTANCE_FLOATS := 20
+# A loop with a stop: brakes into it at STOP_ACCEL, waits STOP_DWELL, pulls
+# away; the lap a whole fraction of an hour.
+const STOP_DWELL := 20.0
+const STOP_ACCEL := 0.5
 
 static func make_loop(mode: int, x0: float, z0: float, width: float, height: float, corner: float, speed: float, phase_share: float, level: float, id: int) -> Dictionary:
-	var loop := {"mode": mode, "x0": x0, "z0": z0, "w": width, "h": height, "corner": corner, "level": level, "id": id, "laps": 1, "phase": 0.0}
+	var loop := {"mode": mode, "x0": x0, "z0": z0, "w": width, "h": height, "corner": corner, "level": level, "id": id, "laps": 1, "phase": 0.0, "stop": -1.0}
 	var length := loop_length(loop)
 	loop.laps = maxi(1, roundi(speed * 3600.0 / length))
 	loop.phase = phase_share * length
@@ -31,7 +36,48 @@ static func loop_length(loop: Dictionary) -> float:
 
 static func pose_s(loop: Dictionary, t: float) -> float:
 	var length := loop_length(loop)
+	if loop.stop >= 0.0:
+		var u := stop_progress(fposmod(loop.phase + t, lap_time(loop)), length, cruise_speed(loop), lap_time(loop))
+		return fposmod(loop.stop + (u if loop.laps >= 0 else -u), length)
 	return fposmod(loop.phase + length * loop.laps / 3600.0 * t, length)
+
+# Gives the loop a stop `stop_s` metres round: about `speed` between stops,
+# `phase_time` seconds into its lap at t = 0 (the lap starts pulling away).
+static func with_stop(loop: Dictionary, stop_s: float, speed: float, phase_time: float) -> Dictionary:
+	var length := loop_length(loop)
+	var wanted := length / speed + speed / STOP_ACCEL + STOP_DWELL
+	var laps := maxi(1, floori(3600.0 / wanted))
+	loop.laps = laps if loop.laps >= 0 else -laps
+	loop.stop = stop_s
+	loop.phase = phase_time
+	return loop
+
+static func lap_time(loop: Dictionary) -> float:
+	return 3600.0 / absi(loop.laps)
+
+# The cruising speed that makes a lap with its stop last lap_time:
+# length / v + v / a + dwell = lap (the slower root).
+static func cruise_speed(loop: Dictionary) -> float:
+	return _cruise(loop_length(loop), lap_time(loop))
+
+static func _cruise(length: float, lap: float) -> float:
+	var free := lap - STOP_DWELL
+	return STOP_ACCEL * 0.5 * (free - sqrt(maxf(free * free - 4.0 * length / STOP_ACCEL, 0.0)))
+
+# Metres from the stop `tau` seconds into a lap: pull away, cruise, brake
+# into the stop at `length`, wait.
+static func stop_progress(tau: float, length: float, v: float, lap: float) -> float:
+	var ramp := v / STOP_ACCEL
+	var ramp_distance := 0.5 * v * ramp
+	if tau < ramp:
+		return 0.5 * STOP_ACCEL * tau * tau
+	var arrive := ramp + (length - 2.0 * ramp_distance) / v + ramp
+	if tau < arrive - ramp:
+		return ramp_distance + v * (tau - ramp)
+	if tau < arrive:
+		var left := arrive - tau
+		return length - 0.5 * STOP_ACCEL * left * left
+	return length
 
 static func pose_at(loop: Dictionary, t: float) -> Transform3D:
 	return pose(loop, pose_s(loop, t))
@@ -80,7 +126,7 @@ static func instance_buffer(loops: Array, paints: Array = []) -> PackedFloat32Ar
 	for loop: Dictionary in loops:
 		var c0 := Vector3(loop.x0, loop.z0, loop.w)
 		var c1 := Vector3(loop.h, loop.phase, loop.laps)
-		var c2 := Vector3(loop.id, loop.level, loop.mode)
+		var c2 := Vector3(loop.stop, loop.level, loop.mode)
 		var paint: Color = paints[posmod(hash(loop.id), paints.size())] if not paints.is_empty() else Color.WHITE
 		data.append_array([c0.x, c1.x, c2.x, 0.0, c0.y, c1.y, c2.y, 0.0, c0.z, c1.z, c2.z, 0.0,
 			paint.r, paint.g, paint.b, fposmod(loop.id * 0.618034, 1.0), 0.0, 0.0, 0.0, 0.0])
@@ -90,7 +136,7 @@ static func instance_buffer(loops: Array, paints: Array = []) -> PackedFloat32Ar
 static func pose_from_data(data: PackedFloat32Array, i: int, time: float, corner: float) -> Transform3D:
 	var b := i * INSTANCE_FLOATS
 	var loop := {"x0": data[b], "z0": data[b + 4], "w": data[b + 8], "h": data[b + 1], "phase": data[b + 5], "laps": roundi(data[b + 9]),
-		"id": roundi(data[b + 2]), "level": data[b + 6], "mode": roundi(data[b + 10]), "corner": corner}
+		"stop": data[b + 2], "level": data[b + 6], "mode": roundi(data[b + 10]), "corner": corner, "id": 0}
 	return pose_at(loop, time)
 
 # The loop and pose above in GLSL (keep the two in step).
@@ -98,6 +144,8 @@ const LOOP_GLSL := """
 #include "res://shaders/interior_hour.gdshaderinc"
 
 uniform float corner = 4.0;
+uniform float stop_dwell = 20.0;
+uniform float stop_accel = 0.5;
 
 void loop_pose(mat4 model, float time, out vec3 pos, out vec3 left, out vec3 up, out vec3 forward) {
 	vec3 c0 = model[0].xyz;
@@ -110,6 +158,25 @@ void loop_pose(mat4 model, float time, out vec3 pos, out vec3 left, out vec3 up,
 	float quarter = 1.5707963 * c;
 	float len = 2.0 * a + 2.0 * b + TAU * c;
 	float s = mod(c1.y + len * c1.z / 3600.0 * time, len);
+	if (c2.x >= 0.0) {
+		// With a stop: pull away, cruise, brake, wait (LoopTraffic.stop_progress).
+		float lap = 3600.0 / abs(c1.z);
+		float free = lap - stop_dwell;
+		float v = stop_accel * 0.5 * (free - sqrt(max(free * free - 4.0 * len / stop_accel, 0.0)));
+		float ramp = v / stop_accel;
+		float ramp_distance = 0.5 * v * ramp;
+		float tau = mod(c1.y + time, lap);
+		float arrive = 2.0 * ramp + (len - 2.0 * ramp_distance) / v;
+		float u = len;
+		if (tau < ramp) {
+			u = 0.5 * stop_accel * tau * tau;
+		} else if (tau < arrive - ramp) {
+			u = ramp_distance + v * (tau - ramp);
+		} else if (tau < arrive) {
+			u = len - 0.5 * stop_accel * (arrive - tau) * (arrive - tau);
+		}
+		s = mod(c2.x + (c1.z >= 0.0 ? u : -u), len);
+	}
 	vec2 p = vec2(x0 + c, z0);
 	vec2 heading = vec2(1.0, 0.0);
 	vec2 starts[4] = vec2[4](vec2(x0 + c, z0), vec2(x0 + w, z0 + c), vec2(x0 + w - c, z0 + h), vec2(x0, z0 + h - c));
@@ -156,6 +223,8 @@ render_mode unshaded, skip_vertex_transform;
 uniform vec3 accent : source_color = vec3(0.3, 0.9, 1.0);
 uniform float bob = 0.0;
 uniform float bob_rate = 2.0;
+// This share of them (by id) is gone by night.
+uniform float night_hide = 0.0;
 
 varying float part;
 varying float shade;
@@ -171,7 +240,7 @@ void vertex() {
 	vec3 normal = normalize(left * NORMAL.x + up * NORMAL.y + forward * NORMAL.z);
 	night = interior_night(interior_hour(world.z));
 	shade = mix(1.0, 0.3, night) * (0.6 + 0.4 * max(dot(normal, up), 0.0));
-	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+	VERTEX = fract(COLOR.a * 13.7) < night * night_hide ? vec3(0.0) : (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	NORMAL = mat3(VIEW_MATRIX) * normal;
 	part = UV.x;
 	paint = COLOR.rgb;
@@ -195,7 +264,7 @@ void fragment() {
 }
 """
 
-static func material(corner_radius: float, accent: Color, bob: float = 0.0, bob_rate: float = 2.0) -> ShaderMaterial:
+static func material(corner_radius: float, accent: Color, bob: float = 0.0, bob_rate: float = 2.0, night_hide: float = 0.0) -> ShaderMaterial:
 	var shader_material := ShaderMaterial.new()
 	shader_material.shader = Shader.new()
 	shader_material.shader.code = LOOP_SHADER % LOOP_GLSL
@@ -203,6 +272,7 @@ static func material(corner_radius: float, accent: Color, bob: float = 0.0, bob_
 	shader_material.set_shader_parameter("accent", accent)
 	shader_material.set_shader_parameter("bob", bob)
 	shader_material.set_shader_parameter("bob_rate", bob_rate)
+	shader_material.set_shader_parameter("night_hide", night_hide)
 	return shader_material
 
 static func multimesh_instance(node_name: String, data: PackedFloat32Array, mesh: Mesh, shader_material: Material, bounds: AABB) -> MultiMeshInstance3D:

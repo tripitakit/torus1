@@ -58,3 +58,30 @@ Tutti `unshaded`, illuminati dall'ora come le altre strutture dell'interno.
 - **Misure FPS** (A/B nella stessa sessione, 5 s per inquadratura): attracco 207–208 senza barche e attracco
   animato, 203–207 con; volo basso 137–138 contro 137–139; dall'alto 141–144 contro 143–146. Nessuna
   differenza oltre il rumore.
+
+## Correzioni dopo la prova in gioco (richieste dell'utente)
+
+- **Dock dei ponti vuoto**: persone, carrelli e droni non stanno lì. "Attracco" voleva dire il molo delle barche.
+- **Moli sui laghi**: per ogni lago con barche, sul lato del rettangolo navigabile, nel lotto di terra piana più
+  vicino al centro del lato, c'è un pontile largo 12 m. Va dalla riva (2 m sulla terra) fino a 3 m dalla rotta,
+  a 2 m sull'acqua. Sulla terra c'è una piattaforma di carico di 24 × 24 m, e gli edifici del lotto vengono
+  tolti. Pontile e piattaforma hanno collisione.
+- **Sosta delle barche**: a ogni giro si fermano 20 s alla punta del pontile, con frenata e ripartenza a
+  0,5 m/s². È una funzione generale degli anelli (`LoopTraffic.with_stop`): la velocità di crociera è scelta
+  perché il giro duri esattamente 3600 / n secondi. Le barche dello stesso lago sono sfasate di una frazione del
+  giro.
+- **Vita sul molo**: 8 persone sulla piattaforma, 2 carrelli che fanno la spola lungo il pontile, 2 droni che
+  volano fra la piattaforma e la punta del pontile (a 15 m).
+- **Scia tolta**: il triangolo piatto sull'acqua faceva z-fighting con la superficie, cioè appariva e spariva.
+- **Pedoni nei paesi e nella città** (`town_walkers.gd`): 10–20 per lotto su anelli a piedi sparsi a caso negli
+  spazi aperti, ad almeno 2 m dagli edifici e fuori dalle strade; di notte metà spariscono.
+  - Stanno sul nodo della sezione, un MultiMesh per pezzo di terreno, visibili entro 500 m.
+  - Non possono stare nel nodo del pezzo, perché quello è ruotato e lo shader degli anelli vuole un nodo
+    solo traslato.
+- **Finestre che "sfarfallano"**: nessuna faccia doppia negli edifici e nessun edificio sovrapposto (verificato
+  sulle sezioni 1, 2, 5 e 11). La causa più probabile sono le celle delle finestre più piccole di un pixel, che
+  brulicano quando ci si muove. Lo shader ora sfuma il disegno verso la media della facciata fra 3 e 1,5
+  pixel per cella (`fwidth`).
+- **Tempo di costruzione all'attracco**: 2,77 s (limite del test 3 s).
+- **FPS** (A/B nella stessa sessione): volo basso 116–124 senza pedoni, moli e barche, 115–122 con; dall'alto
+  123–130 contro 127–134. Nessuna differenza oltre il rumore.

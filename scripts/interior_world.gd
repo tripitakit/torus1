@@ -17,6 +17,7 @@ const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
+const TownWalkers = preload("res://scripts/town_walkers.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -139,6 +140,11 @@ class SectionLoad:
 	var air := PackedFloat32Array()
 	# The boats on the lakes (LakeBoats.routes as LoopTraffic data).
 	var boats := PackedFloat32Array()
+	# The lakes' piers (LakeBoats.piers) and the life on them, and the town
+	# walkers by chunk (LoopTraffic data).
+	var piers := []
+	var pier_life := []
+	var walkers := {}
 	var trains := []
 	var lifts := []
 	var task_id := -1
@@ -157,6 +163,19 @@ class SectionLoad:
 		station_zs = SpineTrain.station_z(plan)
 		air = AirTraffic.instance_buffer(AirTraffic.lanes(plan), plan)
 		boats = LoopTraffic.instance_buffer(LakeBoats.routes(plan), LakeBoats.PAINTS)
+		LakeBoats.drop_pier_buildings(plan, groups)
+		piers = LakeBoats.piers(plan)
+		var people := []
+		var carts := []
+		var drones := []
+		for pier: Dictionary in piers:
+			people.append_array(LakeBoats.pier_people(plan, pier))
+			carts.append_array(LakeBoats.pier_carts(plan, pier))
+			drones.append_array(LakeBoats.pier_drones(plan, pier))
+		pier_life = [LoopTraffic.instance_buffer(people, DockCrowd.SUITS), LoopTraffic.instance_buffer(carts, DockCrowd.CART_PAINTS), LoopTraffic.instance_buffer(drones, DockCrowd.DRONE_PAINTS)]
+		var by_chunk := TownWalkers.loops_by_chunk(plan)
+		for key: Vector2i in by_chunk:
+			walkers[key] = LoopTraffic.instance_buffer(by_chunk[key], DockCrowd.SUITS)
 		SpineTrain.drop_station_buildings(plan, groups)
 		traffic = RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
 		far_traffic = RoadTraffic.section_buffer(plan, traffic)
@@ -207,6 +226,7 @@ var _boat_mesh: ArrayMesh
 var _boat_material: ShaderMaterial
 var _person_mesh: ArrayMesh
 var _person_material: ShaderMaterial
+var _walker_material: ShaderMaterial
 var _cart_mesh: ArrayMesh
 var _cart_material: ShaderMaterial
 var _drone_mesh: ArrayMesh
@@ -258,11 +278,12 @@ func build() -> void:
 	_boat_mesh = LakeBoats.boat_mesh()
 	_boat_material = LoopTraffic.material(LakeBoats.CORNER, ACCENT_COLOR, 0.08, 1.5)
 	_person_mesh = DockCrowd.person_mesh()
-	_person_material = LoopTraffic.material(DockCrowd.PEOPLE_CORNER, ACCENT_COLOR, 0.06, 7.0)
+	_person_material = LoopTraffic.material(LakeBoats.PEOPLE_CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
+	_walker_material = LoopTraffic.material(TownWalkers.CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
 	_cart_mesh = DockCrowd.cart_mesh()
-	_cart_material = LoopTraffic.material(DockCrowd.CART_CORNER, ACCENT_COLOR)
+	_cart_material = LoopTraffic.material(LakeBoats.CART_CORNER, ACCENT_COLOR)
 	_drone_mesh = DockCrowd.drone_mesh()
-	_drone_material = LoopTraffic.material(DockCrowd.DRONE_RADIUS, ACCENT_COLOR, 0.3, 1.2)
+	_drone_material = LoopTraffic.material(LakeBoats.DRONE_CORNER, ACCENT_COLOR, 0.3, 1.2)
 	_chain = Node3D.new()
 	_chain.name = "Chain"
 	add_child(_chain)
@@ -496,6 +517,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 		var lake_bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
 		state.node.add_child(LoopTraffic.multimesh_instance("Boats", state.boats, _boat_mesh, _boat_material, lake_bounds))
 		state.boats = PackedFloat32Array()
+	_build_piers(state)
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []
@@ -586,6 +608,14 @@ func _build_chunk(state: SectionLoad, around: int, along: int) -> void:
 	var ground_slot: GroundSlot = state.grounds[along * CHUNKS_AROUND + around]
 	_dressing.dress_chunk(chunk, state.plan, around, along, state.groups.get(Vector2i(around, along), []), ground_slot.ground)
 	ground_slot.ground = []
+	# The chunk's walkers hang on the section's node (never turned: the loop
+	# shader reads its data from the instance basis), bounded like the chunk.
+	var walkers: PackedFloat32Array = state.walkers.get(Vector2i(around, along), PackedFloat32Array())
+	if not walkers.is_empty():
+		var bounds: AABB = chunk.transform * _dressing._chunk_bounds(state.plan, 3.0)
+		var crowd := LoopTraffic.multimesh_instance("Walkers_%02d_%02d" % [around, along], walkers, _person_mesh, _walker_material, bounds)
+		crowd.visibility_range_end = TownWalkers.VISIBLE_TO
+		state.node.add_child(crowd)
 	var cars: PackedFloat32Array = state.traffic.get(Vector2i(around, along), PackedFloat32Array())
 	if not cars.is_empty():
 		var traffic := RoadTraffic.multimesh_instance("Traffic", cars, _car_mesh, _car_material, _dressing._chunk_bounds(state.plan, 3.0))
@@ -640,7 +670,7 @@ func _build_bridge(slot: int) -> Node3D:
 		segment.position = Vector3(0.0, 0.0, -bridge_length * 0.5 + k * segment_length)
 		_add_mesh_and_collision(segment, _tube_mesh, _tube_shape, _tube_material)
 		bridge.add_child(segment)
-	bridge.add_child(_build_dock(get_bridge_ring_index(slot)))
+	bridge.add_child(_build_dock())
 	bridge.add_child(_build_spine(bridge_length))
 	return bridge
 
@@ -749,10 +779,9 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 		state.trains.append(train)
 	update_trains(game_seconds())
 
-func _build_dock(ring_index: int) -> Node3D:
+func _build_dock() -> Node3D:
 	var dock := Node3D.new()
 	dock.name = "Dock"
-	_add_dock_life(dock, ring_index)
 
 	var platform := StaticBody3D.new()
 	platform.name = "Platform"
@@ -787,18 +816,33 @@ func _build_dock(ring_index: int) -> Node3D:
 	dock.add_child(undock_sign)
 	return dock
 
-# People walking round the platform, carts round its edge, drones above its
-# corners (DockCrowd), drawn only near.
-func _add_dock_life(dock: Node3D, ring_index: int) -> void:
-	var top: float = _platform_position().y + DOCK_PLATFORM_SIZE.y * 0.5
-	var bounds := AABB(Vector3(-35.0, top - 2.0, -35.0), Vector3(70.0, 35.0, 70.0))
-	var parts := [["People", DockCrowd.people(top, ring_index), DockCrowd.SUITS, _person_mesh, _person_material],
-		["Carts", DockCrowd.carts(top), DockCrowd.CART_PAINTS, _cart_mesh, _cart_material],
-		["Drones", DockCrowd.drones(top, ring_index), DockCrowd.DRONE_PAINTS, _drone_mesh, _drone_material]]
-	for part in parts:
-		var node := LoopTraffic.multimesh_instance(part[0], LoopTraffic.instance_buffer(part[1], part[2]), part[3], part[4], bounds)
-		node.visibility_range_end = DockCrowd.VISIBLE_TO
-		dock.add_child(node)
+# Each lake pier (deck and loading platform, solid) and, for the whole
+# section, the people, carts and drones on the piers.
+func _build_piers(state: SectionLoad) -> void:
+	var plan = state.plan
+	for k in range(state.piers.size()):
+		var pier: Dictionary = state.piers[k]
+		var body := StaticBody3D.new()
+		body.name = "Pier_%d" % k
+		for part in [["Deck", pier.deck, 1.0], ["Platform", pier.platform, LakeBoats.DECK_HEIGHT]]:
+			var r: Rect2 = part[1]
+			var thick: float = part[2]
+			var centre := r.get_center()
+			var frame := SpineTrain.spine_frame(centre.x / section_radius, section_radius - LakeBoats.DECK_HEIGHT + thick * 0.5, centre.y - section_length * 0.5)
+			var size := Vector3(r.size.x, thick, r.size.y)
+			var mesh := _structure_mesh(part[0], LakeBoats.pier_mesh(size), _station_material)
+			mesh.transform = frame
+			body.add_child(mesh)
+			_add_box(body, size, Vector3.ZERO)
+			(body.get_child(body.get_child_count() - 1) as Node3D).transform = frame
+		state.node.add_child(body)
+	if state.piers.is_empty():
+		return
+	var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
+	var parts := [["PierPeople", _person_mesh, _person_material], ["PierCarts", _cart_mesh, _cart_material], ["PierDrones", _drone_mesh, _drone_material]]
+	for k in range(parts.size()):
+		state.node.add_child(LoopTraffic.multimesh_instance(parts[k][0], state.pier_life[k], parts[k][1], parts[k][2], bounds))
+	state.pier_life = []
 
 # The interior panels in `dir` (color, roughness, normal, emission).
 func _panel_material(dir: String) -> StandardMaterial3D:

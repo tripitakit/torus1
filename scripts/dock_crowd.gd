@@ -1,65 +1,16 @@
 extends RefCounted
 
-# Life on a dock platform (60 x 60 m, its top at `top` in the dock's frame):
-# people walking round square loops between PEOPLE_BAND, clear of the
-# landing square (LANDING_HALF either way of the middle) where the craft
-# sets down; service carts round the edge; cargo drones circling above the
-# corners. LoopTraffic loops, FLAT; nothing collides (nothing may get in the
-# way of a docking).
+# The little people and service machines of the interior (town walkers, the
+# lakes' piers): low-poly shapes and their paints. UV.x parts as
+# LoopTraffic's shader reads them.
 
-const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const SpineTrain = preload("res://scripts/spine_train.gd")
 
-const LANDING_HALF := 12.0
-const PEOPLE := 24
-const PEOPLE_BAND := Vector2(14.0, 25.0)
-const PEOPLE_CORNER := 2.0
-const WALK_SPEEDS := Vector2(1.2, 1.6)
-const CARTS := 3
-const CART_HALF := 28.5
-const CART_CORNER := 5.0
-const CART_SPEED := 5.0
-const DRONES := 4
-const DRONE_RADIUS := 8.0
-const DRONE_CENTRE := 21.0
-const DRONE_HEIGHTS := Vector2(12.0, 25.0)
-const DRONE_SPEED := 3.0
-# Overalls: white, orange, cyan, grey.
+# Overalls and clothes: white, orange, cyan, grey.
 const SUITS := [Color(0.92, 0.93, 0.95), Color(1.0, 0.5, 0.12), Color(0.3, 0.85, 0.95), Color(0.55, 0.57, 0.6)]
 const CART_PAINTS := [Color(1.0, 0.75, 0.15), Color(0.92, 0.93, 0.95)]
 const DRONE_PAINTS := [Color(0.3, 0.32, 0.35), Color(0.92, 0.93, 0.95)]
-# The crowd shows up to this far (it is small).
-const VISIBLE_TO := 600.0
-
-static func people(top: float, seed: int) -> Array:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([seed, "people"])
-	var found := []
-	for k in range(PEOPLE):
-		var half := rng.randf_range(PEOPLE_BAND.x, PEOPLE_BAND.y)
-		var loop := LoopTraffic.make_loop(LoopTraffic.FLAT, -half, -half, 2.0 * half, 2.0 * half, PEOPLE_CORNER, rng.randf_range(WALK_SPEEDS.x, WALK_SPEEDS.y), rng.randf(), top, seed * 100 + k)
-		if rng.randf() < 0.5:
-			loop.laps = -loop.laps
-		found.append(loop)
-	return found
-
-static func carts(top: float) -> Array:
-	var found := []
-	for k in range(CARTS):
-		found.append(LoopTraffic.make_loop(LoopTraffic.FLAT, -CART_HALF, -CART_HALF, 2.0 * CART_HALF, 2.0 * CART_HALF, CART_CORNER, CART_SPEED, float(k) / CARTS, top, k))
-	return found
-
-static func drones(top: float, seed: int) -> Array:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([seed, "drones"])
-	var found := []
-	for k in range(DRONES):
-		var centre := Vector2(DRONE_CENTRE if k % 2 == 0 else -DRONE_CENTRE, DRONE_CENTRE if k < 2 else -DRONE_CENTRE)
-		var height := rng.randf_range(DRONE_HEIGHTS.x, DRONE_HEIGHTS.y)
-		var loop := LoopTraffic.make_loop(LoopTraffic.FLAT, centre.x - DRONE_RADIUS, centre.y - DRONE_RADIUS, 2.0 * DRONE_RADIUS, 2.0 * DRONE_RADIUS, DRONE_RADIUS, DRONE_SPEED, rng.randf(), top + height, seed * 10 + k)
-		found.append(loop)
-	return found
 
 # A low-poly worker 1.8 m tall standing on y = 0, facing +Z: dark legs,
 # overall-coloured body and helmet, a glowing visor.
