@@ -13,6 +13,7 @@ const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 const Clock = preload("res://scripts/interior_clock.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const SpineTrain = preload("res://scripts/spine_train.gd")
+const AirTraffic = preload("res://scripts/air_traffic.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -131,6 +132,8 @@ class SectionLoad:
 	# The two stations' plan z (SpineTrain.station_z), the trains (AHEAD,
 	# BACK) and the lifts: [cabin, foot point, up, run length, phase].
 	var station_zs := []
+	# The cruisers' lanes in the air (AirTraffic.lanes), made with the plan.
+	var air := PackedFloat32Array()
 	var trains := []
 	var lifts := []
 	var task_id := -1
@@ -147,6 +150,7 @@ class SectionLoad:
 		plan = SectionGeneratorScript.generate(ring_index, radius, length)
 		groups = plan.group_buildings_by_chunk()
 		station_zs = SpineTrain.station_z(plan)
+		air = AirTraffic.instance_buffer(AirTraffic.lanes(plan), plan)
 		SpineTrain.drop_station_buildings(plan, groups)
 		traffic = RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
 		far_traffic = RoadTraffic.section_buffer(plan, traffic)
@@ -189,6 +193,10 @@ var _ring_mesh: ArrayMesh
 var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
+var _cruiser_mesh: ArrayMesh
+var _cruiser_material: ShaderMaterial
+var _strobe_mesh: QuadMesh
+var _strobe_material: ShaderMaterial
 var _sections := {}
 var _bridges := {}
 # 0..24 forces section 0's hour (tests and probes); below 0 the clock runs.
@@ -229,6 +237,10 @@ func build() -> void:
 	_hall_mesh = SpineTrain.hall_mesh()
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
+	_cruiser_mesh = AirTraffic.cruiser_mesh()
+	_cruiser_material = AirTraffic.cruiser_material()
+	_strobe_mesh = AirTraffic.strobe_mesh()
+	_strobe_material = AirTraffic.strobe_material()
 	_chain = Node3D.new()
 	_chain.name = "Chain"
 	add_child(_chain)
@@ -452,6 +464,12 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 		var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
 		state.node.add_child(RoadTraffic.multimesh_instance("TrafficFar", state.far_traffic, _dot_mesh, _dot_material, bounds))
 		state.far_traffic = PackedFloat32Array()
+	# The cruisers and their strobes: the shader flies them (AirTraffic).
+	if not state.air.is_empty():
+		var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
+		state.node.add_child(AirTraffic.multimesh_instance("AirTraffic", state.air, _cruiser_mesh, _cruiser_material, bounds))
+		state.node.add_child(AirTraffic.multimesh_instance("AirLights", state.air, _strobe_mesh, _strobe_material, bounds))
+		state.air = PackedFloat32Array()
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []

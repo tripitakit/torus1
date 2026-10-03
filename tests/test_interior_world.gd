@@ -7,6 +7,7 @@ const Clock = preload("res://scripts/interior_clock.gd")
 const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const SpineTrain = preload("res://scripts/spine_train.gd")
+const AirTraffic = preload("res://scripts/air_traffic.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -45,6 +46,7 @@ func _init():
 	failures += _test_stations_with_pylons_from_the_ground()
 	failures += _test_trains_where_the_timetable_says()
 	failures += _test_lifts_move()
+	failures += _test_cruisers_and_strobes_in_each_section()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -721,5 +723,18 @@ func _test_lifts_move() -> int:
 	if a.distance_to(lift.position) < 100.0:
 		print("FAIL _test_lifts_move: moved %.1f m in 30 s" % a.distance_to(lift.position))
 		result = 1
+	world.free()
+	return result
+
+func _test_cruisers_and_strobes_in_each_section() -> int:
+	var world := _make_world()
+	var result := 0
+	for slot in world.get_loaded_section_slots():
+		var count := AirTraffic.cruiser_count(AirTraffic.lanes(world.get_section_plan(slot)))
+		for node_name in ["AirTraffic", "AirLights"]:
+			var node := world.get_node_or_null("Chain/Section_%d/%s" % [slot, node_name]) as MultiMeshInstance3D
+			if node == null or node.multimesh.instance_count != count or count < 60 or not node.custom_aabb.has_volume():
+				print("FAIL _test_cruisers_and_strobes_in_each_section: section %d %s %s (%d cruisers)" % [slot, node_name, node, count])
+				result = 1
 	world.free()
 	return result
