@@ -8,6 +8,8 @@ const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const SpineTrain = preload("res://scripts/spine_train.gd")
 const AirTraffic = preload("res://scripts/air_traffic.gd")
+const LakeBoats = preload("res://scripts/lake_boats.gd")
+const DockCrowd = preload("res://scripts/dock_crowd.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -47,6 +49,8 @@ func _init():
 	failures += _test_trains_where_the_timetable_says()
 	failures += _test_lifts_move()
 	failures += _test_cruisers_and_strobes_in_each_section()
+	failures += _test_boats_on_the_lakes()
+	failures += _test_life_on_every_dock()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -735,6 +739,35 @@ func _test_cruisers_and_strobes_in_each_section() -> int:
 			var node := world.get_node_or_null("Chain/Section_%d/%s" % [slot, node_name]) as MultiMeshInstance3D
 			if node == null or node.multimesh.instance_count != count or count < AirTraffic.CRAFT.x or not node.custom_aabb.has_volume():
 				print("FAIL _test_cruisers_and_strobes_in_each_section: section %d %s %s (%d cruisers)" % [slot, node_name, node, count])
+				result = 1
+	world.free()
+	return result
+
+func _test_boats_on_the_lakes() -> int:
+	var world := _make_world()
+	var result := 0
+	var seen := 0
+	for slot in world.get_loaded_section_slots():
+		var count := LakeBoats.routes(world.get_section_plan(slot)).size()
+		var node := world.get_node_or_null("Chain/Section_%d/Boats" % slot) as MultiMeshInstance3D
+		seen += count
+		if (count > 0 and (node == null or node.multimesh.instance_count != count)) or (count == 0 and node != null):
+			print("FAIL _test_boats_on_the_lakes: section %d %s for %d boats" % [slot, node, count])
+			result = 1
+	if seen == 0:
+		print("FAIL _test_boats_on_the_lakes: no boats at all")
+		result = 1
+	world.free()
+	return result
+
+func _test_life_on_every_dock() -> int:
+	var world := _make_world()
+	var result := 0
+	for slot in world.get_bridge_slots():
+		for part in [["People", DockCrowd.PEOPLE], ["Carts", DockCrowd.CARTS], ["Drones", DockCrowd.DRONES]]:
+			var node := world.get_node_or_null("Chain/Bridge_%d/Dock/%s" % [slot, part[0]]) as MultiMeshInstance3D
+			if node == null or node.multimesh.instance_count != part[1] or not is_equal_approx(node.visibility_range_end, DockCrowd.VISIBLE_TO):
+				print("FAIL _test_life_on_every_dock: bridge %d %s %s" % [slot, part[0], node])
 				result = 1
 	world.free()
 	return result
