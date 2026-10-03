@@ -26,8 +26,10 @@ enum { CIRCUIT, RING }
 
 const CIRCUITS := 6
 const RINGS := 4
-const CIRCUIT_CRAFT := 8
-const RING_CRAFT := 12
+# How many cruisers a section (random, from the section's number), shared
+# out over its lanes by length, at least MIN_PER_LANE each.
+const CRAFT := Vector2i(30, 60)
+const MIN_PER_LANE := 2
 const TURN_RADIUS := 80.0
 const BANK := PI / 6.0
 const CLEARANCE := 350.0
@@ -43,6 +45,8 @@ const RING_SPEEDS := Vector2(60.0, 80.0)
 const SAMPLE_STEP := 25.0
 # Per cruiser in a CPU buffer (tests): 12 of transform, 4 of colour.
 const FLOATS := 16
+# Widest the cruiser may be across its wings.
+const MAX_SPAN := 5.5
 
 # The section's lanes. Pure: safe on a worker thread.
 static func lanes(plan) -> Array:
@@ -69,7 +73,7 @@ static func lanes(plan) -> Array:
 				continue
 			lane.r = plan.radius - (ground + CLEARANCE + lift)
 			highest = maxf(highest, ground + CLEARANCE + lift)
-			found.append(_crew(lane, CIRCUIT_CRAFT, CIRCUIT_SPEEDS, rng))
+			found.append(_crew(lane, CIRCUIT_SPEEDS, rng))
 			break
 	# Rings: z spread along the section, clear of the stations and of high
 	# ground all round, above every circuit.
@@ -89,12 +93,36 @@ static func lanes(plan) -> Array:
 				continue
 			lane.r = plan.radius - (maxf(ground + CLEARANCE, highest + RING_ABOVE) + lift)
 			ring_zs.append(z)
-			found.append(_crew(lane, RING_CRAFT, RING_SPEEDS, rng))
+			found.append(_crew(lane, RING_SPEEDS, rng))
 			break
+	_share_out(found, rng.randi_range(CRAFT.x, CRAFT.y))
 	return found
 
-static func _crew(lane: Dictionary, craft: int, speeds: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	lane.craft = craft
+# Gives each lane its share of `total` cruisers by length (at least
+# MIN_PER_LANE), the rounding settled on the longest lanes.
+static func _share_out(all: Array, total: int) -> void:
+	var length := 0.0
+	for lane: Dictionary in all:
+		length += lane_length(lane)
+	var given := 0
+	for lane: Dictionary in all:
+		lane.craft = maxi(MIN_PER_LANE, roundi(total * lane_length(lane) / length))
+		given += lane.craft
+	var by_length := all.duplicate()
+	by_length.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return lane_length(a) > lane_length(b))
+	var k := 0
+	while given != total and k < 1000:
+		var lane: Dictionary = by_length[k % by_length.size()]
+		if given < total:
+			lane.craft += 1
+			given += 1
+		elif lane.craft > MIN_PER_LANE:
+			lane.craft -= 1
+			given -= 1
+		k += 1
+
+static func _crew(lane: Dictionary, speeds: Vector2, rng: RandomNumberGenerator) -> Dictionary:
+	lane.craft = MIN_PER_LANE
 	lane.laps = maxi(1, roundi(rng.randf_range(speeds.x, speeds.y) * 3600.0 / lane_length(lane)))
 	lane.phase = rng.randf() * lane_length(lane)
 	return lane
@@ -372,30 +400,48 @@ static func strobe_material() -> ShaderMaterial:
 	material.shader.code = STROBE_SHADER % POSE_GLSL
 	return material
 
-# A low-poly sci-fi cruiser about 9 m long, +Z forward, +X left, y up:
-# faceted dart of a hull, glass canopy, swept wings, two engine pods with
-# glowing exhausts, a red light on the left wing tip, green on the right.
+# A low-poly sci-fi cruiser about 9 m long and under MAX_SPAN across, +Z
+# forward, +X left, y up: a faceted dart of a hull with a glass canopy,
+# short stub wings bent down with a glowing pod at each tip (red light on
+# the left, green on the right), two canted tail fins, a large glowing
+# thruster at the back and accent strips along the flanks.
 static func cruiser_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	RoadTraffic._loft(st, [[-4.5, 0.9, -0.5, 0.5], [-2.0, 1.3, -0.6, 0.8], [2.0, 1.0, -0.5, 0.7], [4.6, 0.25, -0.12, 0.12]], 0.0)
-	RoadTraffic._loft(st, [[-1.2, 0.55, 0.45, 0.85], [0.4, 0.65, 0.5, 1.25], [2.3, 0.35, 0.45, 0.72]], 1.0)
+	RoadTraffic._loft(st, [[-4.4, 1.0, -0.55, 0.55], [-2.2, 1.35, -0.6, 0.75], [1.5, 0.95, -0.45, 0.6], [4.6, 0.15, -0.1, 0.1]], 0.0)
+	RoadTraffic._loft(st, [[-1.4, 0.55, 0.45, 0.8], [0.2, 0.7, 0.5, 1.2], [2.0, 0.35, 0.4, 0.62]], 1.0)
+	# The thruster: a glowing hexagon in the tail, a dark collar round it.
+	RoadTraffic._loft(st, [[-4.75, 0.75, -0.42, 0.42], [-4.4, 0.85, -0.48, 0.48]], 0.0)
+	RoadTraffic._loft(st, [[-4.8, 0.6, -0.33, 0.33], [-4.74, 0.6, -0.33, 0.33]], 2.0)
 	for side: float in [-1.0, 1.0]:
-		# Swept wing: root along the hull, tip further back.
-		var root_a := Vector3(side * 1.1, -0.15, 0.6)
-		var root_b := Vector3(side * 1.1, -0.15, -3.0)
-		var tip_a := Vector3(side * 4.8, -0.05, -2.2)
-		var tip_b := Vector3(side * 4.8, -0.05, -3.4)
-		var up := Vector3(0.0, 0.18, 0.0)
-		var p := [root_a, tip_a, tip_b, root_b, root_a + up, tip_a + up, tip_b + up, root_b + up]
-		var centre := (root_a + tip_b) * 0.5 + up * 0.5
-		for quad in [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]:
-			RoadTraffic._face(st, [p[quad[0]], p[quad[1]], p[quad[2]], p[quad[3]]], centre, 0.0)
-		RoadTraffic._box(st, Vector3(side * 1.8 - 0.45, -0.75, -4.4), Vector3(side * 1.8 + 0.45, 0.15, -0.6), 0.0)
-		RoadTraffic._box(st, Vector3(side * 1.8 - 0.35, -0.65, -4.55), Vector3(side * 1.8 + 0.35, 0.05, -4.4), 2.0)
-		RoadTraffic._box(st, Vector3(side * 4.8 - 0.15, -0.1, -3.0), Vector3(side * 4.8 + 0.15, 0.25, -2.6), 3.0 if side > 0.0 else 4.0)
+		_plate(st, [Vector3(side * 1.1, -0.2, 0.3), Vector3(side * 2.2, -0.55, -1.7), Vector3(side * 2.2, -0.55, -3.0), Vector3(side * 1.1, -0.2, -2.9)], 0.16, 0.0)
+		# Tip pod and its light.
+		RoadTraffic._box(st, Vector3(side * 2.3 - 0.22, -0.78, -3.3), Vector3(side * 2.3 + 0.22, -0.36, -1.3), 0.0)
+		RoadTraffic._box(st, Vector3(side * 2.3 - 0.16, -0.72, -1.3), Vector3(side * 2.3 + 0.16, -0.42, -1.1), 3.0 if side > 0.0 else 4.0)
+		RoadTraffic._box(st, Vector3(side * 2.3 - 0.16, -0.72, -3.42), Vector3(side * 2.3 + 0.16, -0.42, -3.3), 2.0)
+		# Canted tail fin with a glowing edge.
+		_plate(st, [Vector3(side * 0.55, 0.5, -2.4), Vector3(side * 1.15, 1.6, -3.7), Vector3(side * 1.15, 1.6, -4.4), Vector3(side * 0.55, 0.5, -4.3)], 0.12, 0.0)
+		_plate(st, [Vector3(side * 1.12, 1.6, -3.68), Vector3(side * 1.18, 1.68, -3.7), Vector3(side * 1.18, 1.68, -4.42), Vector3(side * 1.12, 1.6, -4.4)], 0.14, 2.0)
+		# Accent strip along the flank.
+		RoadTraffic._box(st, Vector3(side * 1.25 - 0.06, -0.12, -3.8), Vector3(side * 1.25 + 0.06, 0.0, 0.8), 2.0)
 	st.index()
 	return st.commit()
+
+# A flat four-cornered plate `thickness` thick (both faces offset along its
+# normal), sides closed.
+static func _plate(st: SurfaceTool, corners: Array, thickness: float, part: float) -> void:
+	var normal: Vector3 = (corners[1] - corners[0]).cross(corners[3] - corners[0]).normalized() * thickness * 0.5
+	var p := []
+	for c: Vector3 in corners:
+		p.append(c - normal)
+	for c: Vector3 in corners:
+		p.append(c + normal)
+	var centre := Vector3.ZERO
+	for c: Vector3 in corners:
+		centre += c
+	centre /= 4.0
+	for quad in [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]:
+		RoadTraffic._face(st, [p[quad[0]], p[quad[1]], p[quad[2]], p[quad[3]]], centre, part)
 
 static func strobe_mesh() -> QuadMesh:
 	var quad := QuadMesh.new()

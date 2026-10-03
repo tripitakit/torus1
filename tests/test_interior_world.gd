@@ -733,7 +733,7 @@ func _test_cruisers_and_strobes_in_each_section() -> int:
 		var count := AirTraffic.cruiser_count(AirTraffic.lanes(world.get_section_plan(slot)))
 		for node_name in ["AirTraffic", "AirLights"]:
 			var node := world.get_node_or_null("Chain/Section_%d/%s" % [slot, node_name]) as MultiMeshInstance3D
-			if node == null or node.multimesh.instance_count != count or count < 60 or not node.custom_aabb.has_volume():
+			if node == null or node.multimesh.instance_count != count or count < AirTraffic.CRAFT.x or not node.custom_aabb.has_volume():
 				print("FAIL _test_cruisers_and_strobes_in_each_section: section %d %s %s (%d cruisers)" % [slot, node_name, node, count])
 				result = 1
 	world.free()
