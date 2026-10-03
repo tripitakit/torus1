@@ -646,6 +646,12 @@ func _test_spine_through_sections_and_bridges() -> int:
 			print("FAIL _test_spine_through_sections_and_bridges: spine piece %s" % body)
 			result = 1
 			break
+		# Light rings round core and trains every RING_SPACING, one MultiMesh.
+		var rings := body.get_node_or_null("Rings") as MultiMeshInstance3D
+		if rings == null or rings.multimesh.instance_count != floori(piece[1] / SpineTrain.RING_SPACING):
+			print("FAIL _test_spine_through_sections_and_bridges: %s rings %s" % [body.get_path(), rings.multimesh.instance_count if rings != null else -1])
+			result = 1
+			break
 	world.free()
 	return result
 

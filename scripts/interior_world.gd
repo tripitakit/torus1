@@ -185,7 +185,7 @@ var _spine_material: ShaderMaterial
 var _station_material: ShaderMaterial
 var _train_mesh: ArrayMesh
 var _train_material: ShaderMaterial
-var _pylon_mesh: ArrayMesh
+var _ring_mesh: ArrayMesh
 var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
@@ -225,8 +225,8 @@ func build() -> void:
 	_station_material = SpineTrain.structure_material(STATION_COLOR, ACCENT_COLOR)
 	_train_mesh = SpineTrain.train_mesh()
 	_train_material = SpineTrain.structure_material(TRAIN_COLOR, ACCENT_COLOR)
-	_pylon_mesh = SpineTrain.prism_mesh(SpineTrain.PYLON_RADIUS, 1.0, 0.0, true)
-	_hall_mesh = SpineTrain.prism_mesh(SpineTrain.HALL_RADIUS, SpineTrain.HALL_HEIGHT, 0.0, true)
+	_ring_mesh = SpineTrain.ring_mesh()
+	_hall_mesh = SpineTrain.hall_mesh()
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
 	_chain = Node3D.new()
@@ -612,7 +612,25 @@ func _build_spine(length: float) -> StaticBody3D:
 	mesh.material_override = _spine_material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	spine.add_child(mesh)
-	_add_box(spine, Vector3(2.0 * SpineTrain.SHELF.y, 2.0 * SpineTrain.SPINE_HALF_HEIGHT, length), Vector3.ZERO)
+	# Solid: the core and the four rails; the rings are too thin to matter.
+	_add_box(spine, Vector3(2.0 * SpineTrain.CORE_HALF, 2.0 * SpineTrain.CORE_HALF, length), Vector3.ZERO)
+	for side: float in [-1.0, 1.0]:
+		for y: float in [-SpineTrain.TRAIN_HALF_HEIGHT - SpineTrain.RAIL_GAP - 0.25, SpineTrain.TRAIN_HALF_HEIGHT + SpineTrain.RAIL_GAP + 0.2]:
+			_add_box(spine, Vector3(1.2, 0.5, length), Vector3(SpineTrain.TRACK_OFFSET * side, y, 0.0))
+	var count := floori(length / SpineTrain.RING_SPACING)
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = _ring_mesh
+	multimesh.instance_count = count
+	var first := -(count - 1) * 0.5 * SpineTrain.RING_SPACING
+	for k in range(count):
+		multimesh.set_instance_transform(k, Transform3D(Basis(), Vector3(0.0, 0.0, first + k * SpineTrain.RING_SPACING)))
+	var rings := MultiMeshInstance3D.new()
+	rings.name = "Rings"
+	rings.multimesh = multimesh
+	rings.material_override = _spine_material
+	rings.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spine.add_child(rings)
 	return spine
 
 func _add_box(body: CollisionObject3D, size: Vector3, centre: Vector3) -> void:
@@ -654,10 +672,8 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 		var pylon := StaticBody3D.new()
 		pylon.name = "Pylon"
 		pylon.transform = SpineTrain.spine_frame(angle, ground, z)
-		var pylon_mesh := _structure_mesh("Mesh", _pylon_mesh, _station_material)
-		pylon_mesh.scale = Vector3(1.0, length, 1.0)
-		pylon.add_child(pylon_mesh)
-		_add_box(pylon, Vector3(2.0 * SpineTrain.PYLON_RADIUS, length, 2.0 * SpineTrain.PYLON_RADIUS), Vector3(0.0, length * 0.5, 0.0))
+		pylon.add_child(_structure_mesh("Mesh", SpineTrain.pylon_mesh(length), _station_material))
+		_add_box(pylon, Vector3(2.0 * SpineTrain.PYLON_BASE, length, 2.0 * SpineTrain.PYLON_BASE), Vector3(0.0, length * 0.5, 0.0))
 		station.add_child(pylon)
 		var hall := StaticBody3D.new()
 		hall.name = "Hall"
@@ -672,7 +688,7 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 		for side in range(2):
 			var cabin := _structure_mesh("Lift_%d" % side, _lift_mesh, _station_material)
 			cabin.transform = Transform3D(Basis(across * (1.0 if side == 0 else -1.0), up, across.cross(up) * (1.0 if side == 0 else -1.0)), Vector3.ZERO)
-			var foot: Vector3 = pylon.position + across * (SpineTrain.PYLON_RADIUS + SpineTrain.LIFT_SIZE.x * 0.5 + 0.5) * (1.0 if side == 0 else -1.0) + up * (SpineTrain.HALL_HEIGHT + SpineTrain.LIFT_SIZE.y * 0.5)
+			var foot: Vector3 = pylon.position + across * SpineTrain.LIFT_OFFSET * (1.0 if side == 0 else -1.0) + up * (SpineTrain.HALL_HEIGHT + SpineTrain.LIFT_SIZE.y * 0.5)
 			cabin.position = foot
 			station.add_child(cabin)
 			state.lifts.append([cabin, foot, up, run, 0.5 * side])

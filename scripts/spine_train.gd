@@ -112,48 +112,86 @@ static func train_tau(t: float, way: int, total: float) -> float:
 
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 
-# The girder: half width SPINE_HALF_WIDTH, SPINE_HALF_HEIGHT each way of its
-# centre line; in its frame x across, y toward the axis, z along.
-const SPINE_HALF_WIDTH := 9.0
-const SPINE_HALF_HEIGHT := 4.0
-# The shelves the trains ride on, each flank, and the trains' centre lines.
-const SHELF := Vector2(9.0, 17.0)
+# The spine, light and open: a thin core, two glowing rails per track (one
+# under the train, one over it: the train runs held between them), and thin
+# hexagonal rings every RING_SPACING round core and trains, glowing at their
+# corners. In its frame x across, y toward the axis, z along.
+const CORE_HALF := 1.5
 const TRACK_OFFSET := 13.0
 const TRAIN_HALF_HEIGHT := 2.3
+const RAIL_GAP := 0.4
+const RING_SPACING := 80.0
+const RING_HALF := Vector2(19.0, 7.0)
+const RING_BAR := 0.7
+const RING_DEPTH := 1.4
 const TRAIN_CARS := 6
 const CAR_LENGTH := 24.0
 const CAR_GAP := 1.2
 const TRAIN_SIZE := Vector3(4.8, 4.6, TRAIN_CARS * (CAR_LENGTH + CAR_GAP))
-const PLATFORM_SIZE := Vector3(50.0, 3.0, 200.0)
-const PYLON_RADIUS := 8.0
+const PLATFORM_SIZE := Vector3(40.0, 1.2, 160.0)
+# The pylon: a mast tapering from PYLON_BASE to PYLON_TOP (radius), three
+# fins, glowing rings every PYLON_RING_SPACING, guides for the two lifts.
+const PYLON_BASE := 4.0
+const PYLON_TOP := 2.5
+const FIN_REACH := Vector2(6.0, 3.0)
+const FIN_THICKNESS := 0.6
+const PYLON_RING_SPACING := 150.0
 const HALL_RADIUS := 25.0
-const HALL_HEIGHT := 12.0
+const HALL_HEIGHT := 9.0
 const LIFT_SIZE := Vector3(6.0, 8.0, 6.0)
+const LIFT_OFFSET := PYLON_BASE + LIFT_SIZE.x * 0.5 + 0.5
 const LIFT_SPEED := 40.0
 const LIFT_ACCEL := 4.0
 const LIFT_WAIT := 10.0
 
-# The platform's underside, where the pylon ends (radius from the axis).
+# The platform's underside, where the pylon ends (radius from the axis):
+# just outside the rings.
 static func platform_radius() -> float:
-	return SPINE_RADIUS + SPINE_HALF_HEIGHT + 0.5 + PLATFORM_SIZE.y
+	return SPINE_RADIUS + RING_HALF.y + 0.5 + PLATFORM_SIZE.y
 
-# A piece of spine one metre long (scale its node's z to the length).
+# Core and rails one metre long (scale its node's z to the length).
 static func spine_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var w := SPINE_HALF_WIDTH
-	var h := SPINE_HALF_HEIGHT
-	# Hexagonal girder; RoadTraffic._ring puts y "up" from bottom to top.
-	RoadTraffic._loft(st, [[-0.5, w, -h, h], [0.5, w, -h, h]], 0.0)
+	RoadTraffic._loft(st, [[-0.5, CORE_HALF, -CORE_HALF, CORE_HALF], [0.5, CORE_HALF, -CORE_HALF, CORE_HALF]], 0.0)
 	for side: float in [-1.0, 1.0]:
-		var inner := SHELF.x * side
-		var outer := SHELF.y * side
-		RoadTraffic._box(st, Vector3(minf(inner, outer), -TRAIN_HALF_HEIGHT - 0.7, -0.5), Vector3(maxf(inner, outer), -TRAIN_HALF_HEIGHT, 0.5), 0.0)
-		# Guide light along the shelf's edge and along the girder's top.
-		RoadTraffic._box(st, Vector3(outer - 0.2, -TRAIN_HALF_HEIGHT - 0.6, -0.5), Vector3(outer + 0.2, -TRAIN_HALF_HEIGHT - 0.1, 0.5), 2.0)
-		RoadTraffic._box(st, Vector3(side * 5.0 - 0.25, h - 0.1, -0.5), Vector3(side * 5.0 + 0.25, h + 0.25, 0.5), 2.0)
+		var x := TRACK_OFFSET * side
+		var low := -TRAIN_HALF_HEIGHT - RAIL_GAP
+		var high := TRAIN_HALF_HEIGHT + RAIL_GAP
+		RoadTraffic._box(st, Vector3(x - 0.6, low - 0.5, -0.5), Vector3(x + 0.6, low, 0.5), 2.0)
+		RoadTraffic._box(st, Vector3(x - 0.4, high, -0.5), Vector3(x + 0.4, high + 0.4, 0.5), 2.0)
 	st.index()
 	return st.commit()
+
+# One ring, centred on its frame: an elongated hexagon of thin bars, spokes
+# from the core to each rail, a glowing node at each corner.
+static func ring_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := []
+	for i in range(6):
+		var a := TAU * i / 6.0
+		corners.append(Vector3(cos(a) * RING_HALF.x, sin(a) * RING_HALF.y, 0.0))
+	for i in range(6):
+		_bar(st, corners[i], corners[(i + 1) % 6], RING_BAR, RING_DEPTH, 0.0)
+		var c: Vector3 = corners[i]
+		RoadTraffic._box(st, c - Vector3(0.6, 0.6, 0.8), c + Vector3(0.6, 0.6, 0.8), 2.0)
+	for side: float in [-1.0, 1.0]:
+		var x := TRACK_OFFSET * side
+		_bar(st, Vector3(CORE_HALF * side, 0.0, 0.0), Vector3(x, -TRAIN_HALF_HEIGHT - RAIL_GAP - 0.5, 0.0), RING_BAR * 0.7, RING_DEPTH * 0.7, 0.0)
+		_bar(st, Vector3(CORE_HALF * side, 0.0, 0.0), Vector3(x, TRAIN_HALF_HEIGHT + RAIL_GAP + 0.4, 0.0), RING_BAR * 0.7, RING_DEPTH * 0.7, 0.0)
+	st.index()
+	return st.commit()
+
+# A bar from a to b (both at z = 0), `thickness` across and `depth` along z.
+static func _bar(st: SurfaceTool, a: Vector3, b: Vector3, thickness: float, depth: float, part: float) -> void:
+	var direction := (b - a).normalized()
+	var n := Vector3(-direction.y, direction.x, 0.0) * thickness * 0.5
+	var dz := Vector3(0.0, 0.0, depth * 0.5)
+	var p := [a - n - dz, a + n - dz, a + n + dz, a - n + dz, b - n - dz, b + n - dz, b + n + dz, b - n + dz]
+	var centre := (a + b) * 0.5
+	for quad in [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]:
+		RoadTraffic._face(st, [p[quad[0]], p[quad[1]], p[quad[2]], p[quad[3]]], centre, part)
 
 # A six-car train, +Z forward, y toward the axis, centred on its frame.
 static func train_mesh() -> ArrayMesh:
@@ -182,29 +220,62 @@ static func train_mesh() -> ArrayMesh:
 	st.index()
 	return st.commit()
 
-# A hexagonal prism standing on y = 0, `height` tall (scale its node's y).
-static func prism_mesh(radius: float, height: float, part: float, glow_band: bool) -> ArrayMesh:
+# The pylon `length` tall, standing on y = 0 in its frame (y toward the
+# axis): tapering hexagonal mast, three thin fins, glowing rings, the two
+# lifts' glowing guides along +x and -x.
+static func pylon_mesh(length: float) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_prism(st, radius, 0.0, height, part)
-	if glow_band:
-		_prism(st, radius + 0.2, height * 0.8, height * 0.85, 2.0)
+	_frustum(st, PYLON_BASE, PYLON_TOP, 0.0, length, 0.0)
+	for k in range(3):
+		var a := TAU * (k / 3.0 + 1.0 / 12.0)
+		var out := Vector3(cos(a), 0.0, sin(a))
+		var across := Vector3(-sin(a), 0.0, cos(a)) * FIN_THICKNESS * 0.5
+		var base_in := out * (PYLON_BASE - 0.3)
+		var top_in := out * (PYLON_TOP - 0.3) + Vector3(0.0, length, 0.0)
+		var base_out := out * (PYLON_BASE + FIN_REACH.x)
+		var top_out := out * (PYLON_TOP + FIN_REACH.y) + Vector3(0.0, length, 0.0)
+		var p := [base_in - across, base_out - across, top_out - across, top_in - across, base_in + across, base_out + across, top_out + across, top_in + across]
+		var centre: Vector3 = (base_in + top_out) * 0.5
+		for quad in [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]:
+			RoadTraffic._face(st, [p[quad[0]], p[quad[1]], p[quad[2]], p[quad[3]]], centre, 0.0)
+	var y := PYLON_RING_SPACING
+	while y < length - 20.0:
+		var r := lerpf(PYLON_BASE, PYLON_TOP, y / length) + 0.4
+		_frustum(st, r, r, y, y + 1.5, 2.0)
+		y += PYLON_RING_SPACING
+	for side: float in [-1.0, 1.0]:
+		var x0 := side * lerpf(PYLON_BASE, PYLON_TOP, 0.5)
+		RoadTraffic._box(st, Vector3(minf(x0, x0 + side * 0.4), HALL_HEIGHT, -0.3), Vector3(maxf(x0, x0 + side * 0.4), length, 0.3), 2.0)
 	st.index()
 	return st.commit()
 
-static func _prism(st: SurfaceTool, radius: float, y0: float, y1: float, part: float) -> void:
+# A hexagonal frustum from radius r0 at y0 to r1 at y1, capped.
+static func _frustum(st: SurfaceTool, r0: float, r1: float, y0: float, y1: float, part: float) -> void:
 	var low := []
 	var high := []
 	for i in range(6):
 		var a := TAU * (i + 0.5) / 6.0
-		low.append(Vector3(cos(a) * radius, y0, sin(a) * radius))
-		high.append(Vector3(cos(a) * radius, y1, sin(a) * radius))
+		low.append(Vector3(cos(a) * r0, y0, sin(a) * r0))
+		high.append(Vector3(cos(a) * r1, y1, sin(a) * r1))
 	var centre := Vector3(0.0, (y0 + y1) * 0.5, 0.0)
 	for i in range(6):
 		var j := (i + 1) % 6
 		RoadTraffic._face(st, [low[i], low[j], high[j], high[i]], centre, part)
 	RoadTraffic._face(st, low, centre, part)
 	RoadTraffic._face(st, high, centre, part)
+
+# The hall at the pylon's foot: a low slab, a glass band, a thin roof with
+# a glowing edge.
+static func hall_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_frustum(st, HALL_RADIUS, HALL_RADIUS, 0.0, 1.5, 0.0)
+	_frustum(st, HALL_RADIUS - 3.0, HALL_RADIUS - 3.0, 1.5, HALL_HEIGHT - 1.0, 3.0)
+	_frustum(st, HALL_RADIUS + 1.0, HALL_RADIUS - 1.0, HALL_HEIGHT - 1.0, HALL_HEIGHT, 0.0)
+	_frustum(st, HALL_RADIUS + 1.1, HALL_RADIUS + 1.1, HALL_HEIGHT - 0.9, HALL_HEIGHT - 0.6, 2.0)
+	st.index()
+	return st.commit()
 
 # A lift cabin: a box with a glass front, centred on its frame.
 static func lift_mesh() -> ArrayMesh:
@@ -304,7 +375,8 @@ static func platform_mesh() -> ArrayMesh:
 	var half := PLATFORM_SIZE * 0.5
 	RoadTraffic._box(st, -half, half, 0.0)
 	for side: float in [-1.0, 1.0]:
-		RoadTraffic._box(st, Vector3(side * half.x - 0.3, half.y - 0.6, -half.z), Vector3(side * half.x + 0.3, half.y, half.z), 2.0)
+		RoadTraffic._box(st, Vector3(side * half.x - 0.3, -half.y, -half.z), Vector3(side * half.x + 0.3, half.y + 0.2, half.z), 2.0)
+		RoadTraffic._box(st, Vector3(-half.x, -half.y, side * half.z - 0.3), Vector3(half.x, half.y + 0.2, side * half.z + 0.3), 2.0)
 	st.index()
 	return st.commit()
 

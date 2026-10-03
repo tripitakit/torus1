@@ -73,3 +73,10 @@ nessun calo sensibile di FPS.
   treno e strutture, 190–196 con (circa −5%: la spina passa sopra la piattaforma); volo basso 130–135 contro
   128–133; dall'alto 137–139 contro 136. La macchina oggi rende meno anche senza treno (volo basso 146–148 nel
   pezzo 1): i confronti vanno fatti nella stessa sessione.
+- **Binario e piloni più leggeri e sci-fi** (richiesta dell'utente: erano "pesanti"; scelto lo stile "anelli e
+  rotaie luminose"). Al posto della trave esagonale con i ripiani: nucleo sottile (3 m), due rotaie luminose
+  per binario (sotto e sopra il treno, che corre sospeso fra le due), anelli esagonali sottili ogni 80 m attorno
+  a nucleo e treni, con nodi luminosi agli spigoli (un MultiMesh per pezzo). Collisione: nucleo e rotaie.
+  Pilone: albero affusolato (raggio da 4 a 2,5 m) con tre pinne sottili, anelli luminosi ogni 150 m e guide
+  luminose per le cabine; mesh fatta per ogni stazione con la sua lunghezza. Piattaforma sottile (1,2 m) con i
+  bordi luminosi; atrio basso con fascia di vetro e bordo del tetto luminoso.
