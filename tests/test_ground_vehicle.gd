@@ -7,6 +7,25 @@ const GroundVehicle = preload("res://scripts/ground_vehicle.gd")
 const DT := 1.0 / 60.0
 const MOON_G := 1.62
 
+# A made-up ground: a plane rising `angle` toward -Z (nose ahead), dropping
+# `step` metres for z < step_at; up is always +Y.
+class FakeGround:
+	var angle := 0.0
+	var step := 0.0
+	var step_at := -INF
+
+	func surface(p: Vector3) -> float:
+		var y := -p.z * tan(angle)
+		if p.z < step_at:
+			y -= step
+		return y
+
+	func ground_altitude(p: Vector3) -> float:
+		return p.y - surface(p)
+
+	func up_at(_p: Vector3) -> Vector3:
+		return Vector3.UP
+
 func _init():
 	var failures := 0
 	failures += _test_throttle_reaches_top_speed_and_no_more()
@@ -18,6 +37,12 @@ func _init():
 	failures += _test_engine_weakens_uphill()
 	failures += _test_steep_slope_slides_back()
 	failures += _test_handbrake_stops()
+	failures += _test_drives_straight_on_flat_ground()
+	failures += _test_d_turns_right()
+	failures += _test_climbs_a_ramp_on_its_surface()
+	failures += _test_leans_onto_the_ramp()
+	failures += _test_drop_flies_then_lands()
+	failures += _test_handbrake_holds_on_a_20_degree_ramp()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -113,5 +138,102 @@ func _test_handbrake_stops() -> int:
 	var stopped := _speed_after(16.0, 1.0, true, 0.0, 2.1)
 	if stopped != 0.0:
 		print("FAIL _test_handbrake_stops: %.3f m/s" % stopped)
+		return 1
+	return 0
+
+# One tick: drive, move (no walls here), settle.
+func _tick(body: Dictionary, controls: Dictionary, ground: FakeGround) -> Dictionary:
+	body = GroundVehicle.drive(body, controls, ground, MOON_G, DT)
+	body.transform = Transform3D(body.transform.basis, body.transform.origin + body.motion)
+	return GroundVehicle.settle(body, ground, DT)
+
+func _controls(throttle: float, steer := 0.0, handbrake := false) -> Dictionary:
+	return {"throttle": throttle, "steer": steer, "handbrake": handbrake}
+
+# On `ground` at `z`, nose to -Z, leaned onto the ground at once.
+func _start(ground: FakeGround, z: float) -> Dictionary:
+	var point := Vector3(0.0, ground.surface(Vector3(0.0, 0.0, z)), z)
+	var body: Dictionary = GroundVehicle.new_body(Transform3D(GroundVehicle.heading_basis(Vector3.FORWARD, Vector3.UP), point))
+	return GroundVehicle.settle(body, ground, 1.0)
+
+func _test_drives_straight_on_flat_ground() -> int:
+	var ground := FakeGround.new()
+	var body := _start(ground, 0.0)
+	for i in range(120):
+		body = _tick(body, _controls(1.0), ground)
+	var at: Vector3 = body.transform.origin
+	# 2 s at 3 m/s²: about 6 m ahead, on the ground.
+	if absf(at.z + 6.0) > 0.2 or absf(at.x) > 1e-6 or absf(at.y) > 1e-6 or body.airborne:
+		print("FAIL _test_drives_straight_on_flat_ground: at %s, airborne %s" % [at, body.airborne])
+		return 1
+	return 0
+
+func _test_d_turns_right() -> int:
+	var ground := FakeGround.new()
+	var body := _start(ground, 0.0)
+	body.speed = 10.0
+	for i in range(60):
+		body = _tick(body, _controls(1.0, 1.0), ground)
+	var nose: Vector3 = -body.transform.basis.z
+	if nose.x <= 0.2 or body.transform.origin.x <= 0.0:
+		print("FAIL _test_d_turns_right: nose %s, at %s" % [nose, body.transform.origin])
+		return 1
+	return 0
+
+func _test_climbs_a_ramp_on_its_surface() -> int:
+	var ground := FakeGround.new()
+	ground.angle = deg_to_rad(20.0)
+	var body := _start(ground, 0.0)
+	var worst := 0.0
+	for i in range(180):
+		body = _tick(body, _controls(1.0), ground)
+		worst = maxf(worst, absf(ground.ground_altitude(body.transform.origin)))
+	if worst > 0.01 or body.transform.origin.y < 2.0 or body.airborne:
+		print("FAIL _test_climbs_a_ramp_on_its_surface: %.3f m off the ground at worst, %.2f m up, airborne %s" % [worst, body.transform.origin.y, body.airborne])
+		return 1
+	return 0
+
+func _test_leans_onto_the_ramp() -> int:
+	var ground := FakeGround.new()
+	ground.angle = deg_to_rad(20.0)
+	var body := _start(ground, -10.0)
+	var up: Vector3 = body.transform.basis.y.normalized()
+	var expected := Vector3(0.0, cos(ground.angle), sin(ground.angle))
+	if up.distance_to(expected) > 0.01:
+		print("FAIL _test_leans_onto_the_ramp: up %s, expected %s" % [up, expected])
+		return 1
+	return 0
+
+func _test_drop_flies_then_lands() -> int:
+	var ground := FakeGround.new()
+	ground.step = 1.0
+	ground.step_at = -5.0
+	var body := _start(ground, 0.0)
+	body.speed = 20.0
+	var flew := false
+	var landed_again := false
+	for i in range(240):
+		body = _tick(body, _controls(1.0), ground)
+		if body.airborne:
+			flew = true
+		elif flew:
+			landed_again = true
+			break
+	var height := ground.ground_altitude(body.transform.origin)
+	# Leaning over the edge first, it loses a little speed into the drop.
+	if not flew or not landed_again or absf(height) > 1e-6 or body.speed < 17.0:
+		print("FAIL _test_drop_flies_then_lands: flew %s, landed again %s, %.3f m over the ground, %.2f m/s" % [flew, landed_again, height, body.speed])
+		return 1
+	return 0
+
+func _test_handbrake_holds_on_a_20_degree_ramp() -> int:
+	var ground := FakeGround.new()
+	ground.angle = deg_to_rad(20.0)
+	var body := _start(ground, -10.0)
+	var start: Vector3 = body.transform.origin
+	for i in range(180):
+		body = _tick(body, _controls(0.0, 0.0, true), ground)
+	if body.transform.origin.distance_to(start) > 0.01:
+		print("FAIL _test_handbrake_holds_on_a_20_degree_ramp: moved %.3f m" % body.transform.origin.distance_to(start))
 		return 1
 	return 0
