@@ -73,6 +73,15 @@ func place(point: Vector3, facing: Vector3) -> void:
 	airborne = false
 	vertical = 0.0
 
+# Nothing in the way of the walker's capsule where it stands.
+func is_clear() -> bool:
+	var shape_node := get_node("CollisionShape3D") as CollisionShape3D
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape_node.shape
+	query.transform = shape_node.global_transform
+	query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
 func set_board_prompt(shown: bool) -> void:
 	(get_node("Hud") as CanvasLayer).set_board_prompt(shown)
 

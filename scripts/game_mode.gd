@@ -10,8 +10,10 @@ const InternalCruiserScript = preload("res://scripts/internal_cruiser.gd")
 const MoonRoverScript = preload("res://scripts/moon_rover.gd")
 const RoverRules = preload("res://scripts/rover_rules.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
+const MoonWalkerScript = preload("res://scripts/moon_walker.gd")
+const OnFoot = preload("res://scripts/on_foot.gd")
 
-enum Mode { VOID, INTERIOR, ROVER }
+enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE }
 
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
 @export var void_cruiser_path: NodePath = NodePath("../VoidCruiser")
@@ -38,6 +40,7 @@ var _station: Node3D
 var _void_cruiser: CharacterBody3D
 var _interior: Node3D
 var _rover: CharacterBody3D
+var _walker: CharacterBody3D
 var _detached: Array = []
 var _transitioning := false
 var _curtain: ColorRect
@@ -80,6 +83,13 @@ func _process(_delta: float) -> void:
 	elif mode == Mode.ROVER:
 		if _rover != null:
 			_rover.set_board_prompt(_can_board_now())
+	elif mode == Mode.ON_FOOT:
+		if _walker != null:
+			_walker.set_board_prompt(_board_target() != "")
+			var targets := [["SHIP", _void_cruiser]]
+			if _rover != null:
+				targets.append(["ROVER", _rover])
+			_walker.set_targets(targets)
 	elif _interior:
 		var cruiser := _interior.get_node("InternalCruiser") as Node3D
 		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
@@ -90,6 +100,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			restart_after_crash()
 		return
 	if _transitioning:
+		return
+	if event.is_action_pressed("board"):
+		if mode == Mode.VOID and _can_leave_ship_now():
+			_transition(walk_from_ship)
+		elif mode == Mode.ROVER and _rover != null and _rover.speed() < RoverRules.BOARD_SPEED:
+			_transition(walk_from_rover)
+		elif mode == Mode.ON_FOOT:
+			var target := _board_target()
+			if target == "ship":
+				_transition(board_ship_on_foot)
+			elif target == "rover":
+				_transition(board_rover_on_foot)
 		return
 	if event.is_action_pressed("vehicle"):
 		if mode == Mode.VOID and _can_leave_ship_now():
@@ -183,6 +205,99 @@ func board_ship() -> void:
 		pilot_camera.make_current()
 	_track(_void_cruiser)
 	mode = Mode.VOID
+
+func walker() -> CharacterBody3D:
+	return _walker
+
+# The vehicle the walker on the moon can board: "ship", "rover" (the nearer
+# when both are in reach) or "".
+func _board_target() -> String:
+	if _walker == null:
+		return ""
+	var at := _walker.global_position
+	var best := ""
+	var best_distance := INF
+	var ship_distance := OnFoot.distance_to_box(at, _void_cruiser.global_transform, _void_cruiser.HULL_SIZE)
+	var pad := _ship_pad()
+	if ship_distance <= OnFoot.BOARD_DISTANCE or (not pad.is_empty() and at.distance_to(pad.centre) <= OnFoot.PAD_BOARD):
+		best = "ship"
+		best_distance = ship_distance
+	if _rover != null:
+		var box := Transform3D(_rover.global_transform.basis, _rover.to_global(_rover.BOX_CENTRE))
+		var rover_distance := OnFoot.distance_to_box(at, box, _rover.BOX_SIZE)
+		if rover_distance <= OnFoot.BOARD_DISTANCE and rover_distance < best_distance:
+			best = "rover"
+	return best
+
+# A walker on the moon at the first clear spot, facing `facing`; null (and
+# none made) with no room anywhere.
+func _new_walker(spots: Array, facing: Vector3) -> CharacterBody3D:
+	var moon: Node3D = _void_cruiser.moon_node()
+	var walker: CharacterBody3D = MoonWalkerScript.new()
+	walker.name = "MoonWalker"
+	get_parent().add_child(walker)
+	walker.moon_path = walker.get_path_to(moon)
+	for spot in spots:
+		walker.place(spot, facing)
+		if walker.is_clear():
+			return walker
+	get_parent().remove_child(walker)
+	walker.free()
+	return null
+
+# Out of the landed ship on foot, beside it (or clear of its pad).
+func walk_from_ship() -> void:
+	var moon: Node3D = _void_cruiser.moon_node()
+	var ship := _void_cruiser.global_transform.orthonormalized()
+	var up: Vector3 = moon.up_at(ship.origin)
+	var pad := _ship_pad()
+	var spots := OnFoot.ship_exit_spots(ship, up, not pad.is_empty(), pad.get("centre", Vector3.ZERO))
+	var outward: Vector3 = (spots[0] as Vector3) - ship.origin
+	_walker = _new_walker(spots, outward - up * outward.dot(up))
+	if _walker == null:
+		return
+	_void_cruiser.park(true)
+	_walker.camera().make_current()
+	_track(_walker)
+	mode = Mode.ON_FOOT
+
+# Out of the rover on foot, on its left; the rover left parked.
+func walk_from_rover() -> void:
+	var left := -_rover.global_transform.basis.x.normalized()
+	_walker = _new_walker([_rover.global_position + left * 2.5], left)
+	if _walker == null:
+		return
+	_rover.park(true)
+	_walker.camera().make_current()
+	_track(_walker)
+	mode = Mode.ON_FOOT
+
+func _drop_walker() -> void:
+	if _walker != null:
+		get_parent().remove_child(_walker)
+		_walker.free()
+		_walker = null
+
+# On foot into the ship: the rover (if any) back in the hold.
+func board_ship_on_foot() -> void:
+	_drop_walker()
+	if _rover != null:
+		get_parent().remove_child(_rover)
+		_rover.free()
+		_rover = null
+	_void_cruiser.park(false)
+	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	if pilot_camera:
+		pilot_camera.make_current()
+	_track(_void_cruiser)
+	mode = Mode.VOID
+
+func board_rover_on_foot() -> void:
+	_drop_walker()
+	_rover.park(false)
+	_rover.camera().make_current()
+	_track(_rover)
+	mode = Mode.ROVER
 
 # The world origin shift follows `node`.
 func _track(node: Node3D) -> void:

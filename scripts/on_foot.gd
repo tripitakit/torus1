@@ -19,6 +19,14 @@ const JUMP_INTERIOR := 3.1
 const BOARD_DISTANCE := 8.0
 # On the moon the ground ahead may rise this steeply at most.
 const MAX_CLIMB := 0.6108652  # 35 degrees
+# Out of the Eagle (15 x 7.5 x 30 m): this far from its middle beside it,
+# past its ends behind or ahead; off a pad (60 m square, 2 m high, too high
+# to climb on foot) this far from the pad's middle. Boarding from beside a
+# pad: within PAD_BOARD of its middle.
+const SHIP_EXIT_SIDE := 13.5
+const SHIP_EXIT_END := 21.0
+const PAD_EXIT := 45.0
+const PAD_BOARD := 60.0
 
 # The walking velocity: `input` x right, y ahead (-1..1 each, as WASD),
 # along `basis`'s x (right) and -z (ahead), never faster on a diagonal.
@@ -41,3 +49,15 @@ static func distance_to_box(point: Vector3, box: Transform3D, size: Vector3) -> 
 	var local := box.affine_inverse() * point
 	var half := size * 0.5
 	return (local - local.clamp(-half, half)).length()
+
+# Where the pilot may step out of the ship, first choice first: right,
+# left, behind, ahead, on the level across `up`.
+static func ship_exit_spots(ship: Transform3D, up: Vector3, on_pad: bool, pad_centre: Vector3) -> Array:
+	var right := ship.basis.x - up * ship.basis.x.dot(up)
+	var nose := -ship.basis.z - up * -ship.basis.z.dot(up)
+	right = right.normalized()
+	nose = nose.normalized()
+	var from := pad_centre if on_pad else ship.origin
+	var side := PAD_EXIT if on_pad else SHIP_EXIT_SIDE
+	var ends := PAD_EXIT if on_pad else SHIP_EXIT_END
+	return [from + right * side, from - right * side, from - nose * ends, from + nose * ends]
