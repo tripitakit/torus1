@@ -34,14 +34,18 @@ riusi il nucleo di guida.
 - **Scendere:** in `Mode.VOID`, nave atterrata (`is_landed`) e nel riferimento della luna, non in crash, non
   in transizione. V → dissolvenza (`_transition`, 0,4 s) → il rover appare:
   - 15 m a destra della nave (asse x della nave proiettato sul piano orizzontale locale), muso nella stessa
-    direzione della nave (asse −z proiettato);
+    direzione della nave (asse −z proiettato). Se la nave è su un pad (quadrato di 60 m, alto 2 m), il rover
+    esce invece a 52 m dal centro del pad (fuori anche dagli angoli) dallo stesso lato;
+  - se lì c'è un edificio o un tubo (prova di collisione col box del rover), si prova a sinistra, poi
+    dietro, poi davanti;
   - posato sul suolo (ruote a quota del suolo in quel punto), fermo;
   - figlio dello stesso genitore della nave, nel riferimento della luna.
   La camera del rover diventa quella corrente. Mouse catturato.
 - **Durante il rover:** la nave resta dov'è, atterrata e visibile. I suoi comandi sono spenti (nessun input
   arriva al volo; il modo più semplice: `set_process_unhandled_input(false)` e un flag che il suo
   `_physics_process` legge per ignorare i tasti). Continua a girare con la luna come oggi.
-- **Risalire:** rover entro **30 m** dalla nave (centro a centro) e velocità sotto **1 m/s**. V →
+- **Risalire:** rover entro **30 m** dalla nave (centro a centro), oppure, se la nave è su un pad, entro
+  **60 m** dal centro del pad (il rover non sale sul pad); velocità sotto **1 m/s**. V →
   dissolvenza → rover tolto e liberato, camera del pilota della nave corrente, comandi della nave riaccesi,
   `Mode.VOID`.
 - V in qualsiasi altro caso: non fa nulla.
@@ -63,8 +67,8 @@ Valori:
 
 - Velocità massima **20 m/s**. Accelerazione **3 m/s²**. Freno **6 m/s²**. Freno a mano **8 m/s²**.
 - Senza gas il rover rallenta da solo di **0,6 m/s²** (attrito).
-- Sterzo: angolo delle ruote massimo 30° da fermo, che si riduce con la velocità, così il raggio minimo è
-  circa **6 m** da fermo e circa **40 m** a 20 m/s. Passo (distanza fra gli assi) 2,5 m. Lo sterzo arriva al
+- Sterzo: raggio minimo **6 m** da fermo, che cresce in linea retta fino a **40 m** a 20 m/s. L'angolo delle
+  ruote del modello si ricava dal raggio e dal passo (distanza fra gli assi, 2,5 m): circa 23° da fermo. Lo sterzo arriva al
   massimo in 0,3 s e torna dritto in 0,2 s.
 - **Gravità lunare 1,62 m/s²** lungo `-up_at`.
 - **Pendenza** (angolo fra l'alto del suolo e l'alto locale, misurato lungo il muso): oltre **25°** in salita
@@ -124,7 +128,7 @@ Stile dell'HUD della nave (testo ciano su fondo scuro, `hud_layout.gd` se i suoi
   - `LIGHTS ON/OFF`.
 - **Marcatori** (`beacon_marker.gd`): `SHIP` sulla nave parcheggiata, `SELENE` sul faro della base
   (`moon.beacon_position()`), con distanza. Fuori schermo la freccia sul bordo, come oggi.
-- **In alto al centro**, solo quando vale: `V BOARD` (entro 30 m dalla nave e sotto 1 m/s).
+- **In alto al centro**, solo quando vale: `V BOARD` (le stesse condizioni della risalita).
 
 ## Test
 
