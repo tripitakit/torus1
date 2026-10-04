@@ -39,16 +39,19 @@ func _test_first_person_camera() -> int:
 	return result
 
 func _test_hud_has_only_the_flight_markers_and_section_panel() -> int:
-	# No cockpit panels inside: just the boresight/motion marker and the
-	# current-section readout, nothing else.
+	# No cockpit panels inside: just the boresight/motion marker, the
+	# current-section readout, and for the landing pads (on_foot spec) the
+	# "K LAND" panel and the PAD marker.
 	var cruiser := _make_cruiser()
 	cruiser.build_hud()
 	var result := 0
 	var layers := cruiser.find_children("*", "CanvasLayer", true, false)
 	var markers := cruiser.get_node_or_null("Hud/FlightMarkers") as Control
 	var panel := cruiser.get_node_or_null("Hud/SectionPanel") as Control
-	if layers.size() != 1 or markers == null or panel == null or cruiser.get_node("Hud").get_child_count() != 2 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
-		print("FAIL _test_hud_has_only_the_flight_markers_and_section_panel: the internal-cruiser's HUD must be just the flight markers and the section panel")
+	var land := cruiser.get_node_or_null("Hud/LandPanel") as Control
+	var pad := cruiser.get_node_or_null("Hud/PadMarker") as Control
+	if layers.size() != 1 or markers == null or panel == null or land == null or pad == null or cruiser.get_node("Hud").get_child_count() != 4 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		print("FAIL _test_hud_has_only_the_flight_markers_and_section_panel: the internal-cruiser's HUD must be just the flight markers, the section panel, the land panel and the pad marker")
 		result = 1
 	cruiser.free()
 	return result

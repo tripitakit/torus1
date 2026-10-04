@@ -338,15 +338,28 @@ func stream_step(focus_z: float, chunk_budget: int, free_budget: int) -> int:
 	_free_unloading(free_budget)
 	return dressed
 
+# What the streaming and the rebase follow: the pilot on foot if out of
+# the craft, else the craft.
+func focus() -> Node3D:
+	var walker := get_node_or_null("InteriorWalker") as Node3D
+	return walker if walker != null else get_node_or_null("InternalCruiser") as Node3D
+
+# Back near the origin along Z with `craft`; the craft and the pilot on foot
+# (whichever is not `craft`) move with it.
 func rebase_around(craft: Node3D) -> void:
 	if absf(craft.position.z) <= REBASE_DISTANCE:
 		return
 	var shift: float = craft.position.z
 	_chain.position.z -= shift
-	craft.position.z -= shift
+	for mover_name in ["InternalCruiser", "InteriorWalker"]:
+		var mover := get_node_or_null(mover_name) as Node3D
+		if mover != null:
+			mover.position.z -= shift
+	if craft.get_parent() != self:
+		craft.position.z -= shift
 
 func _process(_delta: float) -> void:
-	var craft := get_node_or_null("InternalCruiser") as Node3D
+	var craft := focus()
 	if craft != null and _chain != null:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)
 	if _chain != null:
@@ -396,7 +409,7 @@ func restore_ambient() -> void:
 # Before the craft moves this tick (a parent runs before its children); the
 # static bodies follow their moved parent.
 func _physics_process(_delta: float) -> void:
-	var craft := get_node_or_null("InternalCruiser") as Node3D
+	var craft := focus()
 	if craft != null and _chain != null:
 		rebase_around(craft)
 	update_trains(game_seconds())
@@ -879,10 +892,19 @@ func _build_piers(state: SectionLoad) -> void:
 func _build_pads(state: SectionLoad) -> void:
 	var plan = state.plan
 	state.pad_frames.clear()
+	# A flat chunk's ground is a band of flat strips (_chunk_shape): the pad
+	# lies on the strip whose middle is nearest its lot's, square to it.
+	var strip := TAU / CHUNKS_AROUND / CHUNK_ARC_SEGMENTS
 	for k in range(state.pads.size()):
 		var centre: Vector2 = state.pads[k].centre
-		var ground: float = section_radius - plan.height_at(centre.x, centre.y)
-		var frame := SpineTrain.spine_frame(centre.x / section_radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
+		var lot: Vector2i = state.pads[k].lot
+		var frame: Transform3D
+		if plan.chunk_has_relief(lot.x / LandingPads.SectionPlanScript.CHUNK_LOTS_AROUND, lot.y / LandingPads.SectionPlanScript.CHUNK_LOTS_ALONG):
+			var ground: float = section_radius - plan.height_at(centre.x, centre.y)
+			frame = SpineTrain.spine_frame(centre.x / section_radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
+		else:
+			var middle := (floorf(centre.x / section_radius / strip) + 0.5) * strip
+			frame = SpineTrain.spine_frame(middle, section_radius * cos(strip * 0.5) - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
 		var body := StaticBody3D.new()
 		body.name = "Pad_%d" % k
 		body.transform = frame

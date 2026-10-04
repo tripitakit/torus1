@@ -8,6 +8,7 @@ extends "res://scripts/flying_craft.gd"
 const FlightMarkersScript = preload("res://scripts/flight_markers.gd")
 const SectionLabelScript = preload("res://scripts/section_label.gd")
 const Clock = preload("res://scripts/interior_clock.gd")
+const BeaconMarkerScript = preload("res://scripts/beacon_marker.gd")
 const HULL_SIZE := Vector3(4.0, 2.0, 8.0)
 const CAMERA_POSITION := Vector3(0.0, 0.3, -2.0)
 const CAMERA_HFOV := 90.0
@@ -23,6 +24,16 @@ const HUD_FONT_SIZE := 22
 const HUD_TEXT_COLOR := Color(0.4, 0.95, 1.0)
 const HUD_BACKGROUND_COLOR := Color(0.02, 0.05, 0.08, 0.6)
 const SECTION_PANEL_WIDTH := 180.0
+# The assisted landing on a pad (GameMode) takes this long.
+const LAND_TIME := 2.0
+
+signal landed
+
+# Parked on a pad while the pilot walks (GameMode): see park().
+var parked := false
+var _landing_from := Transform3D()
+var _landing_to := Transform3D()
+var _landing_t := -1.0
 
 func _init() -> void:
 	thrust_power = INTERNAL_THRUST
@@ -88,6 +99,26 @@ func build_hud() -> void:
 		label.label_settings = settings
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		rows.add_child(label)
+	# Top centre, over a landing pad: "K LAND".
+	var land := PanelContainer.new()
+	land.name = "LandPanel"
+	land.anchor_left = 0.5
+	land.anchor_right = 0.5
+	land.offset_top = HUD_MARGIN
+	land.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	land.add_theme_stylebox_override("panel", background)
+	var land_label := Label.new()
+	land_label.text = "K LAND"
+	land_label.label_settings = settings
+	land.add_child(land_label)
+	land.visible = false
+	hud.add_child(land)
+	# The nearest landing pad.
+	var pad_marker: Control = BeaconMarkerScript.new()
+	pad_marker.name = "PadMarker"
+	pad_marker.prefix = "PAD"
+	pad_marker.color = HUD_TEXT_COLOR
+	hud.add_child(pad_marker)
 
 func _process(_delta: float) -> void:
 	var markers := get_node_or_null("Hud/FlightMarkers") as Control
@@ -107,5 +138,52 @@ func _update_section_panel() -> void:
 	label.text = SectionLabelScript.format_id(interior.get_section_ring_index(slot))
 	(get_node("Hud/SectionPanel/Rows/TimeLabel") as Label).text = Clock.format(interior.hour_at(position))
 
+func set_land_prompt(shown: bool) -> void:
+	(get_node("Hud/LandPanel") as Control).visible = shown
+
+func update_pad_marker(target: Vector3, distance: float, shown: bool) -> void:
+	var camera := get_node_or_null("Camera") as Camera3D
+	if camera != null and is_inside_tree():
+		get_node("Hud/PadMarker").update_target(camera, target, distance, shown)
+
+func is_landing() -> bool:
+	return _landing_t >= 0.0
+
+# Down onto `pad` (its top's centre, y up) by itself in LAND_TIME: square to
+# the pad, the bow where it pointed; `landed` when there.
+func land_on(pad: Transform3D) -> void:
+	var up := pad.basis.y.normalized()
+	var nose := -transform.basis.z
+	var flat := nose - up * nose.dot(up)
+	if flat.length() < 0.01:
+		flat = -pad.basis.z
+	var rest := Transform3D(Basis.looking_at(flat.normalized(), up), pad.origin + up * HULL_SIZE.y * 0.5)
+	_landing_from = transform
+	_landing_to = rest
+	_landing_t = 0.0
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	set_process_unhandled_input(false)
+
+# Parked while the pilot walks: no keys, no HUD; off again when boarding.
+func park(on: bool) -> void:
+	parked = on
+	set_process_unhandled_input(not on)
+	velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	_mouse_delta = Vector2.ZERO
+	(get_node("Hud") as CanvasLayer).visible = not on
+
 func _physics_process(delta: float) -> void:
+	if is_landing():
+		_landing_t = minf(_landing_t + delta / LAND_TIME, 1.0)
+		var share := smoothstep(0.0, 1.0, _landing_t)
+		transform = _landing_from.interpolate_with(_landing_to, share)
+		if _landing_t >= 1.0:
+			_landing_t = -1.0
+			transform = _landing_to
+			landed.emit()
+		return
+	if parked:
+		return
 	_fly(delta)

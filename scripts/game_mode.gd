@@ -12,6 +12,7 @@ const RoverRules = preload("res://scripts/rover_rules.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
 const MoonWalkerScript = preload("res://scripts/moon_walker.gd")
 const OnFoot = preload("res://scripts/on_foot.gd")
+const InteriorWalkerScript = preload("res://scripts/interior_walker.gd")
 
 enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE }
 
@@ -90,9 +91,18 @@ func _process(_delta: float) -> void:
 			if _rover != null:
 				targets.append(["ROVER", _rover])
 			_walker.set_targets(targets)
-	elif _interior:
+	elif mode == Mode.INTERIOR and _interior:
 		var cruiser := _interior.get_node("InternalCruiser") as Node3D
 		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
+		cruiser.set_land_prompt(_can_land_now())
+		var pad: Dictionary = _interior.nearest_pad(cruiser.position)
+		var shown: bool = not pad.is_empty() and pad.distance < PAD_MARKER_RANGE
+		cruiser.update_pad_marker((pad.transform as Transform3D).origin if shown else Vector3.ZERO, pad.get("distance", 0.0), shown)
+	elif mode == Mode.ON_FOOT_INSIDE and _interior:
+		var walker := _interior.get_node_or_null("InteriorWalker")
+		if walker != null:
+			walker.set_board_prompt(_can_board_cruiser())
+			walker.set_targets([["CRUISER", _interior.get_node("InternalCruiser")]])
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _crashed:
@@ -106,6 +116,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_transition(walk_from_ship)
 		elif mode == Mode.ROVER and _rover != null and _rover.speed() < RoverRules.BOARD_SPEED:
 			_transition(walk_from_rover)
+		elif mode == Mode.INTERIOR and _can_land_now():
+			_land_and_walk()
+		elif mode == Mode.ON_FOOT_INSIDE and _can_board_cruiser():
+			_transition(board_cruiser)
 		elif mode == Mode.ON_FOOT:
 			var target := _board_target()
 			if target == "ship":
@@ -163,6 +177,16 @@ func _ship_pad() -> Dictionary:
 	var across: Vector3 = offset - up * offset.dot(up)
 	return {"centre": pad.origin} if across.length() < MoonBase.PAD_RADIUS * sqrt(2.0) else {}
 
+# The pad shown in the internal cruiser's HUD within this range.
+const PAD_MARKER_RANGE := 3000.0
+# Over a pad, the cruiser may land: this far off its middle on its plane,
+# this high at most, this slow.
+const PAD_LAND_REACH := 20.0
+const PAD_LAND_HEIGHT := 30.0
+const PAD_LAND_SPEED := 2.0
+# Out of the landed cruiser: this far to its left.
+const CRUISER_EXIT := 4.0
+
 # Out of the ship into the rover: beside the ship (or clear of its pad), in
 # the first spot with nothing in the way; the ship parked; the rover's eyes
 # and the world origin with the rover. With no room anywhere the pilot stays
@@ -208,6 +232,53 @@ func board_ship() -> void:
 
 func walker() -> CharacterBody3D:
 	return _walker
+
+# Over a pad, slow, the cruiser not already landing or parked.
+func _can_land_now() -> bool:
+	var cruiser := _interior.get_node("InternalCruiser")
+	if cruiser.parked or cruiser.is_landing():
+		return false
+	var pad: Dictionary = _interior.nearest_pad(cruiser.position)
+	if pad.is_empty():
+		return false
+	var local: Vector3 = (pad.transform as Transform3D).affine_inverse() * cruiser.position
+	return Vector2(local.x, local.z).length() <= PAD_LAND_REACH and local.y > 0.0 and local.y <= PAD_LAND_HEIGHT and cruiser.velocity.length() < PAD_LAND_SPEED
+
+# The cruiser down on the pad by itself, then the pilot out on foot.
+func _land_and_walk() -> void:
+	var cruiser := _interior.get_node("InternalCruiser")
+	_transitioning = true
+	cruiser.land_on(_interior.nearest_pad(cruiser.position).transform)
+	await cruiser.landed
+	_transitioning = false
+	_transition(walk_from_cruiser)
+
+func walk_from_cruiser() -> void:
+	var cruiser := _interior.get_node("InternalCruiser") as Node3D
+	var up: Vector3 = cruiser.transform.basis.y.normalized()
+	var left := -cruiser.transform.basis.x.normalized()
+	var walker: CharacterBody3D = InteriorWalkerScript.new()
+	walker.name = "InteriorWalker"
+	_interior.add_child(walker)
+	walker.place(cruiser.position - up * (cruiser.HULL_SIZE.y * 0.5 - 0.1) + left * CRUISER_EXIT, left)
+	cruiser.park(true)
+	walker.camera().make_current()
+	mode = Mode.ON_FOOT_INSIDE
+
+func _can_board_cruiser() -> bool:
+	var walker := _interior.get_node_or_null("InteriorWalker") as Node3D
+	var cruiser := _interior.get_node("InternalCruiser")
+	return walker != null and OnFoot.distance_to_box(walker.position, cruiser.transform, cruiser.HULL_SIZE) <= OnFoot.BOARD_DISTANCE
+
+func board_cruiser() -> void:
+	var walker := _interior.get_node_or_null("InteriorWalker")
+	if walker != null:
+		_interior.remove_child(walker)
+		walker.free()
+	var cruiser := _interior.get_node("InternalCruiser")
+	cruiser.park(false)
+	(cruiser.get_node("Camera") as Camera3D).make_current()
+	mode = Mode.INTERIOR
 
 # The vehicle the walker on the moon can board: "ship", "rover" (the nearer
 # when both are in reach) or "".

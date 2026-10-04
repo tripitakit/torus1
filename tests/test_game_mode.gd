@@ -50,6 +50,8 @@ func _initialize():
 	_failures += await _test_k_from_the_rover_parks_it()
 	_failures += await _test_k_by_the_rover_drives_again()
 	_failures += await _test_k_by_the_eagle_stows_the_rover()
+	_failures += await _test_k_land_only_over_a_pad()
+	_failures += await _test_k_by_the_cruiser_boards()
 	_failures += await _test_outside_world_is_freed_if_the_scene_goes_while_inside()
 
 	if _failures == 0:
@@ -609,4 +611,53 @@ func _test_k_by_the_eagle_stows_the_rover() -> int:
 	_void_cruiser.set_physics_process(false)
 	_void_cruiser.is_landed = false
 	_void_cruiser.in_moon_frame = false
+	return result
+
+func _wait_for_mode(wanted: int, seconds: float) -> void:
+	for i in range(roundi(seconds / 0.05)):
+		if _game_mode.mode == wanted and not _game_mode.is_transitioning():
+			return
+		await create_timer(0.05).timeout
+
+func _test_k_land_only_over_a_pad() -> int:
+	_game_mode.enter_interior(0)
+	await _frames(5)
+	var interior: Node3D = _scene.get_node("InteriorWorld")
+	var cruiser: CharacterBody3D = interior.get_node("InternalCruiser")
+	var pad: Transform3D = interior.nearest_pad(cruiser.position).transform
+	var up: Vector3 = pad.basis.y.normalized()
+	var side: Vector3 = pad.basis.x.normalized()
+	cruiser.position = pad.origin + up * 15.0 + side * 200.0
+	cruiser.velocity = Vector3.ZERO
+	await physics_frame
+	_press("board")
+	await create_timer(0.6).timeout
+	if _game_mode.mode != _game_mode.Mode.INTERIOR or cruiser.parked:
+		print("FAIL _test_k_land_only_over_a_pad: away from the pad, mode %d, parked %s" % [_game_mode.mode, cruiser.parked])
+		return 1
+	cruiser.position = pad.origin + up * 15.0 + side * 5.0
+	cruiser.velocity = Vector3.ZERO
+	await physics_frame
+	_press("board")
+	await _wait_for_mode(_game_mode.Mode.ON_FOOT_INSIDE, 6.0)
+	var rest: Vector3 = pad.origin + up * cruiser.HULL_SIZE.y * 0.5
+	var walker := interior.get_node_or_null("InteriorWalker") as Node3D
+	if _game_mode.mode != _game_mode.Mode.ON_FOOT_INSIDE or not cruiser.parked or cruiser.position.distance_to(rest) > 0.1 or walker == null or not walker.camera().current:
+		print("FAIL _test_k_land_only_over_a_pad: mode %d, parked %s, cruiser %.2f m off its rest, walker %s" % [_game_mode.mode, cruiser.parked, cruiser.position.distance_to(rest), walker])
+		return 1
+	return 0
+
+func _test_k_by_the_cruiser_boards() -> int:
+	var interior: Node3D = _scene.get_node("InteriorWorld")
+	var cruiser: CharacterBody3D = interior.get_node("InternalCruiser")
+	await _frames(10)
+	_press("board")
+	await _wait_for_mode(_game_mode.Mode.INTERIOR, 3.0)
+	var camera := cruiser.get_node("Camera") as Camera3D
+	var result := 0
+	if _game_mode.mode != _game_mode.Mode.INTERIOR or cruiser.parked or not camera.current or interior.get_node_or_null("InteriorWalker") != null:
+		print("FAIL _test_k_by_the_cruiser_boards: mode %d, parked %s, camera %s" % [_game_mode.mode, cruiser.parked, camera.current])
+		result = 1
+	_game_mode.exit_interior()
+	await _frames(3)
 	return result
