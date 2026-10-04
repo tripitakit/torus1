@@ -35,6 +35,13 @@ func _initialize():
 	_failures += await _test_restart_key_does_nothing_before_a_crash()
 	_failures += await _test_crash_shows_the_screen_and_r_restarts_at_a_dock()
 	_failures += await _test_moon_crash_restarts_landed_on_pad_1()
+	_failures += await _test_vehicle_key_in_flight_does_nothing()
+	_failures += await _test_rover_comes_out_clear_of_the_pad()
+	_failures += await _test_parked_ship_ignores_its_keys()
+	_failures += await _test_parked_ship_leaves_the_patch_to_the_rover()
+	_failures += await _test_rebase_follows_the_rover()
+	_failures += await _test_vehicle_key_far_from_the_ship_does_nothing()
+	_failures += await _test_vehicle_key_by_the_ship_boards_it()
 	_failures += await _test_outside_world_is_freed_if_the_scene_goes_while_inside()
 
 	if _failures == 0:
@@ -352,4 +359,112 @@ func _test_crash_shows_the_screen_and_r_restarts_at_a_dock() -> int:
 	if _game_mode.is_crashed() or _void_cruiser.is_crashed or absf(distance - 60.0) > 1.0 or not _void_cruiser.velocity.is_zero_approx() or label.visible or curtain.color.a > 0.01:
 		print("FAIL _test_crash_shows_the_screen_and_r_restarts_at_a_dock: after R crashed %s/%s, %.1f m from a port, velocity %s, label %s, curtain %s" % [_game_mode.is_crashed(), _void_cruiser.is_crashed, distance, _void_cruiser.velocity, label.visible, curtain.color])
 		result = 1
+	return result
+
+func _press(action: String) -> void:
+	_game_mode._unhandled_input(_action_event(action))
+
+func _action_event(action: String) -> InputEventAction:
+	var event := InputEventAction.new()
+	event.action = action
+	event.pressed = true
+	return event
+
+func _moon() -> Node3D:
+	return _scene.get_node("PlanetSystem/Moon")
+
+# The ship landed on pad 1, carried with the moon (its physics on).
+func _land_on_pad_1() -> void:
+	var pad: Transform3D = _moon().pad_transform(1)
+	_void_cruiser.set_physics_process(true)
+	_void_cruiser.land_at(Transform3D(pad.basis, pad.origin + pad.basis.y.normalized() * _void_cruiser.HALF_HEIGHT))
+	await physics_frame
+	await physics_frame
+
+func _test_vehicle_key_in_flight_does_nothing() -> int:
+	_void_cruiser.is_landed = false
+	_press("vehicle")
+	await _wait_for_transition()
+	if _game_mode.mode != 0 or _game_mode.rover() != null:
+		print("FAIL _test_vehicle_key_in_flight_does_nothing: mode %d" % _game_mode.mode)
+		return 1
+	return 0
+
+func _test_rover_comes_out_clear_of_the_pad() -> int:
+	await _land_on_pad_1()
+	_press("vehicle")
+	await _wait_for_transition()
+	var rover: CharacterBody3D = _game_mode.rover()
+	if _game_mode.mode != _game_mode.Mode.ROVER or rover == null:
+		print("FAIL _test_rover_comes_out_clear_of_the_pad: mode %d, rover %s" % [_game_mode.mode, rover])
+		return 1
+	var pad: Transform3D = _moon().pad_transform(1)
+	var from_pad: float = rover.global_position.distance_to(pad.origin)
+	var height: float = _moon().ground_altitude(rover.global_position)
+	if from_pad < 45.0 or from_pad > 60.0 or absf(height) > 0.05 or not rover.is_clear() or not rover.camera().current:
+		print("FAIL _test_rover_comes_out_clear_of_the_pad: %.1f m from the pad, %.3f m over the ground, clear %s, camera %s" % [from_pad, height, rover.is_clear(), rover.camera().current])
+		return 1
+	return 0
+
+func _test_parked_ship_ignores_its_keys() -> int:
+	var hud := _void_cruiser.get_node("Cockpit/Hud") as CanvasLayer
+	if not _void_cruiser.parked or _void_cruiser.is_processing_unhandled_input() or hud.visible:
+		print("FAIL _test_parked_ship_ignores_its_keys: parked %s, input on %s, HUD shown %s" % [_void_cruiser.parked, _void_cruiser.is_processing_unhandled_input(), hud.visible])
+		return 1
+	return 0
+
+func _test_parked_ship_leaves_the_patch_to_the_rover() -> int:
+	# The rover 200 m off: the patch must follow it, not the ship.
+	var rover: CharacterBody3D = _game_mode.rover()
+	var away: Vector3 = rover.global_position + rover.global_transform.basis.x * 200.0
+	rover.place(away, -rover.global_transform.basis.z)
+	await physics_frame
+	await physics_frame
+	var patch := _moon().get_node("Patch")
+	var target: Vector3 = _moon().global_transform.affine_inverse() * rover.global_position
+	var followed: Vector3 = patch.last_point
+	if followed.distance_to(target) > 50.0:
+		print("FAIL _test_parked_ship_leaves_the_patch_to_the_rover: the patch follows %.0f m from the rover" % followed.distance_to(target))
+		return 1
+	return 0
+
+func _test_rebase_follows_the_rover() -> int:
+	var rebase := _scene.get_node("WorldOriginRebase")
+	var tracked: Node = rebase.get_node(rebase.tracked_node)
+	if tracked != _game_mode.rover():
+		print("FAIL _test_rebase_follows_the_rover: the world origin follows %s" % tracked.name)
+		return 1
+	return 0
+
+func _test_vehicle_key_far_from_the_ship_does_nothing() -> int:
+	var rover: CharacterBody3D = _game_mode.rover()
+	var pad: Transform3D = _moon().pad_transform(1)
+	var out: Vector3 = (rover.global_position - pad.origin).normalized()
+	rover.place(pad.origin + out * 100.0, -rover.global_transform.basis.z)
+	await physics_frame
+	await physics_frame
+	_press("vehicle")
+	await _wait_for_transition()
+	if _game_mode.mode != _game_mode.Mode.ROVER:
+		print("FAIL _test_vehicle_key_far_from_the_ship_does_nothing: mode %d" % _game_mode.mode)
+		return 1
+	return 0
+
+func _test_vehicle_key_by_the_ship_boards_it() -> int:
+	var rover: CharacterBody3D = _game_mode.rover()
+	var pad: Transform3D = _moon().pad_transform(1)
+	var out: Vector3 = (rover.global_position - pad.origin).normalized()
+	rover.place(pad.origin + out * 50.0, -rover.global_transform.basis.z)
+	await physics_frame
+	await physics_frame
+	_press("vehicle")
+	await _wait_for_transition()
+	var pilot := _void_cruiser.get_node("Cockpit/PilotCamera") as Camera3D
+	var result := 0
+	if _game_mode.mode != 0 or _game_mode.rover() != null or _void_cruiser.parked or not pilot.current or not _void_cruiser.is_landed:
+		print("FAIL _test_vehicle_key_by_the_ship_boards_it: mode %d, parked %s, pilot camera %s, landed %s" % [_game_mode.mode, _void_cruiser.parked, pilot.current, _void_cruiser.is_landed])
+		result = 1
+	_void_cruiser.set_physics_process(false)
+	_void_cruiser.is_landed = false
+	_void_cruiser.in_moon_frame = false
 	return result

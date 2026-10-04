@@ -99,6 +99,8 @@ var planet_radius := 1737400.0
 # moon every tick, `velocity` relative to it.
 var in_moon_frame := false
 var is_landed := false
+# Parked while the pilot drives the moon rover (GameMode): see park().
+var parked := false
 var crashed_on_moon := false
 # While levelling itself near the moon: the nose's heading to keep, in the
 # moon's own axes (so it turns with the moon). Zero when not levelling.
@@ -502,6 +504,17 @@ func land_at(where: Transform3D) -> void:
 	in_moon_frame = true
 	_level_heading = Vector3.ZERO
 
+# Parked while the pilot is out in the rover: no keys, no mouse, no HUD;
+# still carried with the moon. Off again when the pilot boards.
+func park(on: bool) -> void:
+	parked = on
+	set_process_unhandled_input(not on)
+	_mouse_delta = Vector2.ZERO
+	_forward_hold_time = 0.0
+	var hud := get_node_or_null("Cockpit/Hud") as CanvasLayer
+	if hud != null:
+		hud.visible = not on
+
 func _crash_at(where: Vector3) -> void:
 	if is_inside_tree():
 		global_position = where
@@ -771,6 +784,10 @@ func _physics_process(delta: float) -> void:
 		_transit_tick(delta)
 		return
 	_follow_moon()
+	# Parked, the ship only turns with the moon: no flying, and the moon's
+	# patch is the rover's.
+	if parked:
+		return
 	var moon := moon_node()
 	if moon != null:
 		moon.follow_patch(global_position, in_moon_frame, velocity)

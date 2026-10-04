@@ -52,6 +52,8 @@ var hole_half := 0.0
 var building := false
 var built := false
 var _active := false
+# Where it was last told to follow (moon axes).
+var last_point := Vector3.ZERO
 var _task := -1
 var _material: Material
 
@@ -67,6 +69,7 @@ func set_material(material: Material) -> void:
 # ground under where it will be (LEAD) when the inner ring has a step to
 # slide.
 func follow(point: Vector3, velocity := Vector3.ZERO) -> void:
+	last_point = point
 	_active = true
 	visible = built
 	if building:

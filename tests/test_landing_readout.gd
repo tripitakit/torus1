@@ -9,6 +9,7 @@ func _init():
 	failures += _test_lines()
 	failures += _test_colours_at_the_limits()
 	failures += _test_status()
+	failures += _test_rover_hint()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -50,5 +51,13 @@ func _test_status() -> int:
 	var drifting_low := LandingReadout.readout(150.0, -1.0, 3.0, 0.0, 2, false)
 	if landed.status != "LANDED" or fast_low.status != "TOO FAST" or fast_high.status != "" or drifting_low.status != "TOO FAST":
 		print("FAIL _test_status: %s / %s / %s / %s" % [landed.status, fast_low.status, fast_high.status, drifting_low.status])
+		return 1
+	return 0
+
+func _test_rover_hint() -> int:
+	var landed := LandingReadout.readout(0.0, 0.0, 0.0, 0.0, 1, true)
+	var flying := LandingReadout.readout(50.0, -1.0, 0.0, 0.0, 1, false)
+	if landed.get("hint", null) != "V ROVER" or flying.get("hint", null) != "":
+		print("FAIL _test_rover_hint: landed '%s', flying '%s'" % [landed.get("hint", null), flying.get("hint", null)])
 		return 1
 	return 0

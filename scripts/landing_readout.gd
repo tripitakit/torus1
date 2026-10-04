@@ -31,6 +31,8 @@ static func readout(altitude: float, vertical: float, drift: float, tilt: float,
 		"drift": "DRIFT %.1f m/s" % drift,
 		"level": "LEVEL %.0f°" % tilt,
 		"status": status,
+		# Landed, the rover can come out (GameMode, V).
+		"hint": "V ROVER" if landed else "",
 		"colors": {
 			"vs": GOOD if descent_ok else BAD,
 			"drift": GOOD if drift_ok else BAD,

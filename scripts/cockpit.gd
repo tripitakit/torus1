@@ -79,6 +79,7 @@ const MOON_LINES := {
 	"drift": "DriftLabel",
 	"level": "LevelLabel",
 	"status": "StatusLabel",
+	"hint": "HintLabel",
 }
 # By DockingAssist.Rating: OK, CAUTION, OVER.
 const APPROACH_COLORS := [Color(0.3, 1.0, 0.4), Color(1.0, 0.8, 0.3), Color(1.0, 0.3, 0.25)]
