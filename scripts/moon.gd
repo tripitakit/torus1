@@ -182,6 +182,11 @@ func altitude(point: Vector3) -> float:
 	var local: Vector3 = global_transform.affine_inverse() * point
 	return local.length() - MoonOrbit.RADIUS - MoonTerrain.height(local.normalized())
 
+# The ground's height under `point`, as a ground vehicle asks for it
+# (GroundVehicle).
+func ground_altitude(point: Vector3) -> float:
+	return altitude(point)
+
 # The base's flat ground: its distance from the moon's centre.
 static func ground_radius() -> float:
 	return MoonOrbit.RADIUS + MoonTerrain.base_height()
