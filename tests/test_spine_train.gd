@@ -21,6 +21,9 @@ func _initialize():
 	_failures += _test_stops_where_the_stations_are()
 	_failures += _test_train_handed_on_at_the_bridge()
 	_failures += _test_opposite_way_half_a_period_apart()
+	_failures += _test_lift_frame_keeps_its_size()
+	_failures += _test_lift_glass_on_four_sides()
+	_failures += _test_lift_riders()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -143,4 +146,39 @@ func _test_opposite_way_half_a_period_apart() -> int:
 	if not is_equal_approx(fposmod(SpineTrain.train_tau(100.0, SpineTrain.BACK, total) - SpineTrain.train_tau(100.0, SpineTrain.AHEAD, total), total), total * 0.5):
 		print("FAIL _test_opposite_way_half_a_period_apart")
 		return 1
+	return 0
+
+func _test_lift_frame_keeps_its_size() -> int:
+	var box: AABB = SpineTrain.lift_mesh().get_aabb()
+	var half := SpineTrain.LIFT_SIZE * 0.5
+	if box.position.x < -half.x - 0.06 or box.end.x > half.x + 0.06 or box.position.y < -half.y - 0.01 or box.end.y > half.y + 0.3 or box.position.z < -half.z - 0.06 or box.end.z > half.z + 0.06:
+		print("FAIL _test_lift_frame_keeps_its_size: %s" % box)
+		return 1
+	return 0
+
+func _test_lift_glass_on_four_sides() -> int:
+	var box: AABB = SpineTrain.lift_glass_mesh().get_aabb()
+	if box.size.x < 5.6 or box.size.z < 5.6 or box.size.y < 6.8:
+		print("FAIL _test_lift_glass_on_four_sides: %s" % box)
+		return 1
+	return 0
+
+func _test_lift_riders() -> int:
+	var half := SpineTrain.LIFT_SIZE * 0.5
+	var floor_y := -half.y + SpineTrain.LIFT_SLAB
+	for seed in range(60):
+		var riders: Array = SpineTrain.lift_riders(seed)
+		var again: Array = SpineTrain.lift_riders(seed)
+		if riders.size() < 1 or riders.size() > 4 or riders.size() != again.size():
+			print("FAIL _test_lift_riders: seed %d gives %d riders" % [seed, riders.size()])
+			return 1
+		for i in range(riders.size()):
+			var at: Vector3 = riders[i].transform.origin
+			if at != (again[i].transform.origin as Vector3) or absf(at.x) > half.x - 0.6 or absf(at.z) > half.z - 0.6 or absf(at.y - floor_y) > 1e-6:
+				print("FAIL _test_lift_riders: seed %d rider at %s" % [seed, at])
+				return 1
+			for j in range(i):
+				if at.distance_to(riders[j].transform.origin) < 0.8:
+					print("FAIL _test_lift_riders: seed %d riders too close" % seed)
+					return 1
 	return 0

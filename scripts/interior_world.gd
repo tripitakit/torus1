@@ -219,6 +219,9 @@ var _ring_mesh: ArrayMesh
 var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
+var _lift_glass_mesh: ArrayMesh
+var _lift_glass_material: ShaderMaterial
+var _rider_materials: Array = []
 var _cruiser_mesh: ArrayMesh
 var _cruiser_material: ShaderMaterial
 var _strobe_mesh: QuadMesh
@@ -274,6 +277,11 @@ func build() -> void:
 	_hall_mesh = SpineTrain.hall_mesh()
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
+	_lift_glass_mesh = SpineTrain.lift_glass_mesh()
+	_lift_glass_material = SpineTrain.lift_glass_material()
+	_rider_materials.clear()
+	for suit in DockCrowd.SUITS:
+		_rider_materials.append(SpineTrain.structure_material(suit, ACCENT_COLOR))
 	_cruiser_mesh = AirTraffic.cruiser_mesh()
 	_cruiser_material = AirTraffic.cruiser_material()
 	_strobe_mesh = AirTraffic.strobe_mesh()
@@ -770,6 +778,12 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 			cabin.transform = Transform3D(Basis(across * (1.0 if side == 0 else -1.0), up, across.cross(up) * (1.0 if side == 0 else -1.0)), Vector3.ZERO)
 			var foot: Vector3 = pylon.position + across * SpineTrain.LIFT_OFFSET * (1.0 if side == 0 else -1.0) + up * (SpineTrain.HALL_HEIGHT + SpineTrain.LIFT_SIZE.y * 0.5)
 			cabin.position = foot
+			cabin.add_child(_structure_mesh("Glass", _lift_glass_mesh, _lift_glass_material))
+			var riders := SpineTrain.lift_riders(hash([state.ring_index, k, side]))
+			for i in range(riders.size()):
+				var rider := _structure_mesh("Rider_%d" % i, _person_mesh, _rider_materials[riders[i].suit])
+				rider.transform = riders[i].transform
+				cabin.add_child(rider)
 			station.add_child(cabin)
 			state.lifts.append([cabin, foot, up, run, 0.5 * side])
 		state.node.add_child(station)

@@ -143,6 +143,12 @@ const LIFT_OFFSET := PYLON_BASE + LIFT_SIZE.x * 0.5 + 0.5
 const LIFT_SPEED := 40.0
 const LIFT_ACCEL := 4.0
 const LIFT_WAIT := 10.0
+# A cabin's floor and roof thickness, its corner posts' width.
+const LIFT_SLAB := 0.4
+const LIFT_POST := 0.3
+# Riders keep this far from the walls and 0.8 m from each other.
+const LIFT_RIDER_MARGIN := 0.6
+const LIFT_RIDER_GAP := 0.8
 
 # The platform's underside, where the pylon ends (radius from the axis):
 # just outside the rings.
@@ -277,16 +283,83 @@ static func hall_mesh() -> ArrayMesh:
 	st.index()
 	return st.commit()
 
-# A lift cabin: a box with a glass front, centred on its frame.
+# A lift cabin's frame, centred: floor and roof LIFT_SLAB thick, four corner
+# posts, a glowing band round the roof and a cap on it, the sliding door's
+# rail on +z. The walls are glass (lift_glass_mesh).
 static func lift_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := LIFT_SIZE * 0.5
-	RoadTraffic._box(st, -half, half, 0.0)
-	RoadTraffic._box(st, Vector3(-half.x * 0.7, -half.y * 0.6, half.z), Vector3(half.x * 0.7, half.y * 0.7, half.z + 0.1), 3.0)
-	RoadTraffic._box(st, Vector3(-half.x, half.y, -half.z), Vector3(half.x, half.y + 0.3, half.z), 2.0)
+	RoadTraffic._box(st, Vector3(-half.x, -half.y, -half.z), Vector3(half.x, -half.y + LIFT_SLAB, half.z), 0.0)
+	RoadTraffic._box(st, Vector3(-half.x, half.y - LIFT_SLAB, -half.z), Vector3(half.x, half.y, half.z), 0.0)
+	for x: float in [-1.0, 1.0]:
+		for z: float in [-1.0, 1.0]:
+			var a := Vector3(x * half.x, -half.y, z * half.z)
+			var b := Vector3(x * (half.x - LIFT_POST), half.y, z * (half.z - LIFT_POST))
+			RoadTraffic._box(st, a.min(b), a.max(b), 0.0)
+	RoadTraffic._box(st, Vector3(-half.x - 0.05, half.y - 0.35, -half.z - 0.05), Vector3(half.x + 0.05, half.y - 0.2, half.z + 0.05), 2.0)
+	RoadTraffic._box(st, Vector3(-half.x * 0.8, half.y, -half.z * 0.8), Vector3(half.x * 0.8, half.y + 0.25, half.z * 0.8), 2.0)
+	RoadTraffic._box(st, Vector3(-1.6, half.y - LIFT_SLAB - 0.15, half.z - 0.15), Vector3(1.6, half.y - LIFT_SLAB, half.z), 1.0)
 	st.index()
 	return st.commit()
+
+# The cabin's four glass walls between floor and roof.
+static func lift_glass_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var inner := LIFT_SIZE * 0.5 - Vector3(0.05, LIFT_SLAB, 0.05)
+	for side: float in [-1.0, 1.0]:
+		RoadTraffic._box(st, Vector3(side * inner.x - 0.03, -inner.y, -inner.z), Vector3(side * inner.x + 0.03, inner.y, inner.z), 0.0)
+		RoadTraffic._box(st, Vector3(-inner.x, -inner.y, side * inner.z - 0.03), Vector3(inner.x, inner.y, side * inner.z + 0.03), 0.0)
+	st.index()
+	return st.commit()
+
+# Faint blue glass, warmer and a little brighter by night (lit inside).
+const GLASS_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+
+#include "res://shaders/interior_hour.gdshaderinc"
+
+varying float night;
+
+void vertex() {
+	vec3 world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	night = interior_night(interior_hour(world.z));
+}
+
+void fragment() {
+	ALBEDO = mix(vec3(0.55, 0.8, 0.95), vec3(1.0, 0.88, 0.65), night);
+	ALPHA = mix(0.22, 0.38, night);
+}
+"""
+
+static func lift_glass_material() -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = Shader.new()
+	material.shader.code = GLASS_SHADER
+	return material
+
+# One to four people standing on the cabin's floor, the same for the same
+# `seed`: {transform (cabin frame), suit (0-3)}.
+static func lift_riders(seed: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var count := rng.randi_range(1, 4)
+	var floor_y := -LIFT_SIZE.y * 0.5 + LIFT_SLAB
+	var reach := LIFT_SIZE.x * 0.5 - LIFT_POST - LIFT_RIDER_MARGIN
+	var riders := []
+	for attempt in range(100):
+		if riders.size() >= count:
+			break
+		var at := Vector3(rng.randf_range(-reach, reach), floor_y, rng.randf_range(-reach, reach))
+		var clear := true
+		for rider in riders:
+			if (rider.transform.origin as Vector3).distance_to(at) < LIFT_RIDER_GAP:
+				clear = false
+		if clear:
+			riders.append({"transform": Transform3D(Basis(Vector3.UP, rng.randf() * TAU), at), "suit": rng.randi_range(0, 3)})
+	return riders
 
 # Unshaded, lit from the hour where the vertex is (interior_hour.gdshaderinc)
 # as the cars are: a 20 km girder would meet 20 suns (8 at most, one pass
