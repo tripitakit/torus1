@@ -159,3 +159,18 @@ Solo quelli nuovi o toccati (regola dell'utente). TDD: ogni test visto fallire p
 - L'auto a noleggio nelle sezioni interne (pezzo 2).
 - Suoni, polvere sotto le ruote, tracce degli pneumatici.
 - Danni e ribaltamento.
+
+## Cambiato durante l'esecuzione
+
+- **Pad e sterzo** (prima del piano): rover a 52 m dal centro del pad, risalita entro 60 m; raggio di sterzata
+  fissato (6 → 40 m), angolo delle ruote ricavato.
+- **Cabina** (dopo la prova GPU): con l'occhio sopra l'asse anteriore il cruscotto copriva un quarto dello
+  schermo e le ruote non si vedevano. Ora l'occhio sta fra gli assi (0,2 m davanti al centro), il cruscotto è
+  largo 0,7 m, il telaio 1,25 m (più stretto della carreggiata) e il roll-bar sta accanto al pilota: le ruote
+  anteriori si vedono negli angoli in basso.
+- **Fari**: 18 di energia come quelli della nave, portata 120 m, inclinati di 7° verso il basso; con 4 di
+  energia non si vedevano.
+- **Test della nave parcheggiata**: controlla che sia `parked`, senza input e senza HUD; non chiama
+  `_unhandled_input` direttamente (salterebbe il blocco e non proverebbe nulla).
+- **Rimasto**: fuori schermo, se nave e base stanno nella stessa direzione, le frecce SHIP e SELENE e le
+  loro etichette si sovrappongono (stesso problema già noto per GATE e NAV).

@@ -19,17 +19,19 @@ static func build(rover: Node3D) -> void:
 	var tyre := _material(TYRE, 0.9, 0.0)
 	var screen := _material(SCREEN, 0.2, 0.0)
 	# Chassis, bonnet, rear deck.
-	_box(rover, "Chassis", Vector3(1.6, 0.25, 3.1), Vector3(0.0, 0.65, 0.0), frame)
-	_box(rover, "Bonnet", Vector3(1.5, 0.12, 0.5), Vector3(0.0, 0.84, -1.3), gold)
-	_box(rover, "Deck", Vector3(1.5, 0.3, 0.7), Vector3(0.0, 0.92, 1.15), gold)
+	# Narrower than the track, so the front wheels show beside the bonnet.
+	_box(rover, "Chassis", Vector3(1.25, 0.25, 3.1), Vector3(0.0, 0.65, 0.0), frame)
+	_box(rover, "Bonnet", Vector3(1.15, 0.12, 0.5), Vector3(0.0, 0.84, -1.3), gold)
+	_box(rover, "Deck", Vector3(1.15, 0.3, 0.7), Vector3(0.0, 0.92, 1.15), gold)
 	# Dashboard with two dark screens, in front of the driver.
-	_box(rover, "Dashboard", Vector3(1.1, 0.3, 0.12), Vector3(0.0, 1.0, -1.32), frame)
-	_box(rover, "ScreenL", Vector3(0.35, 0.2, 0.02), Vector3(-0.25, 1.02, -1.255), screen)
-	_box(rover, "ScreenR", Vector3(0.35, 0.2, 0.02), Vector3(0.25, 1.02, -1.255), screen)
-	# Roll bar: two posts and a top bar over the seats.
-	_box(rover, "PostL", Vector3(0.06, 0.95, 0.06), Vector3(-0.75, 1.25, -0.45), frame)
-	_box(rover, "PostR", Vector3(0.06, 0.95, 0.06), Vector3(0.75, 1.25, -0.45), frame)
-	_box(rover, "RollBar", Vector3(1.56, 0.06, 0.06), Vector3(0.0, 1.72, -0.45), frame)
+	# Narrow, so the front wheels show at the view's lower corners.
+	_box(rover, "Dashboard", Vector3(0.7, 0.25, 0.1), Vector3(0.0, 0.925, -0.75), frame)
+	_box(rover, "ScreenL", Vector3(0.28, 0.16, 0.02), Vector3(-0.16, 0.94, -0.695), screen)
+	_box(rover, "ScreenR", Vector3(0.28, 0.16, 0.02), Vector3(0.16, 0.94, -0.695), screen)
+	# Roll bar: two posts beside the driver and a bar over the seats.
+	_box(rover, "PostL", Vector3(0.06, 0.95, 0.06), Vector3(-0.7, 1.25, 0.1), frame)
+	_box(rover, "PostR", Vector3(0.06, 0.95, 0.06), Vector3(0.7, 1.25, 0.1), frame)
+	_box(rover, "RollBar", Vector3(1.46, 0.06, 0.06), Vector3(0.0, 1.72, 0.1), frame)
 	# Umbrella antenna behind.
 	_box(rover, "Mast", Vector3(0.04, 0.9, 0.04), Vector3(0.5, 1.5, 1.3), frame)
 	var dish := MeshInstance3D.new()

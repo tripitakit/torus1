@@ -19,11 +19,17 @@ const BUMP_KEEP := 0.5
 # The collision box, above the wheels so the ground's pebbles never stop it.
 const BOX_SIZE := Vector3(1.8, 1.4, 3.1)
 const BOX_CENTRE := Vector3(0.0, 1.1, 0.0)
-const EYE := Vector3(0.0, 1.3, -0.95)
+# The driver sits between the axles: the front wheels show at the view's
+# lower corners.
+const EYE := Vector3(0.0, 1.3, -0.2)
 const CAMERA_HFOV := 90.0
 const CAMERA_NEAR := 0.05
-const HEADLIGHT_RANGE := 80.0
-const HEADLIGHT_ENERGY := 4.0
+# As bright as the ship's (void_cruiser.gd), over a shorter reach.
+const HEADLIGHT_RANGE := 120.0
+const HEADLIGHT_ENERGY := 18.0
+const HEADLIGHT_ATTENUATION := 0.8
+# Aimed a little down, at the ground ahead.
+const HEADLIGHT_TILT := -0.12
 const HEADLIGHT_ANGLE := 35.0
 # Looking round with the mouse: so far each way, back ahead after a pause.
 const LOOK_SENSITIVITY := 0.003
@@ -60,6 +66,8 @@ func _ready() -> void:
 		light.spot_range = HEADLIGHT_RANGE
 		light.spot_angle = HEADLIGHT_ANGLE
 		light.light_energy = HEADLIGHT_ENERGY
+		light.rotation.x = HEADLIGHT_TILT
+		light.spot_attenuation = HEADLIGHT_ATTENUATION
 		light.shadow_enabled = false
 		add_child(light)
 	var eye := Camera3D.new()
