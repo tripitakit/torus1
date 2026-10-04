@@ -16,6 +16,7 @@ const SpineTrain = preload("res://scripts/spine_train.gd")
 const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
+const BoatWake = preload("res://scripts/boat_wake.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
 
@@ -224,6 +225,8 @@ var _strobe_mesh: QuadMesh
 var _strobe_material: ShaderMaterial
 var _boat_mesh: ArrayMesh
 var _boat_material: ShaderMaterial
+var _wake_mesh: ArrayMesh
+var _wake_material: ShaderMaterial
 var _person_mesh: ArrayMesh
 var _person_material: ShaderMaterial
 var _walker_material: ShaderMaterial
@@ -277,6 +280,8 @@ func build() -> void:
 	_strobe_material = AirTraffic.strobe_material()
 	_boat_mesh = LakeBoats.boat_mesh()
 	_boat_material = LoopTraffic.material(LakeBoats.CORNER, ACCENT_COLOR, 0.08, 1.5)
+	_wake_mesh = BoatWake.wake_mesh()
+	_wake_material = BoatWake.material(LakeBoats.CORNER)
 	_person_mesh = DockCrowd.person_mesh()
 	_person_material = LoopTraffic.material(LakeBoats.PEOPLE_CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
 	_walker_material = LoopTraffic.material(TownWalkers.CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
@@ -516,6 +521,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 	if not state.boats.is_empty():
 		var lake_bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
 		state.node.add_child(LoopTraffic.multimesh_instance("Boats", state.boats, _boat_mesh, _boat_material, lake_bounds))
+		state.node.add_child(LoopTraffic.multimesh_instance("BoatWakes", state.boats, _wake_mesh, _wake_material, lake_bounds))
 		state.boats = PackedFloat32Array()
 	_build_piers(state)
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5

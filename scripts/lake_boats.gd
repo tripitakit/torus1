@@ -265,7 +265,7 @@ static func pier_drones(plan, pier: Dictionary) -> Array:
 
 # A sci-fi hydrofoil about 11 m long, +Z forward, +X left, on the water at
 # y = 0: faceted wedge hull, glass cabin, accent strips, twin tail fins, a
-# white light at the bow. (A flat wake on the water flickered against it.)
+# white light at the bow. (The wake is boat_wake.gd's.)
 static func boat_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
