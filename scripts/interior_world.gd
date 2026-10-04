@@ -17,6 +17,7 @@ const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
 const BoatWake = preload("res://scripts/boat_wake.gd")
+const LandingPads = preload("res://scripts/landing_pads.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
 
@@ -144,6 +145,10 @@ class SectionLoad:
 	# The lakes' piers (LakeBoats.piers) and the life on them, and the town
 	# walkers by chunk (LoopTraffic data).
 	var piers := []
+	# The internal cruiser's landing pads (LandingPads.pads), and their slabs'
+	# frames in the section node once built.
+	var pads := []
+	var pad_frames := []
 	var pier_life := []
 	var walkers := {}
 	var trains := []
@@ -165,6 +170,8 @@ class SectionLoad:
 		air = AirTraffic.instance_buffer(AirTraffic.lanes(plan), plan)
 		boats = LoopTraffic.instance_buffer(LakeBoats.routes(plan), LakeBoats.PAINTS)
 		LakeBoats.drop_pier_buildings(plan, groups)
+		LandingPads.drop_pad_buildings(plan, groups)
+		pads = LandingPads.pads(plan)
 		piers = LakeBoats.piers(plan)
 		var people := []
 		var carts := []
@@ -220,6 +227,7 @@ var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
 var _lift_glass_mesh: ArrayMesh
+var _pad_mesh: ArrayMesh
 var _lift_glass_material: ShaderMaterial
 var _rider_materials: Array = []
 var _cruiser_mesh: ArrayMesh
@@ -278,6 +286,7 @@ func build() -> void:
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
 	_lift_glass_mesh = SpineTrain.lift_glass_mesh()
+	_pad_mesh = LandingPads.pad_mesh()
 	_lift_glass_material = SpineTrain.lift_glass_material()
 	_rider_materials.clear()
 	for suit in DockCrowd.SUITS:
@@ -532,6 +541,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 		state.node.add_child(LoopTraffic.multimesh_instance("BoatWakes", state.boats, _wake_mesh, _wake_material, lake_bounds))
 		state.boats = PackedFloat32Array()
 	_build_piers(state)
+	_build_pads(state)
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []
@@ -863,6 +873,39 @@ func _build_piers(state: SectionLoad) -> void:
 	for k in range(parts.size()):
 		state.node.add_child(LoopTraffic.multimesh_instance(parts[k][0], state.pier_life[k], parts[k][1], parts[k][2], bounds))
 	state.pier_life = []
+
+# The section's landing pads: a slab standing LandingPads.PROUD above the
+# ground at each pad's centre, up toward the axis, with its collision.
+func _build_pads(state: SectionLoad) -> void:
+	var plan = state.plan
+	state.pad_frames.clear()
+	for k in range(state.pads.size()):
+		var centre: Vector2 = state.pads[k].centre
+		var ground: float = section_radius - plan.height_at(centre.x, centre.y)
+		var frame := SpineTrain.spine_frame(centre.x / section_radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
+		var body := StaticBody3D.new()
+		body.name = "Pad_%d" % k
+		body.transform = frame
+		body.add_child(_structure_mesh("Mesh", _pad_mesh, _station_material))
+		_add_box(body, Vector3(LandingPads.SIZE, LandingPads.THICK, LandingPads.SIZE), Vector3.ZERO)
+		state.node.add_child(body)
+		state.pad_frames.append(frame)
+
+# The landing pad nearest `point` (this node's coordinates): {transform (its
+# top's centre, y toward the axis), distance}; empty with none loaded.
+func nearest_pad(point: Vector3) -> Dictionary:
+	var best := {}
+	for state: SectionLoad in _sections.values():
+		if state.node == null:
+			continue
+		var section := _chain.transform * state.node.transform
+		for frame: Transform3D in state.pad_frames:
+			var slab := section * frame
+			var top := Transform3D(slab.basis, slab.origin + slab.basis.y.normalized() * LandingPads.THICK * 0.5)
+			var distance := point.distance_to(top.origin)
+			if best.is_empty() or distance < best.distance:
+				best = {"transform": top, "distance": distance}
+	return best
 
 # The interior panels in `dir` (color, roughness, normal, emission).
 func _panel_material(dir: String) -> StandardMaterial3D:

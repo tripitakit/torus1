@@ -33,6 +33,7 @@ func _init():
 	failures += _test_sections_come_from_their_ring_indices()
 	failures += _test_plan_from_the_worker_thread_matches_a_direct_one()
 	failures += _test_loading_elsewhere_unloads_far_sections()
+	failures += _test_pads_built_and_found()
 	failures += _test_axis_lights_reach_the_ground_without_distance_falloff()
 	failures += _test_every_light_fades_out_by_25_km()
 	failures += _test_at_most_64_lights_within_25_km_along_the_chain()
@@ -820,5 +821,28 @@ func _test_walkers_in_the_town_chunks() -> int:
 			print("FAIL _test_walkers_in_the_town_chunks: chunk %s %s" % [key, node])
 			result = 1
 			break
+	world.free()
+	return result
+
+# The docked-beside sections' landing pads stand on their towns; the
+# nearest is found with its top's centre, up toward the axis.
+func _test_pads_built_and_found() -> int:
+	const LandingPads = preload("res://scripts/landing_pads.gd")
+	var world := _make_world()
+	var pads := world.find_children("Pad_*", "StaticBody3D", true, false)
+	var result := 0
+	if pads.is_empty():
+		print("FAIL _test_pads_built_and_found: no pads in the loaded sections")
+		world.free()
+		return 1
+	var slab := _world_transform(pads[0])
+	var up := slab.basis.y.normalized()
+	var top := slab.origin + up * LandingPads.THICK * 0.5
+	var probe := top + up * 50.0 + slab.basis.x.normalized() * 5.0
+	var found: Dictionary = world.nearest_pad(probe)
+	var axis_up := -Vector3(top.x, top.y, 0.0).normalized()
+	if found.is_empty() or (found.transform as Transform3D).origin.distance_to(top) > 0.01 or (found.transform as Transform3D).basis.y.normalized().dot(axis_up) < 0.999 or absf(found.distance - probe.distance_to(top)) > 0.01:
+		print("FAIL _test_pads_built_and_found: %s, expected top %s" % [found, top])
+		result = 1
 	world.free()
 	return result
