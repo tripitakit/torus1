@@ -100,7 +100,9 @@ void fragment() {
 	}
 	if (hole_half > 0.0) {
 		float facing = dot(local_dir, hole_up);
-		if (facing > 0.99) {
+		// Anywhere on the face (its corners are 55 degrees off its axis),
+		// never the far side.
+		if (facing > 0.5) {
 			vec2 on_plane = vec2(dot(local_dir, hole_x), dot(local_dir, hole_z)) * hole_radius / facing - hole_centre;
 			if (abs(on_plane.x) < hole_half && abs(on_plane.y) < hole_half) {
 				discard;
@@ -299,6 +301,17 @@ func follow_patch(point: Vector3, active: bool, velocity := Vector3.ZERO) -> voi
 	elif patch.visible or patch.built:
 		patch.stop()
 		((get_node("Surface") as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("hole_half", 0.0)
+
+# The shader's hole test (MOON_SHADER, fragment), in GDScript for the
+# tests: whether the whole moon leaves out moon-axes direction `direction`.
+static func in_hole(direction: Vector3, up: Vector3, x: Vector3, z: Vector3, centre: Vector2, half: float, radius: float) -> bool:
+	if half <= 0.0:
+		return false
+	var facing := direction.dot(up)
+	if facing <= 0.5:
+		return false
+	var on_plane := Vector2(direction.dot(x), direction.dot(z)) * radius / facing - centre
+	return absf(on_plane.x) < half and absf(on_plane.y) < half
 
 # New rings in place: the whole moon's hole and the patch's offset follow.
 func _on_patch_rebuilt(patch: Node3D, material: ShaderMaterial, patch_material: ShaderMaterial) -> void:

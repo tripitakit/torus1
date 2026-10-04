@@ -266,8 +266,11 @@ static func _ring(on_face: int, k: int, centre: Vector2i, hole_centre_index: Vec
 			# The edge lies on the next surface: no crack whatever the morph.
 			points[n] = (target if on_edge else direction * lattice_radius(on_face, k, gi, gj)) - origin
 			targets[n] = target - origin
-	var normals := _normals(points)
-	var target_normals := _normals(targets)
+	# On +X, +Y and +Z the face's axes (e1 x e2 along the axis) lay the grid
+	# out the other way round: the triangles and normals turn with them.
+	var flip := outward_grid(on_face)
+	var normals := _normals(points, flip)
+	var target_normals := _normals(targets, flip)
 	var morph := PackedFloat32Array()
 	morph.resize(count * 4)
 	var morph_normals := PackedFloat32Array()
@@ -296,12 +299,23 @@ static func _ring(on_face: int, k: int, centre: Vector2i, hole_centre_index: Vec
 			var b := a + 1
 			var c := a + side
 			var d := c + 1
-			indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
+			# Clockwise seen from above: Godot's front face.
+			if flip:
+				indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+			else:
+				indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
 	if last:
-		_skirt(points, normals, morph, morph_normals, indices, origin)
+		_skirt(points, normals, morph, morph_normals, indices, origin, flip)
 	return {"origin": origin, "vertices": points, "normals": normals, "morph": morph, "morph_normals": morph_normals, "indices": indices, "edge": edge, "centre_uv": Vector2(centre) * spacing, "face": on_face}
 
-static func _normals(points: PackedVector3Array) -> PackedVector3Array:
+# Whether the grid's i and j (e1, e2) turn round the face's axis the
+# right-handed way (e1 x e2 = axis: +X, +Y, +Z), which turns the triangles'
+# and normals' sense.
+static func outward_grid(on_face: int) -> bool:
+	var axes := face_axes(on_face)
+	return (axes.e1 as Vector3).cross(axes.e2).dot(axes.axis) > 0.0
+
+static func _normals(points: PackedVector3Array, flip: bool) -> PackedVector3Array:
 	var side := CELLS + 1
 	var normals := PackedVector3Array()
 	normals.resize(points.size())
@@ -309,12 +323,12 @@ static func _normals(points: PackedVector3Array) -> PackedVector3Array:
 		for i in range(side):
 			var east := points[j * side + mini(i + 1, CELLS)] - points[j * side + maxi(i - 1, 0)]
 			var south := points[mini(j + 1, CELLS) * side + i] - points[maxi(j - 1, 0) * side + i]
-			normals[j * side + i] = south.cross(east).normalized()
+			normals[j * side + i] = (east.cross(south) if flip else south.cross(east)).normalized()
 	return normals
 
 # A strip hanging SKIRT metres down from the outer edge (hides any slit
 # between the patch and the whole moon's mesh).
-static func _skirt(points: PackedVector3Array, normals: PackedVector3Array, morph: PackedFloat32Array, morph_normals: PackedFloat32Array, indices: PackedInt32Array, origin: Vector3) -> void:
+static func _skirt(points: PackedVector3Array, normals: PackedVector3Array, morph: PackedFloat32Array, morph_normals: PackedFloat32Array, indices: PackedInt32Array, origin: Vector3, flip: bool) -> void:
 	var side := CELLS + 1
 	var ring_order := []
 	for i in range(CELLS):
@@ -340,4 +354,7 @@ static func _skirt(points: PackedVector3Array, normals: PackedVector3Array, morp
 		var b: int = ring_order[(n + 1) % count]
 		var c := start + n
 		var d := start + (n + 1) % count
-		indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+		if flip:
+			indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
+		else:
+			indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
