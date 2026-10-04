@@ -49,7 +49,8 @@ static func build(rover: Node3D) -> void:
 	for k in range(4):
 		var colour := Color(0.3, 1.0, 0.4) if k % 2 == 0 else Color(1.0, 0.7, 0.2)
 		_box(rover, "Status%d" % k, Vector3(0.06, 0.04, 0.02), Vector3(-0.21 + k * 0.14, 0.95, -0.62), _glow(colour))
-	# The glass dome over the seats and its thin ring.
+	# The glass dome over the seats, its thin ring down on the platform
+	# (higher up it read as a bar across the view).
 	var dome := MeshInstance3D.new()
 	dome.name = "Dome"
 	var sphere := SphereMesh.new()
@@ -60,18 +61,18 @@ static func build(rover: Node3D) -> void:
 	sphere.rings = 8
 	dome.mesh = sphere
 	dome.material_override = _glass()
-	dome.position = Vector3(0.0, 0.95, -0.2)
+	dome.position = Vector3(0.0, 0.8, -0.2)
 	rover.add_child(dome)
 	var ring := MeshInstance3D.new()
 	ring.name = "DomeRing"
 	var torus := TorusMesh.new()
-	torus.inner_radius = 1.02
-	torus.outer_radius = 1.08
+	torus.inner_radius = 1.03
+	torus.outer_radius = 1.07
 	torus.rings = 24
 	torus.ring_segments = 6
 	ring.mesh = torus
 	ring.material_override = white
-	ring.position = Vector3(0.0, 0.95, -0.2)
+	ring.position = Vector3(0.0, 0.8, -0.2)
 	rover.add_child(ring)
 	# Cargo box and whip antenna behind.
 	_box(rover, "Cargo", Vector3(1.1, 0.45, 0.45), Vector3(0.0, 1.0, 1.25), white)

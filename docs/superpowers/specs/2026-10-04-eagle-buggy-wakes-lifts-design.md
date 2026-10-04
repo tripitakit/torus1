@@ -112,3 +112,12 @@ Solo i test nuovi o toccati. TDD.
 - Interni dell'Eagle e del Moon Buggy oltre a quello visibile.
 - Persone che salgono e scendono dalle cabine.
 - Schiuma che resta sull'acqua anche dopo il passaggio (oltre i 6 s).
+
+## Cambiato durante l'esecuzione
+
+- **Moon Buggy:** con la base della cupola a 0,95 m il suo anello attraversava la vista bassa come una sbarra;
+  cupola e anello ora poggiano sulla piattaforma (0,8 m) e l'anello è più sottile. Fari tondi arretrati nel muso
+  e parafanghi lunghi 0,85 m per stare nei 3,4 m di lunghezza.
+- **Ascensori:** `interior_world.gd` aveva già `_person_mesh` (per i moli): riusata.
+- **Prova GPU:** Eagle vista dal rover a 45 m, cabina del buggy, barca con scia dall'alto, cabina d'ascensore
+  con il vetro e quattro persone. Non fatto: la cabina di notte (l'ora dell'interno segue l'orologio vero).
