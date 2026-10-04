@@ -11,6 +11,7 @@ const GroundVehicle = preload("res://scripts/ground_vehicle.gd")
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const RoverModel = preload("res://scripts/rover_model.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
+const RoverHud = preload("res://scripts/rover_hud.gd")
 
 const MOON_GRAVITY := 1.62
 # A bump keeps half of what is left along the wall; head-on, nothing.
@@ -72,6 +73,9 @@ func _ready() -> void:
 	add_child(eye)
 	if body.is_empty():
 		body = GroundVehicle.new_body(global_transform)
+	var hud: CanvasLayer = RoverHud.new()
+	hud.name = "Hud"
+	add_child(hud)
 
 func _moon() -> Node3D:
 	if not is_inside_tree():
@@ -105,9 +109,9 @@ func is_clear() -> bool:
 	query.exclude = [get_rid()]
 	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
-# The "V BOARD" line (rover_hud.gd).
-func set_board_prompt(_shown: bool) -> void:
-	pass
+# "V BOARD" at the top centre (GameMode decides when).
+func set_board_prompt(shown: bool) -> void:
+	(get_node("Hud") as CanvasLayer).set_board_prompt(shown)
 
 func read_controls() -> Dictionary:
 	if not controls.is_empty():
@@ -149,6 +153,17 @@ func _process(delta: float) -> void:
 		if wheel.begins_with("WheelF"):
 			pivot.rotation.y = angle
 		(pivot.get_node("Spin") as Node3D).rotation.x = _wheel_roll
+	var moon := _moon()
+	if moon == null:
+		return
+	var up: Vector3 = moon.up_at(global_position)
+	var basis := global_transform.basis.orthonormalized()
+	var pole: Vector3 = moon.global_transform.basis.y.normalized()
+	var slope := rad_to_deg(acos(clampf(basis.y.dot(up), -1.0, 1.0)))
+	var altitude: float = moon.to_local(global_position).length() - MoonOrbit.RADIUS
+	var hud := get_node("Hud") as CanvasLayer
+	hud.show_readout(RoverHud.readout(body.speed, RoverHud.heading(-basis.z, up, pole), slope, altitude, lights_on))
+	hud.update_markers(camera(), ship.global_position if is_instance_valid(ship) else null, moon.beacon_position())
 
 func _physics_process(delta: float) -> void:
 	var moon := _moon()
