@@ -36,7 +36,9 @@ func _initialize():
 	_failures += await _test_crash_shows_the_screen_and_r_restarts_at_a_dock()
 	_failures += await _test_moon_crash_restarts_landed_on_pad_1()
 	_failures += await _test_vehicle_key_in_flight_does_nothing()
+	_failures += await _test_no_room_keeps_the_pilot_aboard()
 	_failures += await _test_rover_comes_out_clear_of_the_pad()
+	_failures += await _test_parked_ship_hides_its_landing_guide()
 	_failures += await _test_parked_ship_ignores_its_keys()
 	_failures += await _test_parked_ship_leaves_the_patch_to_the_rover()
 	_failures += await _test_rebase_follows_the_rover()
@@ -468,3 +470,36 @@ func _test_vehicle_key_by_the_ship_boards_it() -> int:
 	_void_cruiser.is_landed = false
 	_void_cruiser.in_moon_frame = false
 	return result
+
+# Every spot round the ship blocked: no rover, the pilot stays aboard.
+func _test_no_room_keeps_the_pilot_aboard() -> int:
+	await _land_on_pad_1()
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(400.0, 60.0, 400.0)
+	shape.shape = box
+	wall.add_child(shape)
+	# On the moon, so it moves with the ship (the moon moves ~30 m a tick).
+	_moon().add_child(wall)
+	wall.global_position = _void_cruiser.global_position
+	await physics_frame
+	_press("vehicle")
+	await _wait_for_transition()
+	var result := 0
+	if _game_mode.mode != 0 or _game_mode.rover() != null or _void_cruiser.parked:
+		print("FAIL _test_no_room_keeps_the_pilot_aboard: mode %d, rover %s, parked %s" % [_game_mode.mode, _game_mode.rover(), _void_cruiser.parked])
+		result = 1
+	wall.free()
+	await physics_frame
+	return result
+
+# Parked on pad 1, the ship's guide lines over the pads stay hidden.
+func _test_parked_ship_hides_its_landing_guide() -> int:
+	await process_frame
+	await process_frame
+	var guide := _void_cruiser.get_node("ApproachGuide") as MeshInstance3D
+	if guide.visible:
+		print("FAIL _test_parked_ship_hides_its_landing_guide: the guide lines show from the rover")
+		return 1
+	return 0

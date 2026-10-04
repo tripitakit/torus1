@@ -143,7 +143,8 @@ func _ship_pad() -> Dictionary:
 
 # Out of the ship into the rover: beside the ship (or clear of its pad), in
 # the first spot with nothing in the way; the ship parked; the rover's eyes
-# and the world origin with the rover.
+# and the world origin with the rover. With no room anywhere the pilot stays
+# aboard.
 func leave_ship() -> void:
 	var moon: Node3D = _void_cruiser.moon_node()
 	var ship := _void_cruiser.global_transform.orthonormalized()
@@ -155,10 +156,17 @@ func leave_ship() -> void:
 	_rover.ship = _void_cruiser
 	get_parent().add_child(_rover)
 	_rover.moon_path = _rover.get_path_to(moon)
+	var room := false
 	for spot in spots:
 		_rover.place(spot, -ship.basis.z)
 		if _rover.is_clear():
+			room = true
 			break
+	if not room:
+		get_parent().remove_child(_rover)
+		_rover.free()
+		_rover = null
+		return
 	_void_cruiser.park(true)
 	_rover.camera().make_current()
 	_track(_rover)

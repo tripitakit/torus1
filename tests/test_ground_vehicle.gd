@@ -13,9 +13,11 @@ class FakeGround:
 	var angle := 0.0
 	var step := 0.0
 	var step_at := -INF
+	# Past this the ramp tops out flat (a crest).
+	var crest_at := -INF
 
 	func surface(p: Vector3) -> float:
-		var y := -p.z * tan(angle)
+		var y := -maxf(p.z, crest_at) * tan(angle)
 		if p.z < step_at:
 			y -= step
 		return y
@@ -43,6 +45,7 @@ func _init():
 	failures += _test_leans_onto_the_ramp()
 	failures += _test_drop_flies_then_lands()
 	failures += _test_handbrake_holds_on_a_20_degree_ramp()
+	failures += _test_crest_makes_a_small_jump()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -235,5 +238,29 @@ func _test_handbrake_holds_on_a_20_degree_ramp() -> int:
 		body = _tick(body, _controls(0.0, 0.0, true), ground)
 	if body.transform.origin.distance_to(start) > 0.01:
 		print("FAIL _test_handbrake_holds_on_a_20_degree_ramp: moved %.3f m" % body.transform.origin.distance_to(start))
+		return 1
+	return 0
+
+# Over the top of a 34-degree ramp at full speed: a small hop under a
+# second, not a flight (the climb's 11 m/s straight up would send it 40 m
+# high for 14 s).
+func _test_crest_makes_a_small_jump() -> int:
+	var ground := FakeGround.new()
+	ground.angle = deg_to_rad(34.0)
+	ground.crest_at = -20.0
+	var body := _start(ground, -5.0)
+	body.speed = 20.0
+	var launch := 0.0
+	var air_ticks := 0
+	for i in range(600):
+		body = _tick(body, _controls(1.0), ground)
+		if body.airborne:
+			if air_ticks == 0:
+				launch = body.vertical
+			air_ticks += 1
+		elif air_ticks > 0:
+			break
+	if air_ticks == 0 or launch > GroundVehicle.MAX_LAUNCH + 1e-6 or air_ticks > 60:
+		print("FAIL _test_crest_makes_a_small_jump: off at %.2f m/s up, %.2f s in the air" % [launch, air_ticks / 60.0])
 		return 1
 	return 0

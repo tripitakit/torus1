@@ -21,7 +21,8 @@ func _test_spots_beside_the_ship() -> int:
 	# Ship nose -Z, right +X, tilted a little: the spots lie on the level.
 	var ship := Transform3D(Basis(Vector3.FORWARD, 0.1), Vector3(100.0, 5.0, 0.0))
 	var spots: Array = RoverRules.spawn_spots(ship, Vector3.UP, false, Vector3.ZERO)
-	var expected := [Vector3(115.0, 5.0, 0.0), Vector3(85.0, 5.0, 0.0), Vector3(100.0, 5.0, 15.0), Vector3(100.0, 5.0, -15.0)]
+	# Behind and ahead past the hull's ends (15 m from its centre).
+	var expected := [Vector3(115.0, 5.0, 0.0), Vector3(85.0, 5.0, 0.0), Vector3(100.0, 5.0, 25.0), Vector3(100.0, 5.0, -25.0)]
 	for i in range(4):
 		if (spots[i] as Vector3).distance_to(expected[i]) > 1e-3:
 			print("FAIL _test_spots_beside_the_ship: %s" % [spots])

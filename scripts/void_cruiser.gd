@@ -646,6 +646,10 @@ func _update_approach_guide() -> Dictionary:
 	var guide := get_node_or_null("ApproachGuide") as MeshInstance3D
 	if guide == null:
 		return {}
+	# Parked, the pilot is out in the rover: no lines over the pads.
+	if parked:
+		_show_lines(guide, PackedVector3Array())
+		return {}
 	# Near Base Selene the same lines guide down onto the nearest pad.
 	var target := landing_target()
 	if not target.is_empty():

@@ -27,6 +27,12 @@ const SLOPE_SOFT := 0.4363323  # 25 degrees
 const SLOPE_STOP := 0.6108652  # 35 degrees
 # Further than this over the ground the vehicle is in the air.
 const AIR_GAP := 0.15
+# Off a crest it goes up at most this fast (m/s): a hop, not a flight.
+const MAX_LAUNCH := 2.0
+# In the air it falls this many times faster than the ground's gravity:
+# at the moon's 1.62 m/s² a rover off a rim at speed would fly for seconds,
+# with no steering and no brake.
+const AIR_GRAVITY := 3.0
 # How fast the body leans onto the ground under its wheels.
 const SETTLE_TIME := 0.1
 # The wheels: half the track, half the wheelbase.
@@ -86,7 +92,7 @@ static func drive(body: Dictionary, controls: Dictionary, ground: Object, gravit
 	var origin: Vector3 = (body.transform as Transform3D).origin
 	var up: Vector3 = ground.up_at(origin)
 	if body.airborne:
-		out.vertical = body.vertical - gravity * delta
+		out.vertical = body.vertical - gravity * AIR_GRAVITY * delta
 		out.motion = (_flat_nose(basis, up) * body.speed + up * out.vertical) * delta
 		return out
 	out.steer = next_steer(body.steer, controls.steer, delta)
@@ -101,7 +107,8 @@ static func drive(body: Dictionary, controls: Dictionary, ground: Object, gravit
 
 # After the move. On the ground: put on it and leaned toward the plane under
 # its four wheels; if the ground fell away more than AIR_GAP, off into the
-# air with the speed it had (its climb becomes the vertical speed). In the
+# air with the speed it had (its climb becomes the vertical speed, at most
+# MAX_LAUNCH). In the
 # air: levels out slowly, back on the ground once it reaches it.
 static func settle(body: Dictionary, ground: Object, delta: float) -> Dictionary:
 	var out := body.duplicate()
@@ -112,7 +119,7 @@ static func settle(body: Dictionary, ground: Object, delta: float) -> Dictionary
 	if not body.airborne and height > AIR_GAP:
 		var rise: float = -basis.z.dot(up)
 		out.airborne = true
-		out.vertical = body.speed * rise
+		out.vertical = minf(body.speed * rise, MAX_LAUNCH)
 		out.speed = body.speed * sqrt(maxf(0.0, 1.0 - rise * rise))
 	elif body.airborne and height <= 0.0:
 		out.airborne = false

@@ -174,3 +174,12 @@ Solo quelli nuovi o toccati (regola dell'utente). TDD: ogni test visto fallire p
   `_unhandled_input` direttamente (salterebbe il blocco e non proverebbe nulla).
 - **Rimasto**: fuori schermo, se nave e base stanno nella stessa direzione, le frecce SHIP e SELENE e le
   loro etichette si sovrappongono (stesso problema già noto per GATE e NAV).
+- **Dopo la revisione finale:**
+  - **Salti:** sul terreno vero il rover saltava a ~10 m/s in su e volava per 12–15 s fino a 59 m (15–20% del
+    tempo in aria). Ora lo stacco verso l'alto è al massimo **2 m/s** e in aria cade **3 volte** più in fretta
+    della gravità lunare (`AIR_GRAVITY`, regolabile); a terra la gravità resta 1,62. Misurato: 3–16% del
+    tempo in aria, voli di 0,5–1,8 s in media; i più lunghi scendendo a 20 m/s dai bordi ripidi dei crateri.
+  - **Uscita:** dietro e davanti il rover esce a 25 m (lo scafo arriva a 15 m dal centro); se non c'è posto
+    da nessuna parte il pilota resta a bordo.
+  - **Guida della nave:** con la nave parcheggiata le linee della guida d'atterraggio sopra i pad non si
+    vedono più.

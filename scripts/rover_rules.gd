@@ -5,6 +5,8 @@ extends RefCounted
 # climb) both count from the pad's centre instead of the ship.
 
 const SIDE_OFFSET := 15.0
+# Behind and ahead: past the ship's ends (its hull reaches 15 m each way).
+const END_OFFSET := 25.0
 # Past the pad's corners (30 * sqrt 2 = 42.4 m) with room to spare.
 const PAD_OFFSET := 52.0
 const BOARD_DISTANCE := 30.0
@@ -12,16 +14,15 @@ const PAD_BOARD_DISTANCE := 60.0
 const BOARD_SPEED := 1.0
 
 # Where the rover may come out, first choice first: right of the ship,
-# left, behind, ahead, on the level across `up`.
+# left, behind, ahead, on the level across `up`. Off a pad, behind and
+# ahead clear the hull's ends.
 static func spawn_spots(ship: Transform3D, up: Vector3, on_pad: bool, pad_centre: Vector3) -> Array:
 	var right := _flat(ship.basis.x, up)
 	var nose := _flat(-ship.basis.z, up)
 	var from := pad_centre if on_pad else ship.origin
-	var reach := PAD_OFFSET if on_pad else SIDE_OFFSET
-	var spots := []
-	for direction in [right, -right, -nose, nose]:
-		spots.append(from + direction * reach)
-	return spots
+	var side := PAD_OFFSET if on_pad else SIDE_OFFSET
+	var ends := PAD_OFFSET if on_pad else END_OFFSET
+	return [from + right * side, from - right * side, from - nose * ends, from + nose * ends]
 
 static func can_board(rover: Vector3, speed: float, ship: Vector3, on_pad: bool, pad_centre: Vector3) -> bool:
 	if speed >= BOARD_SPEED:
