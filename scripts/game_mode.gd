@@ -7,11 +7,15 @@ extends Node
 const DockingRules = preload("res://scripts/docking_rules.gd")
 const InteriorWorldScript = preload("res://scripts/interior_world.gd")
 const InternalCruiserScript = preload("res://scripts/internal_cruiser.gd")
+const MoonRoverScript = preload("res://scripts/moon_rover.gd")
+const RoverRules = preload("res://scripts/rover_rules.gd")
+const MoonBase = preload("res://scripts/moon_base.gd")
 
-enum Mode { VOID, INTERIOR }
+enum Mode { VOID, INTERIOR, ROVER }
 
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
 @export var void_cruiser_path: NodePath = NodePath("../VoidCruiser")
+@export var rebase_path: NodePath = NodePath("../WorldOriginRebase")
 
 const FADE_TIME := 0.4
 # The void-cruiser reappears this far out from the port it docked at.
@@ -33,6 +37,7 @@ var docked_bridge := -1
 var _station: Node3D
 var _void_cruiser: CharacterBody3D
 var _interior: Node3D
+var _rover: CharacterBody3D
 var _detached: Array = []
 var _transitioning := false
 var _curtain: ColorRect
@@ -72,6 +77,9 @@ func _process(_delta: float) -> void:
 		var cockpit := _void_cruiser.get_node_or_null("Cockpit")
 		if cockpit:
 			cockpit.set_dock_prompt(_can_dock_now())
+	elif mode == Mode.ROVER:
+		if _rover != null:
+			_rover.set_board_prompt(_can_board_now())
 	elif _interior:
 		var cruiser := _interior.get_node("InternalCruiser") as Node3D
 		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
@@ -81,7 +89,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _crash_screen_up and event.is_action_pressed("restart"):
 			restart_after_crash()
 		return
-	if _transitioning or not event.is_action_pressed("dock"):
+	if _transitioning:
+		return
+	if event.is_action_pressed("vehicle"):
+		if mode == Mode.VOID and _can_leave_ship_now():
+			_transition(leave_ship)
+		elif mode == Mode.ROVER and _can_board_now():
+			_transition(board_ship)
+		return
+	if not event.is_action_pressed("dock"):
 		return
 	if mode == Mode.VOID and _can_dock_now():
 		_transition(enter_interior.bind(_station.nearest_bridge_index(_void_cruiser.global_position)))
@@ -99,6 +115,80 @@ func _can_undock_now() -> bool:
 	var cruiser: CharacterBody3D = _interior.get_node("InternalCruiser")
 	var dock: Vector3 = _interior.get_dock_position(_interior.nearest_dock_slot(cruiser.position))
 	return DockingRules.can_dock(dock.distance_to(cruiser.position), cruiser.velocity.length())
+
+func rover() -> CharacterBody3D:
+	return _rover
+
+# Landed on the moon, the rover can come out.
+func _can_leave_ship_now() -> bool:
+	return _void_cruiser.is_landed and _void_cruiser.in_moon_frame and not _void_cruiser.is_crashed and _void_cruiser.moon_node() != null
+
+func _can_board_now() -> bool:
+	if _rover == null:
+		return false
+	var pad := _ship_pad()
+	return RoverRules.can_board(_rover.global_position, _rover.speed(), _void_cruiser.global_position, not pad.is_empty(), pad.get("centre", Vector3.ZERO))
+
+# The pad the landed ship sits on: {centre (its top's centre, world)}, or
+# empty when it sits on the bare ground.
+func _ship_pad() -> Dictionary:
+	var target: Dictionary = _void_cruiser.landing_target()
+	if target.is_empty():
+		return {}
+	var pad: Transform3D = target.pad
+	var up: Vector3 = pad.basis.y.normalized()
+	var offset: Vector3 = _void_cruiser.global_position - pad.origin
+	var across: Vector3 = offset - up * offset.dot(up)
+	return {"centre": pad.origin} if across.length() < MoonBase.PAD_RADIUS * sqrt(2.0) else {}
+
+# Out of the ship into the rover: beside the ship (or clear of its pad), in
+# the first spot with nothing in the way; the ship parked; the rover's eyes
+# and the world origin with the rover. With no room anywhere the pilot stays
+# aboard.
+func leave_ship() -> void:
+	var moon: Node3D = _void_cruiser.moon_node()
+	var ship := _void_cruiser.global_transform.orthonormalized()
+	var up: Vector3 = moon.up_at(ship.origin)
+	var pad := _ship_pad()
+	var spots := RoverRules.spawn_spots(ship, up, not pad.is_empty(), pad.get("centre", Vector3.ZERO))
+	_rover = MoonRoverScript.new()
+	_rover.name = "MoonRover"
+	_rover.ship = _void_cruiser
+	get_parent().add_child(_rover)
+	_rover.moon_path = _rover.get_path_to(moon)
+	var room := false
+	for spot in spots:
+		_rover.place(spot, -ship.basis.z)
+		if _rover.is_clear():
+			room = true
+			break
+	if not room:
+		get_parent().remove_child(_rover)
+		_rover.free()
+		_rover = null
+		return
+	_void_cruiser.park(true)
+	_rover.camera().make_current()
+	_track(_rover)
+	mode = Mode.ROVER
+
+# Back into the ship: the rover gone, the ship's controls and eyes back.
+func board_ship() -> void:
+	get_parent().remove_child(_rover)
+	_rover.free()
+	_rover = null
+	_void_cruiser.park(false)
+	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	if pilot_camera:
+		pilot_camera.make_current()
+	_track(_void_cruiser)
+	mode = Mode.VOID
+
+# The world origin shift follows `node`.
+func _track(node: Node3D) -> void:
+	var rebase := get_node_or_null(rebase_path)
+	if rebase != null:
+		rebase.tracked_node = rebase.get_path_to(node)
 
 func enter_interior(bridge_index: int) -> void:
 	var parent := get_parent()

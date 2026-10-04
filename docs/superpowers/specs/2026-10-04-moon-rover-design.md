@@ -159,3 +159,27 @@ Solo quelli nuovi o toccati (regola dell'utente). TDD: ogni test visto fallire p
 - L'auto a noleggio nelle sezioni interne (pezzo 2).
 - Suoni, polvere sotto le ruote, tracce degli pneumatici.
 - Danni e ribaltamento.
+
+## Cambiato durante l'esecuzione
+
+- **Pad e sterzo** (prima del piano): rover a 52 m dal centro del pad, risalita entro 60 m; raggio di sterzata
+  fissato (6 → 40 m), angolo delle ruote ricavato.
+- **Cabina** (dopo la prova GPU): con l'occhio sopra l'asse anteriore il cruscotto copriva un quarto dello
+  schermo e le ruote non si vedevano. Ora l'occhio sta fra gli assi (0,2 m davanti al centro), il cruscotto è
+  largo 0,7 m, il telaio 1,25 m (più stretto della carreggiata) e il roll-bar sta accanto al pilota: le ruote
+  anteriori si vedono negli angoli in basso.
+- **Fari**: 18 di energia come quelli della nave, portata 120 m, inclinati di 7° verso il basso; con 4 di
+  energia non si vedevano.
+- **Test della nave parcheggiata**: controlla che sia `parked`, senza input e senza HUD; non chiama
+  `_unhandled_input` direttamente (salterebbe il blocco e non proverebbe nulla).
+- **Rimasto**: fuori schermo, se nave e base stanno nella stessa direzione, le frecce SHIP e SELENE e le
+  loro etichette si sovrappongono (stesso problema già noto per GATE e NAV).
+- **Dopo la revisione finale:**
+  - **Salti:** sul terreno vero il rover saltava a ~10 m/s in su e volava per 12–15 s fino a 59 m (15–20% del
+    tempo in aria). Ora lo stacco verso l'alto è al massimo **2 m/s** e in aria cade **3 volte** più in fretta
+    della gravità lunare (`AIR_GRAVITY`, regolabile); a terra la gravità resta 1,62. Misurato: 3–16% del
+    tempo in aria, voli di 0,5–1,8 s in media; i più lunghi scendendo a 20 m/s dai bordi ripidi dei crateri.
+  - **Uscita:** dietro e davanti il rover esce a 25 m (lo scafo arriva a 15 m dal centro); se non c'è posto
+    da nessuna parte il pilota resta a bordo.
+  - **Guida della nave:** con la nave parcheggiata le linee della guida d'atterraggio sopra i pad non si
+    vedono più.
