@@ -3,6 +3,7 @@ extends "res://scripts/flying_craft.gd"
 const CockpitScript = preload("res://scripts/cockpit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const ApproachGuide = preload("res://scripts/approach_guide.gd")
+const ShipModel = preload("res://scripts/ship_model.gd")
 const VelocityCross = preload("res://scripts/velocity_cross.gd")
 const Attitude = preload("res://scripts/attitude.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
@@ -139,6 +140,8 @@ func _init() -> void:
 
 func _ready() -> void:
 	build_collision_shape()
+	# The Eagle seen from outside (the rover); never from the cockpit.
+	ShipModel.build(self)
 	build_proximity_sensors()
 	build_navigation_lights()
 	build_headlights()
@@ -153,6 +156,9 @@ func _process(delta: float) -> void:
 	var tail_light: OmniLight3D = get_node_or_null("TailLight")
 	if tail_light:
 		tail_light.light_energy = VoidCruiserPhysics.compute_strobe_energy(_strobe_time, STROBE_PERIOD, STROBE_ON_DURATION, TAIL_LIGHT_ENERGY)
+	var model := get_node_or_null("Model") as MeshInstance3D
+	if model != null:
+		ShipModel.set_engines(model, ShipModel.engines_on(accel_thrust, is_landed))
 	var cockpit := get_node_or_null("Cockpit")
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
