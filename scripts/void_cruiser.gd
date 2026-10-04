@@ -3,6 +3,7 @@ extends "res://scripts/flying_craft.gd"
 const CockpitScript = preload("res://scripts/cockpit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const ApproachGuide = preload("res://scripts/approach_guide.gd")
+const ShipModel = preload("res://scripts/ship_model.gd")
 const VelocityCross = preload("res://scripts/velocity_cross.gd")
 const Attitude = preload("res://scripts/attitude.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
@@ -139,6 +140,8 @@ func _init() -> void:
 
 func _ready() -> void:
 	build_collision_shape()
+	# The Eagle seen from outside (the rover); never from the cockpit.
+	ShipModel.build(self)
 	build_proximity_sensors()
 	build_navigation_lights()
 	build_headlights()
@@ -153,6 +156,9 @@ func _process(delta: float) -> void:
 	var tail_light: OmniLight3D = get_node_or_null("TailLight")
 	if tail_light:
 		tail_light.light_energy = VoidCruiserPhysics.compute_strobe_energy(_strobe_time, STROBE_PERIOD, STROBE_ON_DURATION, TAIL_LIGHT_ENERGY)
+	var model := get_node_or_null("Model") as MeshInstance3D
+	if model != null:
+		ShipModel.set_engines(model, ShipModel.engines_on(accel_thrust, is_landed))
 	var cockpit := get_node_or_null("Cockpit")
 	if cockpit:
 		cockpit.update_hud(velocity.length(), read_proximity_distances())
@@ -732,8 +738,9 @@ func attitude_matrix() -> Basis:
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),
 	# white = tail. The tail light strobes; position/color are steady.
-	_add_nav_light("PortLight", Color.RED, Vector3(-7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
-	_add_nav_light("StarboardLight", Color.GREEN, Vector3(7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
+	# On the Eagle's side frames (ship_model.gd), by their red band.
+	_add_nav_light("PortLight", Color.RED, Vector3(-5.96, 0.75, 0.0), NAV_LIGHT_ENERGY)
+	_add_nav_light("StarboardLight", Color.GREEN, Vector3(5.96, 0.75, 0.0), NAV_LIGHT_ENERGY)
 	_add_nav_light("TailLight", Color.WHITE, Vector3(0.0, 0.0, 15.0), TAIL_LIGHT_ENERGY)
 
 func _add_nav_light(light_name: String, color: Color, local_position: Vector3, energy: float) -> void:
@@ -743,6 +750,8 @@ func _add_nav_light(light_name: String, color: Color, local_position: Vector3, e
 	light.light_energy = energy
 	light.omni_range = 50.0
 	light.position = local_position
+	# Not on the ship's own hull (ship_model.gd), which they sit on.
+	light.light_cull_mask = CockpitScript.ALL_LAYERS & ~CockpitScript.SHIP_EXTERIOR_LAYER
 	add_child(light)
 
 	var marker := MeshInstance3D.new()

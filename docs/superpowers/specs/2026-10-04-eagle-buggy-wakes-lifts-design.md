@@ -112,3 +112,25 @@ Solo i test nuovi o toccati. TDD.
 - Interni dell'Eagle e del Moon Buggy oltre a quello visibile.
 - Persone che salgono e scendono dalle cabine.
 - Schiuma che resta sull'acqua anche dopo il passaggio (oltre i 6 s).
+
+## Cambiato durante l'esecuzione
+
+- **Moon Buggy:** con la base della cupola a 0,95 m il suo anello attraversava la vista bassa come una sbarra;
+  cupola e anello ora poggiano sulla piattaforma (0,8 m) e l'anello è più sottile. Fari tondi arretrati nel muso
+  e parafanghi lunghi 0,85 m per stare nei 3,4 m di lunghezza.
+- **Ascensori:** `interior_world.gd` aveva già `_person_mesh` (per i moli): riusata.
+- **Prova GPU:** Eagle vista dal rover a 45 m, cabina del buggy, barca con scia dall'alto, cabina d'ascensore
+  con il vetro e quattro persone. Non fatto: la cabina di notte (l'ora dell'interno segue l'orologio vero).
+- **Dopo la revisione finale:**
+  - **Eagle senza decalcomanie:** strisce, porte, finestrini e manicotti delle gambe erano piastre sottili sopra
+    lo scafo, che con la profondità a 24 bit della camera del rover avrebbero sfarfallato oltre ~150 m. Ora il
+    colore sta sulle facce stesse (scatole impilate a fasce, finestrini come tratto del cono, montante delle
+    gambe spezzato attorno al manicotto) e le porte sono boccaporti sporgenti 0,3 m. Un test lo verifica sulle
+    facce visibili. Prova GPU a 250 m: nessuno sfarfallio sullo scafo.
+  - **Luci di navigazione:** spostate da ±7,5 m (galleggiavano 1,5 m fuori dallo scafo) ai telai laterali
+    (±5,96 m, 0,75 m d'altezza); le luci della nave non illuminano più il modello stesso (sennò lo tingevano di
+    verde e rosso).
+  - **Ugelli accesi:** il codice c'è, ma il rover esce solo a nave posata, quando gli ugelli sono spenti: per
+    ora non si vedono mai accesi.
+  - **Scia:** la forza piena è sopra 6 m/s fissi (non la velocità di crociera della singola barca): la scia
+    svanisce solo nell'ultima parte della frenata.

@@ -16,6 +16,7 @@ const SpineTrain = preload("res://scripts/spine_train.gd")
 const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
+const BoatWake = preload("res://scripts/boat_wake.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
 
@@ -218,12 +219,17 @@ var _ring_mesh: ArrayMesh
 var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
+var _lift_glass_mesh: ArrayMesh
+var _lift_glass_material: ShaderMaterial
+var _rider_materials: Array = []
 var _cruiser_mesh: ArrayMesh
 var _cruiser_material: ShaderMaterial
 var _strobe_mesh: QuadMesh
 var _strobe_material: ShaderMaterial
 var _boat_mesh: ArrayMesh
 var _boat_material: ShaderMaterial
+var _wake_mesh: ArrayMesh
+var _wake_material: ShaderMaterial
 var _person_mesh: ArrayMesh
 var _person_material: ShaderMaterial
 var _walker_material: ShaderMaterial
@@ -271,12 +277,19 @@ func build() -> void:
 	_hall_mesh = SpineTrain.hall_mesh()
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
+	_lift_glass_mesh = SpineTrain.lift_glass_mesh()
+	_lift_glass_material = SpineTrain.lift_glass_material()
+	_rider_materials.clear()
+	for suit in DockCrowd.SUITS:
+		_rider_materials.append(SpineTrain.structure_material(suit, ACCENT_COLOR))
 	_cruiser_mesh = AirTraffic.cruiser_mesh()
 	_cruiser_material = AirTraffic.cruiser_material()
 	_strobe_mesh = AirTraffic.strobe_mesh()
 	_strobe_material = AirTraffic.strobe_material()
 	_boat_mesh = LakeBoats.boat_mesh()
 	_boat_material = LoopTraffic.material(LakeBoats.CORNER, ACCENT_COLOR, 0.08, 1.5)
+	_wake_mesh = BoatWake.wake_mesh()
+	_wake_material = BoatWake.material(LakeBoats.CORNER)
 	_person_mesh = DockCrowd.person_mesh()
 	_person_material = LoopTraffic.material(LakeBoats.PEOPLE_CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
 	_walker_material = LoopTraffic.material(TownWalkers.CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
@@ -516,6 +529,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 	if not state.boats.is_empty():
 		var lake_bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
 		state.node.add_child(LoopTraffic.multimesh_instance("Boats", state.boats, _boat_mesh, _boat_material, lake_bounds))
+		state.node.add_child(LoopTraffic.multimesh_instance("BoatWakes", state.boats, _wake_mesh, _wake_material, lake_bounds))
 		state.boats = PackedFloat32Array()
 	_build_piers(state)
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
@@ -764,6 +778,12 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 			cabin.transform = Transform3D(Basis(across * (1.0 if side == 0 else -1.0), up, across.cross(up) * (1.0 if side == 0 else -1.0)), Vector3.ZERO)
 			var foot: Vector3 = pylon.position + across * SpineTrain.LIFT_OFFSET * (1.0 if side == 0 else -1.0) + up * (SpineTrain.HALL_HEIGHT + SpineTrain.LIFT_SIZE.y * 0.5)
 			cabin.position = foot
+			cabin.add_child(_structure_mesh("Glass", _lift_glass_mesh, _lift_glass_material))
+			var riders := SpineTrain.lift_riders(hash([state.ring_index, k, side]))
+			for i in range(riders.size()):
+				var rider := _structure_mesh("Rider_%d" % i, _person_mesh, _rider_materials[riders[i].suit])
+				rider.transform = riders[i].transform
+				cabin.add_child(rider)
 			station.add_child(cabin)
 			state.lifts.append([cabin, foot, up, run, 0.5 * side])
 		state.node.add_child(station)
