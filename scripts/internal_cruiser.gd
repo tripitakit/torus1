@@ -214,6 +214,11 @@ func land_on(pad: Transform3D) -> void:
 	angular_velocity = Vector3.ZERO
 	set_process_unhandled_input(false)
 
+# The interior world moved everything `dz` along Z (rebase) mid-landing.
+func shift_landing(dz: float) -> void:
+	_landing_from.origin.z += dz
+	_landing_to.origin.z += dz
+
 # Parked while the pilot walks: no keys, no HUD; off again when boarding.
 func park(on: bool) -> void:
 	parked = on
@@ -221,7 +226,9 @@ func park(on: bool) -> void:
 	velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_mouse_delta = Vector2.ZERO
-	(get_node("Hud") as CanvasLayer).visible = not on
+	var hud := get_node_or_null("Hud") as CanvasLayer
+	if hud != null:
+		hud.visible = not on
 
 func _physics_process(delta: float) -> void:
 	if is_landing():
@@ -231,6 +238,8 @@ func _physics_process(delta: float) -> void:
 		if _landing_t >= 1.0:
 			_landing_t = -1.0
 			transform = _landing_to
+			# Down: no keys any more (the pilot gets out behind the fade).
+			park(true)
 			landed.emit()
 		return
 	if parked:

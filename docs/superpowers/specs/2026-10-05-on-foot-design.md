@@ -103,3 +103,12 @@ TDD; solo i test nuovi o toccati.
 - **Salita oltre 35° sulla luna:** nel codice (legge il suolo 0,5 m avanti), non coperta da un test automatico.
 - **Prova GPU:** a piedi davanti all'Eagle sul pad (`K BOARD` a 48 m dal centro del pad), accanto al buggy
   parcheggiato, accanto al cruiser posato in un paese.
+- **Dopo la revisione finale:**
+  - **Terreno di collisione = terreno disegnato:** la collisione dei lotti piatti era a strisce di 98 m, il terreno
+    disegnato a corde di 52 m: a piedi si galleggiava fino a 0,6 m sopra il suolo visibile. Ora la collisione piatta
+    ha le stesse corde (15 strisce per pezzo di terreno), e la piazzola sta sulla corda del suo lotto, sia piatto sia
+    con rilievo (sul rilievo il 36% delle piazzole era 12 cm sotto il suolo). Non serve più spostarla.
+  - **Posa e spostamento dell'origine:** se l'origine del mondo si sposta durante i 2 s della posa, la posa prosegue
+    verso la stessa piazzola (prima il mondo "saltava" a ogni tick).
+  - **Cruiser fermo appena posato:** si parcheggia nell'istante in cui tocca, così i tasti tenuti premuti durante la
+    dissolvenza non lo spostano più.

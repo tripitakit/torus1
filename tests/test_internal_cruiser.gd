@@ -13,6 +13,7 @@ func _init():
 	failures += _test_section_id_panel_shows_the_current_section()
 	failures += _test_small_hull()
 	failures += _test_model_seen_from_outside_only()
+	failures += _test_landing_survives_a_rebase_and_parks()
 	failures += _test_ramp_stops_at_10x()
 	failures += _test_top_speed_about_1_km_s_after_the_ramp()
 	failures += _test_same_mouse_sensitivity_as_void_cruiser()
@@ -153,5 +154,24 @@ func _test_model_seen_from_outside_only() -> int:
 		if box.position.x < -half.x or box.end.x > half.x or box.position.y < -half.y or box.end.y > half.y or box.position.z < -half.z or box.end.z > half.z:
 			print("FAIL _test_model_seen_from_outside_only: model %s outside the hull" % box)
 			result = 1
+	cruiser.free()
+	return result
+
+# The interior world shifts the craft along Z mid-landing (rebase): the
+# landing goes on to the same pad, and the craft is parked as it touches.
+func _test_landing_survives_a_rebase_and_parks() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.position = Vector3(0.0, -90.0, 9995.0)
+	cruiser.land_on(Transform3D(Basis(), Vector3(0.0, -100.0, 10010.0)))
+	cruiser._physics_process(1.0 / 60.0)
+	cruiser.position.z -= 10000.0
+	cruiser.shift_landing(-10000.0)
+	for i in range(200):
+		cruiser._physics_process(1.0 / 60.0)
+	var rest := Vector3(0.0, -100.0 + cruiser.HULL_SIZE.y * 0.5, 10.0)
+	var result := 0
+	if cruiser.position.distance_to(rest) > 0.01 or not cruiser.parked:
+		print("FAIL _test_landing_survives_a_rebase_and_parks: at %s (expected %s), parked %s" % [cruiser.position, rest, cruiser.parked])
+		result = 1
 	cruiser.free()
 	return result

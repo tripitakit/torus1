@@ -35,7 +35,10 @@ var ring_sections := 2000
 # lights (see InteriorLayout.count_lights_reaching_band).
 const CHUNKS_AROUND := 16
 const CHUNK_LENGTH := 1000.0
-const CHUNK_ARC_SEGMENTS := 8
+# The flat chunks' collision band in the drawn ground's chords
+# (SectionPlan.RELIEF_POINTS_PER_LOT a lot, CHUNK_LOTS_AROUND lots a chunk):
+# feet on foot stand on what is drawn.
+const CHUNK_ARC_SEGMENTS := 15
 const CHUNK_LENGTH_SEGMENTS := 4
 const CAP_SEGMENTS := 128
 const TUBE_SEGMENTS := 4
@@ -355,6 +358,8 @@ func rebase_around(craft: Node3D) -> void:
 		var mover := get_node_or_null(mover_name) as Node3D
 		if mover != null:
 			mover.position.z -= shift
+			if mover.has_method("shift_landing"):
+				mover.shift_landing(-shift)
 	if craft.get_parent() != self:
 		craft.position.z -= shift
 
@@ -892,19 +897,8 @@ func _build_piers(state: SectionLoad) -> void:
 func _build_pads(state: SectionLoad) -> void:
 	var plan = state.plan
 	state.pad_frames.clear()
-	# A flat chunk's ground is a band of flat strips (_chunk_shape): the pad
-	# lies on the strip whose middle is nearest its lot's, square to it.
-	var strip := TAU / CHUNKS_AROUND / CHUNK_ARC_SEGMENTS
 	for k in range(state.pads.size()):
-		var centre: Vector2 = state.pads[k].centre
-		var lot: Vector2i = state.pads[k].lot
-		var frame: Transform3D
-		if plan.chunk_has_relief(lot.x / LandingPads.SectionPlanScript.CHUNK_LOTS_AROUND, lot.y / LandingPads.SectionPlanScript.CHUNK_LOTS_ALONG):
-			var ground: float = section_radius - plan.height_at(centre.x, centre.y)
-			frame = SpineTrain.spine_frame(centre.x / section_radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
-		else:
-			var middle := (floorf(centre.x / section_radius / strip) + 0.5) * strip
-			frame = SpineTrain.spine_frame(middle, section_radius * cos(strip * 0.5) - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - section_length * 0.5)
+		var frame := pad_frame(plan, state.pads[k], section_radius, section_length)
 		var body := StaticBody3D.new()
 		body.name = "Pad_%d" % k
 		body.transform = frame
@@ -912,6 +906,16 @@ func _build_pads(state: SectionLoad) -> void:
 		_add_box(body, Vector3(LandingPads.SIZE, LandingPads.THICK, LandingPads.SIZE), Vector3.ZERO)
 		state.node.add_child(body)
 		state.pad_frames.append(frame)
+
+# A pad's slab frame in its section's node, standing LandingPads.PROUD on
+# the collision ground. The ground (relief or the flat band alike) runs in
+# chords a height-grid cell wide, and a lot's middle is a cell's middle:
+# the pad lies square on that cell's chord.
+static func pad_frame(plan, pad: Dictionary, radius: float, length: float) -> Transform3D:
+	var centre: Vector2 = pad.centre
+	var half_cell: float = plan.lot_width / LandingPads.SectionPlanScript.RELIEF_POINTS_PER_LOT * 0.5 / radius
+	var ground: float = (radius - plan.height_at(centre.x, centre.y)) * cos(half_cell)
+	return SpineTrain.spine_frame(centre.x / radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - length * 0.5)
 
 # The landing pad nearest `point` (this node's coordinates): {transform (its
 # top's centre, y toward the axis), distance}; empty with none loaded.
