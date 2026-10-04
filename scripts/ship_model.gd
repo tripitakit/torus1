@@ -5,7 +5,9 @@ extends RefCounted
 # nose -Z, its four feet on the box's bottom. On the ship-exterior layer:
 # the pilot's camera never sees it. UV.x parts: 0 white hull, 1 dark
 # (windows, doors, shock sleeves), 2 grey frame, 3 red-orange stripes,
-# 4 engine glow (bright with thrust).
+# 4 engine glow (bright with thrust). Colours lie on the faces themselves
+# (boxes stacked in bands), never on thin plates over the hull: those
+# flicker with the rover camera's 24-bit depth from ~150 m.
 
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
@@ -46,10 +48,11 @@ void fragment() {
 static func mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Command module: an eight-sided nose cone on a short drum, a dark band
-	# of windows round it.
-	_cone_z(st, Vector2(0.0, 0.9), [[-14.9, 0.5], [-12.6, 1.9], [-10.0, 2.2], [-8.8, 2.0]], 0.0, true)
-	_cone_z(st, Vector2(0.0, 0.9), [[-12.95, 1.78], [-12.25, 1.98]], 1.0, true)
+	# Command module: an eight-sided nose cone on a short drum, a stretch of
+	# it dark with windows.
+	_cone_z(st, Vector2(0.0, 0.9), [[-14.9, 0.5], [-12.95, 1.687]], 0.0, true)
+	_cone_z(st, Vector2(0.0, 0.9), [[-12.95, 1.687], [-12.6, 1.9], [-12.25, 1.94]], 1.0, false)
+	_cone_z(st, Vector2(0.0, 0.9), [[-12.25, 1.94], [-10.0, 2.2], [-8.8, 2.0]], 0.0, true)
 	# Spine: two rails low and high each side, braces every 2.2 m.
 	for side: float in [-1.0, 1.0]:
 		_b(st, Vector3(side * 1.1, 0.5, -9.0), Vector3(side * 1.5, 0.9, 9.6), 2.0)
@@ -59,25 +62,30 @@ static func mesh() -> ArrayMesh:
 		_b(st, Vector3(-1.3, 0.5, z - 0.12), Vector3(1.3, 0.8, z + 0.12), 2.0)
 		for side: float in [-1.0, 1.0]:
 			_b(st, Vector3(side * 1.2, 0.9, z - 0.1), Vector3(side * 1.4, 1.9, z + 0.1), 2.0)
-	# Passenger module under the spine: a red stripe and a door each side.
-	_b(st, Vector3(-2.6, -1.9, -6.2), Vector3(2.6, 0.5, 6.2), 0.0)
+	# Passenger module under the spine: a red band round it, a hatch each
+	# side.
+	_b(st, Vector3(-2.6, -1.9, -6.2), Vector3(2.6, -0.55, 6.2), 0.0)
+	_b(st, Vector3(-2.6, -0.55, -6.2), Vector3(2.6, -0.25, 6.2), 3.0)
+	_b(st, Vector3(-2.6, -0.25, -6.2), Vector3(2.6, 0.5, 6.2), 0.0)
 	for side: float in [-1.0, 1.0]:
-		_b(st, Vector3(side * 2.6, -0.55, -6.0), Vector3(side * 2.66, -0.25, 6.0), 3.0)
-		_b(st, Vector3(side * 2.6, -1.5, -1.0), Vector3(side * 2.64, 0.1, 1.0), 1.0)
+		_b(st, Vector3(side * 2.6, -1.5, -1.0), Vector3(side * 2.9, 0.1, 1.0), 1.0)
 	# Side frames carrying the legs, arms out to them from the spine; each
 	# leg a strut, a dark shock sleeve and a disc foot on the box's bottom.
 	for side: float in [-1.0, 1.0]:
-		_b(st, Vector3(side * 4.6, 0.4, -8.2), Vector3(side * 5.9, 1.1, 8.2), 0.0)
-		_b(st, Vector3(side * 5.9, 0.6, -8.0), Vector3(side * 5.96, 0.9, 8.0), 3.0)
+		_b(st, Vector3(side * 4.6, 0.4, -8.2), Vector3(side * 5.96, 0.6, 8.2), 0.0)
+		_b(st, Vector3(side * 4.6, 0.6, -8.2), Vector3(side * 5.96, 0.9, 8.2), 3.0)
+		_b(st, Vector3(side * 4.6, 0.9, -8.2), Vector3(side * 5.96, 1.1, 8.2), 0.0)
 		for z: float in [-7.0, 7.0]:
 			_b(st, Vector3(side * 1.5, 0.55, z - 0.25), Vector3(side * 4.6, 0.85, z + 0.25), 2.0)
-			_b(st, Vector3(side * 5.25 - 0.22, -3.45, z - 0.22), Vector3(side * 5.25 + 0.22, 0.4, z + 0.22), 2.0)
+			_b(st, Vector3(side * 5.25 - 0.22, -1.2, z - 0.22), Vector3(side * 5.25 + 0.22, 0.4, z + 0.22), 2.0)
 			_b(st, Vector3(side * 5.25 - 0.32, -2.3, z - 0.32), Vector3(side * 5.25 + 0.32, -1.2, z + 0.32), 1.0)
+			_b(st, Vector3(side * 5.25 - 0.22, -3.45, z - 0.22), Vector3(side * 5.25 + 0.22, -2.3, z + 0.22), 2.0)
 			_cone_y(st, Vector3(side * 5.25, FOOT_Y, z), 0.9, 0.6, 0.3, 2.0)
 	# Engines: a block behind the spine with a stripe, two tanks on top, four
 	# nozzles, each with a glowing disc deep inside.
-	_b(st, Vector3(-2.8, -0.9, 9.6), Vector3(2.8, 2.2, 12.6), 0.0)
-	_b(st, Vector3(-2.84, 0.3, 9.6), Vector3(2.84, 0.6, 12.6), 3.0)
+	_b(st, Vector3(-2.8, -0.9, 9.6), Vector3(2.8, 0.3, 12.6), 0.0)
+	_b(st, Vector3(-2.8, 0.3, 9.6), Vector3(2.8, 0.6, 12.6), 3.0)
+	_b(st, Vector3(-2.8, 0.6, 9.6), Vector3(2.8, 2.2, 12.6), 0.0)
 	for x: float in [-1.6, 1.6]:
 		_cone_z(st, Vector2(x, 2.95), [[9.8, 0.3], [10.3, 0.75], [11.9, 0.75], [12.4, 0.3]], 0.0, true)
 	for x: float in [-1.3, 1.3]:

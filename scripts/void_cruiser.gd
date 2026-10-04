@@ -738,8 +738,9 @@ func attitude_matrix() -> Basis:
 func build_navigation_lights() -> void:
 	# Aircraft convention: red = port (left), green = starboard (right),
 	# white = tail. The tail light strobes; position/color are steady.
-	_add_nav_light("PortLight", Color.RED, Vector3(-7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
-	_add_nav_light("StarboardLight", Color.GREEN, Vector3(7.5, 0.0, 0.0), NAV_LIGHT_ENERGY)
+	# On the Eagle's side frames (ship_model.gd), by their red band.
+	_add_nav_light("PortLight", Color.RED, Vector3(-5.96, 0.75, 0.0), NAV_LIGHT_ENERGY)
+	_add_nav_light("StarboardLight", Color.GREEN, Vector3(5.96, 0.75, 0.0), NAV_LIGHT_ENERGY)
 	_add_nav_light("TailLight", Color.WHITE, Vector3(0.0, 0.0, 15.0), TAIL_LIGHT_ENERGY)
 
 func _add_nav_light(light_name: String, color: Color, local_position: Vector3, energy: float) -> void:
@@ -749,6 +750,8 @@ func _add_nav_light(light_name: String, color: Color, local_position: Vector3, e
 	light.light_energy = energy
 	light.omni_range = 50.0
 	light.position = local_position
+	# Not on the ship's own hull (ship_model.gd), which they sit on.
+	light.light_cull_mask = CockpitScript.ALL_LAYERS & ~CockpitScript.SHIP_EXTERIOR_LAYER
 	add_child(light)
 
 	var marker := MeshInstance3D.new()
