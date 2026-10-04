@@ -88,3 +88,18 @@ TDD; solo i test nuovi o toccati.
 - Corpo visibile, animazioni, suoni dei passi.
 - Entrare negli edifici o nelle stazioni del treno.
 - Scendere dal cruiser fuori dalle piazzole; scendere dall'Eagle nello spazio o agli attracchi.
+
+## Cambiato durante l'esecuzione
+
+- **Internal cruiser visibile da fuori:** non aveva un modello (solo la vista di bordo). Ora da fuori è uno degli
+  incrociatori sci-fi del traffico interno (`AirTraffic.cruiser_mesh`, girato e ridotto nello scafo 4 × 2 × 8 m),
+  sul livello esterno: la sua camera di bordo non lo vede.
+- **Piazzole sui lotti piatti:** la collisione del terreno piatto è un anello di 128 strisce piatte (fino a 0,6 m
+  dentro il cerchio); la piazzola sta al centro della striscia più vicina al centro del lotto (spostata al massimo
+  di 49 m in un lotto di 261 m), alla sua quota e in squadra con essa. Sui lotti con rilievo resta sulla quota
+  `height_at`.
+- **Piazzole:** evitano i lotti già presi da moli e stazioni del treno.
+- **HUD del cruiser:** il test che ne fissava i pezzi ora conta anche `LandPanel` e `PadMarker`.
+- **Salita oltre 35° sulla luna:** nel codice (legge il suolo 0,5 m avanti), non coperta da un test automatico.
+- **Prova GPU:** a piedi davanti all'Eagle sul pad (`K BOARD` a 48 m dal centro del pad), accanto al buggy
+  parcheggiato, accanto al cruiser posato in un paese.

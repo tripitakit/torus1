@@ -12,6 +12,7 @@ func _init():
 	failures += _test_hud_has_only_the_flight_markers_and_section_panel()
 	failures += _test_section_id_panel_shows_the_current_section()
 	failures += _test_small_hull()
+	failures += _test_model_seen_from_outside_only()
 	failures += _test_ramp_stops_at_10x()
 	failures += _test_top_speed_about_1_km_s_after_the_ramp()
 	failures += _test_same_mouse_sensitivity_as_void_cruiser()
@@ -132,4 +133,25 @@ func _test_same_mouse_sensitivity_as_void_cruiser() -> int:
 		result = 1
 	cruiser.free()
 	void_cruiser.free()
+	return result
+
+# Seen from outside (the pilot on foot by a landing pad): a model inside the
+# hull's box, on the exterior layer the cruiser's own camera never sees.
+func _test_model_seen_from_outside_only() -> int:
+	const CockpitScript = preload("res://scripts/cockpit.gd")
+	var cruiser := _make_cruiser()
+	cruiser.build_model()
+	var model := cruiser.get_node_or_null("Model") as MeshInstance3D
+	var camera := cruiser.get_node("Camera") as Camera3D
+	var result := 0
+	if model == null or model.layers != CockpitScript.SHIP_EXTERIOR_LAYER or (camera.cull_mask & model.layers) != 0:
+		print("FAIL _test_model_seen_from_outside_only: model %s, camera mask %d" % [model, camera.cull_mask])
+		result = 1
+	else:
+		var box: AABB = model.transform * model.mesh.get_aabb()
+		var half: Vector3 = cruiser.HULL_SIZE * 0.5 + Vector3(0.5, 0.2, 0.5)
+		if box.position.x < -half.x or box.end.x > half.x or box.position.y < -half.y or box.end.y > half.y or box.position.z < -half.z or box.end.z > half.z:
+			print("FAIL _test_model_seen_from_outside_only: model %s outside the hull" % box)
+			result = 1
+	cruiser.free()
 	return result
