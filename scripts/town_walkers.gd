@@ -18,9 +18,6 @@ const ROAD_CLEAR := 2.0
 const CORNER := 2.0
 const SPEEDS := Vector2(1.0, 1.5)
 const VISIBLE_TO := 500.0
-# The animated walkers' chunk is drawn this close (each one within
-# LoopTraffic.DETAIL_TO).
-const NEAR_VISIBLE_TO := 150.0
 
 static func _built(zone: int) -> bool:
 	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY
@@ -72,3 +69,41 @@ static func loops_by_chunk(plan) -> Dictionary:
 				found[key].append(loop)
 				id += 1
 	return found
+
+# The animated walkers drawn near the camera go in small groups, one per lot:
+# [{loops, bounds}], the bounds (section frame) holding every walker's feet
+# and head all round its loop. Pure: safe on a worker thread.
+static func near_groups(loops: Array) -> Array:
+	var by_lot := {}
+	for loop: Dictionary in loops:
+		if not by_lot.has(loop.lot):
+			by_lot[loop.lot] = []
+		by_lot[loop.lot].append(loop)
+	var out := []
+	for lot in by_lot:
+		var bounds := AABB()
+		var first := true
+		# Each loop stays in its rect on the wall (x along the arc): its
+		# corners and a few points along the arc, at the feet and the head.
+		var rects := {}
+		for loop: Dictionary in by_lot[lot]:
+			rects[Rect2(loop.x0, loop.z0, loop.w, loop.h)] = loop.level
+		for rect: Rect2 in rects:
+			var level: float = rects[rect]
+			for i in range(5):
+				var angle := (rect.position.x + rect.size.x * i / 4.0) / level
+				for r in [level, level - 2.0]:
+					for z in [rect.position.y, rect.end.y]:
+						var point := Vector3(cos(angle) * r, sin(angle) * r, z)
+						if first:
+							bounds = AABB(point, Vector3.ZERO)
+							first = false
+						else:
+							bounds = bounds.expand(point)
+		out.append({"loops": by_lot[lot], "bounds": bounds.grow(0.5)})
+	return out
+
+# How far (to the bounds' centre) a group stays drawn: DETAIL_TO past its
+# farthest corner.
+static func near_range(bounds: AABB) -> float:
+	return LoopTraffic.DETAIL_TO + bounds.size.length() * 0.5 + 2.0

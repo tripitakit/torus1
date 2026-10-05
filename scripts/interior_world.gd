@@ -155,6 +155,9 @@ class SectionLoad:
 	var pad_frames := []
 	var pier_life := []
 	var walkers := {}
+	# The same walkers in small groups for the animated model near the
+	# camera: by chunk, [[buffer, bounds]] (TownWalkers.near_groups).
+	var near_walkers := {}
 	var trains := []
 	var lifts := []
 	var task_id := -1
@@ -188,6 +191,9 @@ class SectionLoad:
 		var by_chunk := TownWalkers.loops_by_chunk(plan)
 		for key: Vector2i in by_chunk:
 			walkers[key] = LoopTraffic.instance_buffer(by_chunk[key], DockCrowd.SUITS)
+			near_walkers[key] = []
+			for group in TownWalkers.near_groups(by_chunk[key]):
+				near_walkers[key].append([LoopTraffic.instance_buffer(group.loops, DockCrowd.SUITS), group.bounds])
 		SpineTrain.drop_station_buildings(plan, groups)
 		traffic = RoadTraffic.chunk_instances(plan, RoadTraffic.loops(plan))
 		far_traffic = RoadTraffic.section_buffer(plan, traffic)
@@ -671,9 +677,14 @@ func _build_chunk(state: SectionLoad, around: int, along: int) -> void:
 		var crowd := LoopTraffic.multimesh_instance("Walkers_%02d_%02d" % [around, along], walkers, _person_mesh, _walker_material, bounds)
 		crowd.visibility_range_end = TownWalkers.VISIBLE_TO
 		state.node.add_child(crowd)
-		var near := LoopTraffic.multimesh_instance("WalkersNear_%02d_%02d" % [around, along], walkers, _people_mesh, _walker_near_material, bounds)
-		near.visibility_range_end = TownWalkers.NEAR_VISIBLE_TO
-		state.node.add_child(near)
+		# The animated ones by lot, each drawn while the camera is within
+		# DETAIL_TO of one of its walkers (the range is measured to the
+		# bounds' centre: a whole chunk's would hide them close by).
+		var groups: Array = state.near_walkers.get(Vector2i(around, along), [])
+		for k in range(groups.size()):
+			var near := LoopTraffic.multimesh_instance("WalkersNear_%02d_%02d_%d" % [around, along, k], groups[k][0], _people_mesh, _walker_near_material, groups[k][1])
+			near.visibility_range_end = TownWalkers.near_range(groups[k][1])
+			state.node.add_child(near)
 	var cars: PackedFloat32Array = state.traffic.get(Vector2i(around, along), PackedFloat32Array())
 	if not cars.is_empty():
 		var traffic := RoadTraffic.multimesh_instance("Traffic", cars, _car_mesh, _car_material, _dressing._chunk_bounds(state.plan, 3.0))

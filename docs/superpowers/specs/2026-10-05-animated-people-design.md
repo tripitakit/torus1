@@ -83,3 +83,8 @@ TDD; solo i test nuovi o toccati.
 - **Prova GPU:** l'utente ha visto a schermo i pedoni camminare con l'animazione giusta; 60 FPS con e senza le
   persone animate (limitati dal vsync). Gli scatti automatici non sono serviti: il tempo dello shader non
   coincide con l'orologio della prova.
+- **Correzione dopo la prova dell'utente (pedoni che sparivano avvicinandosi):** la distanza di visibilità di un
+  nodo si misura dal centro del suo riquadro; un nodo per pezzo di terreno (1.000 × ~785 m) con 150 m era quasi
+  sempre spento proprio quando si era fra i pedoni, mentre lo shader nascondeva già le sagome entro 80 m. Ora i
+  pedoni animati stanno in un nodo per lotto (`TownWalkers.near_groups`), con un riquadro stretto calcolato dai
+  rettangoli dei loro percorsi e la distanza `near_range` = 80 m + mezza diagonale del riquadro.
