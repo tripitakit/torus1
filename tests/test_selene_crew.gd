@@ -120,10 +120,16 @@ func _test_seated_knees_bent() -> int:
 	var knee: Vector3 = member.bone_point("LeftLeg")
 	var foot: Vector3 = member.bone_point("LeftFoot")
 	var ahead := -member.global_transform.basis.z
+	var hands := [member.bone_point("LeftHand"), member.bone_point("RightHand")]
 	member.free()
 	if hips.y > 0.65 or hips.y < 0.35 or (knee - hips).dot(ahead) < 0.3 or absf(knee.y - hips.y) > 0.15 or foot.y > 0.2:
 		print("FAIL _test_seated_knees_bent: hips %s knee %s foot %s" % [hips, knee, foot])
 		return 1
+	# Forearms on the desk (its top at 0.75 m): hands at its height, ahead.
+	for hand: Vector3 in hands:
+		if hand.y < 0.72 or hand.y > 0.95 or (hand - hips).dot(ahead) < 0.35:
+			print("FAIL _test_seated_knees_bent: hand at %s, hips %s" % [hand, hips])
+			return 1
 	return 0
 
 func _test_twelve_in_the_base() -> int:

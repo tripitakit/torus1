@@ -93,3 +93,16 @@ TDD; solo i test nuovi o toccati.
 - `test_selene_crew.gd`: 12 persone, 4 sedute; **seduti dopo l'ingresso nella scena** con le ginocchia piegate.
 - `test_game_mode.gd`: viaggio in Travel Tube da GameMode (K in cabina) e ritorno; uscita all'ascensore.
 - Prova GPU: hangar, corridoio con la colonna, Main Mission, cabina in viaggio nel tunnel, infermeria.
+
+## Cambiato durante l'esecuzione
+
+- **Frecce disegnate:** le frecce dei cartelli sono piccole forme arancioni, non caratteri (il font potrebbe non
+  averli); cartelli più stretti e più distanti dall'asse, per non sovrapporsi negli angoli.
+- **Viaggio:** il pedone a gravità piatta ignora le "piattaforme mobili" di Godot; lo sposta la cabina (con
+  entrambe si muoveva due volte e cadeva fuori).
+- **Seduti:** la posa c'era già nei dati dello scheletro; il motore delle animazioni ora è spento e la posa si
+  riapplica all'ingresso nella scena. Su richiesta dell'utente (dopo la prova) **le braccia poggiano sulla
+  scrivania**: braccio in avanti e in basso, avambraccio orizzontale; test sulle mani all'altezza del piano.
+- **Persone:** 12 (4 sedute, il Comandante e un medico in piedi, 6 che camminano).
+- **Prova GPU:** hangar, corridoio, colonna, Main Mission, seduti da vicino, vetrata, ufficio, infermeria, sala
+  comune, stazione e viaggio in Travel Tube; 60 FPS in Main Mission (vsync).

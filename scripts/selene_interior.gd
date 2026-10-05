@@ -505,16 +505,17 @@ func _build_post(parent: Node3D) -> void:
 	for sign_data in SeleneLayout.post_signs():
 		var normal: Vector3 = sign_data.normal
 		var basis := Basis.looking_at(-normal, Vector3.UP)
-		var face := Transform3D(basis, normal * 0.36 + Vector3(0.0, 2.2, 0.0))
-		_box(post, Vector3(0.9, 0.62, 0.03), _mat(WHITE), face)
+		var face := Transform3D(basis, normal * 0.44 + Vector3(0.0, 2.25, 0.0))
+		_box(post, Vector3(0.66, 0.66, 0.03), _mat(WHITE), face)
+		_box(post, Vector3(0.66, 0.05, 0.035), _mat(ORANGE), face * Transform3D(Basis(), Vector3(0.0, 0.33, 0.0)))
 		var lines: Array = sign_data.lines
 		for k in range(lines.size()):
-			var y := 0.24 - k * 0.12
-			var text := _label(lines[k][0], 0.065, Color(0.12, 0.12, 0.14))
+			var y := 0.23 - k * 0.115
+			var text := _label(lines[k][0], 0.052, Color(0.12, 0.12, 0.14))
 			text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			text.transform = face * Transform3D(Basis(), Vector3(-0.28, y, 0.02))
+			text.transform = face * Transform3D(Basis(), Vector3(-0.2, y, 0.02))
 			post.add_child(text)
-			_arrow(post, face * Transform3D(Basis(), Vector3(-0.36, y, 0.02)), lines[k][1])
+			_arrow(post, face * Transform3D(Basis(), Vector3(-0.26, y, 0.02)), lines[k][1])
 
 # A small flat arrow on a sign: "↑" ahead, "↓" back, "→", "←".
 func _arrow(parent: Node3D, where: Transform3D, arrow: String) -> void:
@@ -522,10 +523,10 @@ func _arrow(parent: Node3D, where: Transform3D, arrow: String) -> void:
 	var holder := Node3D.new()
 	holder.transform = where * Transform3D(Basis(Vector3.BACK, angle), Vector3.ZERO)
 	parent.add_child(holder)
-	_box(holder, Vector3(0.025, 0.06, 0.01), _mat(ORANGE), _at(0.0, -0.02, 0.0))
+	_box(holder, Vector3(0.03, 0.05, 0.01), _mat(ORANGE), _at(0.0, -0.02, 0.0))
 	var head := PrismMesh.new()
-	head.size = Vector3(0.07, 0.045, 0.01)
-	_part(holder, head, _mat(ORANGE), _at(0.0, 0.025, 0.0))
+	head.size = Vector3(0.085, 0.05, 0.01)
+	_part(holder, head, _mat(ORANGE), _at(0.0, 0.028, 0.0))
 
 # The corridors' curved light panels: half-cylinders in a dark frame along
 # every corridor face, clear of doors and wall banks.
