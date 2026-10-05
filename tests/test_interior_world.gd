@@ -10,6 +10,8 @@ const SpineTrain = preload("res://scripts/spine_train.gd")
 const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
+const PeopleModel = preload("res://scripts/people_model.gd")
+const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 
 const RADIUS := 2000.0
 const LENGTH := 20000.0
@@ -54,6 +56,7 @@ func _init():
 	failures += _test_bridge_docks_stay_clear()
 	failures += _test_piers_with_their_life()
 	failures += _test_walkers_in_the_town_chunks()
+	failures += _test_lift_riders_idle()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -793,6 +796,11 @@ func _test_piers_with_their_life() -> int:
 		if not piers.is_empty() and (crowd == null or crowd.multimesh.instance_count != people or world.get_node_or_null("Chain/Section_%d/PierCarts" % slot) == null or world.get_node_or_null("Chain/Section_%d/PierDrones" % slot) == null):
 			print("FAIL _test_piers_with_their_life: section %d crowd %s for %d people" % [slot, crowd, people])
 			result = 1
+		# Near the camera the animated people, on the same data.
+		var near := world.get_node_or_null("Chain/Section_%d/PierPeopleNear" % slot) as MultiMeshInstance3D
+		if not piers.is_empty() and (near == null or near.multimesh.buffer != crowd.multimesh.buffer or near.multimesh.mesh != PeopleModel.bake().mesh):
+			print("FAIL _test_piers_with_their_life: section %d animated crowd %s" % [slot, near])
+			result = 1
 		# No building left on a pier's land lot.
 		var lots := LakeBoats.pier_lots(plan)
 		for indices in world._sections[slot].groups.values():
@@ -821,6 +829,14 @@ func _test_walkers_in_the_town_chunks() -> int:
 			print("FAIL _test_walkers_in_the_town_chunks: chunk %s %s" % [key, node])
 			result = 1
 			break
+		# Within DETAIL_TO the animated model on the same data, beyond it the
+		# plain one.
+		var near := world.get_node_or_null("Chain/Section_0/WalkersNear_%02d_%02d" % [key.x, key.y]) as MultiMeshInstance3D
+		if near == null or near.multimesh.buffer != node.multimesh.buffer or near.multimesh.mesh != PeopleModel.bake().mesh or not is_equal_approx(near.visibility_range_end, TownWalkers.NEAR_VISIBLE_TO) \
+				or not is_equal_approx(near.material_override.get_shader_parameter("detail_to"), LoopTraffic.DETAIL_TO) or not is_equal_approx(node.material_override.get_shader_parameter("detail_from"), LoopTraffic.DETAIL_TO):
+			print("FAIL _test_walkers_in_the_town_chunks: chunk %s animated %s" % [key, near])
+			result = 1
+			break
 	world.free()
 	return result
 
@@ -844,5 +860,21 @@ func _test_pads_built_and_found() -> int:
 	if found.is_empty() or (found.transform as Transform3D).origin.distance_to(top) > 0.01 or (found.transform as Transform3D).basis.y.normalized().dot(axis_up) < 0.999 or absf(found.distance - probe.distance_to(top)) > 0.01:
 		print("FAIL _test_pads_built_and_found: %s, expected top %s" % [found, top])
 		result = 1
+	world.free()
+	return result
+
+# The lift riders stand in the idle pose of the people model.
+func _test_lift_riders_idle() -> int:
+	var world := _make_world()
+	var riders := world.find_children("Rider_*", "MeshInstance3D", true, false)
+	var result := 0
+	if riders.is_empty():
+		print("FAIL _test_lift_riders_idle: no riders")
+		result = 1
+	for rider: MeshInstance3D in riders:
+		if rider.mesh != PeopleModel.bake().idle:
+			print("FAIL _test_lift_riders_idle: %s has %s" % [rider.name, rider.mesh])
+			result = 1
+			break
 	world.free()
 	return result

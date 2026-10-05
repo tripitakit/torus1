@@ -20,6 +20,7 @@ const BoatWake = preload("res://scripts/boat_wake.gd")
 const LandingPads = preload("res://scripts/landing_pads.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
+const PeopleModel = preload("res://scripts/people_model.gd")
 
 # Set before build(); defaults are the full-scale station's.
 var section_radius := 2000.0
@@ -244,6 +245,11 @@ var _wake_material: ShaderMaterial
 var _person_mesh: ArrayMesh
 var _person_material: ShaderMaterial
 var _walker_material: ShaderMaterial
+# The animated people (PeopleModel) near the camera, and the lift riders.
+var _people_mesh: ArrayMesh
+var _rider_mesh: ArrayMesh
+var _walker_near_material: ShaderMaterial
+var _person_near_material: ShaderMaterial
 var _cart_mesh: ArrayMesh
 var _cart_material: ShaderMaterial
 var _drone_mesh: ArrayMesh
@@ -305,6 +311,13 @@ func build() -> void:
 	_person_mesh = DockCrowd.person_mesh()
 	_person_material = LoopTraffic.material(LakeBoats.PEOPLE_CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
 	_walker_material = LoopTraffic.material(TownWalkers.CORNER, ACCENT_COLOR, 0.06, 7.0, 0.5)
+	var people := PeopleModel.bake()
+	_people_mesh = people.mesh
+	_rider_mesh = people.idle
+	_person_near_material = LoopTraffic.material(LakeBoats.PEOPLE_CORNER, ACCENT_COLOR, 0.0, 7.0, 0.5, people)
+	_walker_near_material = LoopTraffic.material(TownWalkers.CORNER, ACCENT_COLOR, 0.0, 7.0, 0.5, people)
+	for plain in [_person_material, _walker_material]:
+		plain.set_shader_parameter("detail_from", LoopTraffic.DETAIL_TO)
 	_cart_mesh = DockCrowd.cart_mesh()
 	_cart_material = LoopTraffic.material(LakeBoats.CART_CORNER, ACCENT_COLOR)
 	_drone_mesh = DockCrowd.drone_mesh()
@@ -658,6 +671,9 @@ func _build_chunk(state: SectionLoad, around: int, along: int) -> void:
 		var crowd := LoopTraffic.multimesh_instance("Walkers_%02d_%02d" % [around, along], walkers, _person_mesh, _walker_material, bounds)
 		crowd.visibility_range_end = TownWalkers.VISIBLE_TO
 		state.node.add_child(crowd)
+		var near := LoopTraffic.multimesh_instance("WalkersNear_%02d_%02d" % [around, along], walkers, _people_mesh, _walker_near_material, bounds)
+		near.visibility_range_end = TownWalkers.NEAR_VISIBLE_TO
+		state.node.add_child(near)
 	var cars: PackedFloat32Array = state.traffic.get(Vector2i(around, along), PackedFloat32Array())
 	if not cars.is_empty():
 		var traffic := RoadTraffic.multimesh_instance("Traffic", cars, _car_mesh, _car_material, _dressing._chunk_bounds(state.plan, 3.0))
@@ -809,7 +825,7 @@ func _build_stations_and_trains(state: SectionLoad) -> void:
 			cabin.add_child(_structure_mesh("Glass", _lift_glass_mesh, _lift_glass_material))
 			var riders := SpineTrain.lift_riders(hash([state.ring_index, k, side]))
 			for i in range(riders.size()):
-				var rider := _structure_mesh("Rider_%d" % i, _person_mesh, _rider_materials[riders[i].suit])
+				var rider := _structure_mesh("Rider_%d" % i, _rider_mesh, _rider_materials[riders[i].suit])
 				rider.transform = riders[i].transform
 				cabin.add_child(rider)
 			station.add_child(cabin)
@@ -887,9 +903,10 @@ func _build_piers(state: SectionLoad) -> void:
 	if state.piers.is_empty():
 		return
 	var bounds := AABB(Vector3(-section_radius, -section_radius, -section_length * 0.5), Vector3(2.0 * section_radius, 2.0 * section_radius, section_length))
-	var parts := [["PierPeople", _person_mesh, _person_material], ["PierCarts", _cart_mesh, _cart_material], ["PierDrones", _drone_mesh, _drone_material]]
-	for k in range(parts.size()):
-		state.node.add_child(LoopTraffic.multimesh_instance(parts[k][0], state.pier_life[k], parts[k][1], parts[k][2], bounds))
+	# Name, mesh, material, which of pier_life (people twice: near, far).
+	var parts := [["PierPeople", _person_mesh, _person_material, 0], ["PierPeopleNear", _people_mesh, _person_near_material, 0], ["PierCarts", _cart_mesh, _cart_material, 1], ["PierDrones", _drone_mesh, _drone_material, 2]]
+	for part in parts:
+		state.node.add_child(LoopTraffic.multimesh_instance(part[0], state.pier_life[part[3]], part[1], part[2], bounds))
 	state.pier_life = []
 
 # The section's landing pads: a slab standing LandingPads.PROUD above the

@@ -17,7 +17,10 @@ extends RefCounted
 
 enum { FLAT, CYLINDER }
 
+const PeopleModel = preload("res://scripts/people_model.gd")
 const INSTANCE_FLOATS := 20
+# People: the animated model this close to the camera, the plain one beyond.
+const DETAIL_TO := 80.0
 # A loop with a stop: brakes into it at STOP_ACCEL, waits STOP_DWELL, pulls
 # away; the lap a whole fraction of an hour.
 const STOP_DWELL := 20.0
@@ -225,6 +228,23 @@ uniform float bob = 0.0;
 uniform float bob_rate = 2.0;
 // This share of them (by id) is gone by night.
 uniform float night_hide = 0.0;
+// Drawn only between these distances from the camera (people: the animated
+// model near, the plain one far).
+uniform float detail_from = 0.0;
+uniform float detail_to = 1e9;
+#ifdef ANIMATED
+// PeopleModel's walk: every vertex's point and normal in every frame,
+// texel vertex + frame * vertices, 1024 to a row; one cycle every stride m.
+uniform sampler2D walk_points : filter_nearest;
+uniform sampler2D walk_normals : filter_nearest;
+uniform int walk_vertices = 1;
+uniform int walk_frames = 1;
+uniform float stride = 1.4;
+
+vec3 walk_texel(sampler2D frames, int index) {
+	return texelFetch(frames, ivec2(index %% 1024, index / 1024), 0).xyz;
+}
+#endif
 
 varying float part;
 varying float shade;
@@ -236,11 +256,29 @@ void vertex() {
 	vec3 pos; vec3 left; vec3 up; vec3 forward;
 	loop_pose(MODEL_MATRIX, TIME, pos, left, up, forward);
 	float lift = bob * abs(sin(TIME * bob_rate + COLOR.a * 40.0));
-	vec3 world = pos + left * VERTEX.x + up * (VERTEX.y + lift) + forward * VERTEX.z;
-	vec3 normal = normalize(left * NORMAL.x + up * NORMAL.y + forward * NORMAL.z);
+	vec3 point = VERTEX;
+	vec3 facing = NORMAL;
+#ifdef ANIMATED
+	// The walk cycle from the distance covered (no stops for people), so
+	// the feet keep to the ground; each walker at its own step.
+	vec3 c0 = MODEL_MATRIX[0].xyz;
+	float sides = 2.0 * (c0.z - 2.0 * corner) + 2.0 * (MODEL_MATRIX[1].x - 2.0 * corner) + TAU * corner;
+	float speed = abs(sides * MODEL_MATRIX[1].z / 3600.0);
+	float cycle = fract(speed * TIME / stride + COLOR.a * 7.0) * float(walk_frames);
+	int f0 = int(cycle) %% walk_frames;
+	int f1 = (f0 + 1) %% walk_frames;
+	float between = fract(cycle);
+	int index = int(UV.y + 0.5);
+	point = mix(walk_texel(walk_points, index + f0 * walk_vertices), walk_texel(walk_points, index + f1 * walk_vertices), between);
+	facing = mix(walk_texel(walk_normals, index + f0 * walk_vertices), walk_texel(walk_normals, index + f1 * walk_vertices), between);
+#endif
+	vec3 world = pos + left * point.x + up * (point.y + lift) + forward * point.z;
+	vec3 normal = normalize(left * facing.x + up * facing.y + forward * facing.z);
 	night = interior_night(interior_hour(world.z));
 	shade = mix(1.0, 0.3, night) * (0.6 + 0.4 * max(dot(normal, up), 0.0));
-	VERTEX = fract(COLOR.a * 13.7) < night * night_hide ? vec3(0.0) : (VIEW_MATRIX * vec4(world, 1.0)).xyz;
+	float seen = distance(pos, INV_VIEW_MATRIX[3].xyz);
+	bool hidden = fract(COLOR.a * 13.7) < night * night_hide || seen < detail_from || seen >= detail_to;
+	VERTEX = hidden ? vec3(0.0) : (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	NORMAL = mat3(VIEW_MATRIX) * normal;
 	part = UV.x;
 	paint = COLOR.rgb;
@@ -264,10 +302,23 @@ void fragment() {
 }
 """
 
-static func material(corner_radius: float, accent: Color, bob: float = 0.0, bob_rate: float = 2.0, night_hide: float = 0.0) -> ShaderMaterial:
+# `walk`: PeopleModel.bake() for the animated people (no bob then: the walk
+# does it).
+static func material(corner_radius: float, accent: Color, bob: float = 0.0, bob_rate: float = 2.0, night_hide: float = 0.0, walk: Dictionary = {}) -> ShaderMaterial:
 	var shader_material := ShaderMaterial.new()
 	shader_material.shader = Shader.new()
-	shader_material.shader.code = LOOP_SHADER % LOOP_GLSL
+	var code: String = LOOP_SHADER % LOOP_GLSL
+	if not walk.is_empty():
+		code = code.replace("render_mode unshaded, skip_vertex_transform;", "render_mode unshaded, skip_vertex_transform;\n#define ANIMATED")
+		bob = 0.0
+	shader_material.shader.code = code
+	if not walk.is_empty():
+		shader_material.set_shader_parameter("walk_points", walk.positions)
+		shader_material.set_shader_parameter("walk_normals", walk.normals)
+		shader_material.set_shader_parameter("walk_vertices", walk.vertices)
+		shader_material.set_shader_parameter("walk_frames", walk.frames)
+		shader_material.set_shader_parameter("stride", PeopleModel.STRIDE)
+		shader_material.set_shader_parameter("detail_to", DETAIL_TO)
 	shader_material.set_shader_parameter("corner", corner_radius)
 	shader_material.set_shader_parameter("accent", accent)
 	shader_material.set_shader_parameter("bob", bob)
