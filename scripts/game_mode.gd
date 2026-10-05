@@ -13,14 +13,20 @@ const MoonBase = preload("res://scripts/moon_base.gd")
 const MoonWalkerScript = preload("res://scripts/moon_walker.gd")
 const OnFoot = preload("res://scripts/on_foot.gd")
 const InteriorWalkerScript = preload("res://scripts/interior_walker.gd")
+const SeleneInteriorScript = preload("res://scripts/selene_interior.gd")
+const SeleneCrew = preload("res://scripts/selene_crew.gd")
+const SeleneLayout = preload("res://scripts/selene_layout.gd")
 
-enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE }
+enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE, IN_BASE }
 
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
 @export var void_cruiser_path: NodePath = NodePath("../VoidCruiser")
 @export var rebase_path: NodePath = NodePath("../WorldOriginRebase")
 
 const FADE_TIME := 0.4
+# Down into Selene (the pad's lift) and the Travel Tube ride: each way.
+const BASE_FADE_TIME := 1.0
+const TUBE_FADE_TIME := 0.75
 # The void-cruiser reappears this far out from the port it docked at.
 const UNDOCK_CLEARANCE := 60.0
 const KEPT_WHILE_INSIDE := ["WorldEnvironment"]
@@ -42,6 +48,7 @@ var _void_cruiser: CharacterBody3D
 var _interior: Node3D
 var _rover: CharacterBody3D
 var _walker: CharacterBody3D
+var _base: Node3D
 var _detached: Array = []
 var _transitioning := false
 var _curtain: ColorRect
@@ -81,6 +88,7 @@ func _process(_delta: float) -> void:
 		var cockpit := _void_cruiser.get_node_or_null("Cockpit")
 		if cockpit:
 			cockpit.set_dock_prompt(_can_dock_now())
+			cockpit.set_base_prompt(_can_enter_base())
 	elif mode == Mode.ROVER:
 		if _rover != null:
 			_rover.set_board_prompt(_can_board_now())
@@ -98,6 +106,19 @@ func _process(_delta: float) -> void:
 		var pad: Dictionary = _interior.nearest_pad(cruiser.position)
 		var shown: bool = not pad.is_empty() and pad.distance < PAD_MARKER_RANGE
 		cruiser.update_pad_marker((pad.transform as Transform3D).origin if shown else Vector3.ZERO, pad.get("distance", 0.0), shown)
+	elif mode == Mode.IN_BASE and _base != null:
+		var walker := _base.get_node("BaseWalker") as CharacterBody3D
+		var hud := walker.get_node("Hud")
+		var stop: String = _base.tube_stop_at(walker.position)
+		if _base.near_lift(walker.position):
+			hud.set_prompt("K EAGLE")
+		elif stop == "dock":
+			hud.set_prompt("K CENTRO")
+		elif stop == "centre":
+			hud.set_prompt("K SBARCO")
+		else:
+			hud.set_prompt("")
+		hud.set_place(_base.room_name(walker.position))
 	elif mode == Mode.ON_FOOT_INSIDE and _interior:
 		var walker := _interior.get_node_or_null("InteriorWalker")
 		if walker != null:
@@ -120,12 +141,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			_land_and_walk()
 		elif mode == Mode.ON_FOOT_INSIDE and _can_board_cruiser():
 			_transition(board_cruiser)
+		elif mode == Mode.IN_BASE:
+			var walker := _base.get_node("BaseWalker") as Node3D
+			if _base.near_lift(walker.position):
+				_transition(exit_base, BASE_FADE_TIME)
+			elif _base.tube_stop_at(walker.position) != "":
+				_transition(ride_tube, TUBE_FADE_TIME)
 		elif mode == Mode.ON_FOOT:
 			var target := _board_target()
 			if target == "ship":
 				_transition(board_ship_on_foot)
 			elif target == "rover":
 				_transition(board_rover_on_foot)
+		return
+	if event.is_action_pressed("base"):
+		if mode == Mode.VOID and _can_enter_base():
+			_transition(enter_base, BASE_FADE_TIME)
 		return
 	if event.is_action_pressed("vehicle"):
 		if mode == Mode.VOID and _can_leave_ship_now():
@@ -370,6 +401,62 @@ func board_rover_on_foot() -> void:
 	_track(_rover)
 	mode = Mode.ROVER
 
+# Landed on one of Selene's pads, the pilot may go down into the base (H).
+func _can_enter_base() -> bool:
+	return _can_leave_ship_now() and not _ship_pad().is_empty()
+
+# Down the pad's lift into Selene: the whole outside world (its sky too)
+# off the tree, the ship parked on its pad; on foot in the dock.
+func enter_base() -> void:
+	var parent := get_parent()
+	_detached.clear()
+	for child in parent.get_children():
+		if child != self:
+			_detached.append([child, child.get_index()])
+	for entry in _detached:
+		parent.remove_child(entry[0])
+	_void_cruiser.park(true)
+	_base = SeleneInteriorScript.new()
+	_base.name = "SeleneInterior"
+	_base.build()
+	var walker: CharacterBody3D = InteriorWalkerScript.new()
+	walker.name = "BaseWalker"
+	walker.flat = true
+	walker.add_to_group(SeleneInteriorScript.PEOPLE_GROUP)
+	walker.add_to_group(SeleneCrew.PILOT_GROUP)
+	_base.add_child(walker)
+	parent.add_child(_base)
+	var spawn: Transform3D = _base.spawn_transform()
+	walker.place(spawn.origin, -spawn.basis.z)
+	walker.camera().make_current()
+	(walker.get_node("Hud") as CanvasLayer).set_title("IN BASE")
+	mode = Mode.IN_BASE
+
+# Up the lift: the outside back as it was, aboard the Eagle on its pad.
+func exit_base() -> void:
+	var parent := get_parent()
+	parent.remove_child(_base)
+	_base.free()
+	_base = null
+	for entry in _detached:
+		parent.add_child(entry[0])
+		parent.move_child(entry[0], entry[1])
+	_detached.clear()
+	_void_cruiser.park(false)
+	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	if pilot_camera:
+		pilot_camera.make_current()
+	_track(_void_cruiser)
+	mode = Mode.VOID
+
+# The Travel Tube to its other stop, the walker where it stood in the cabin.
+func ride_tube() -> void:
+	var walker := _base.get_node("BaseWalker") as CharacterBody3D
+	var stop: String = _base.tube_stop_at(walker.position)
+	var here: Transform3D = SeleneLayout.tube_stops()[stop]
+	walker.transform = _base.tube_ride(stop) * (here.affine_inverse() * walker.transform)
+	walker.velocity = Vector3.ZERO
+
 # The world origin shift follows `node`.
 func _track(node: Node3D) -> void:
 	var rebase := get_node_or_null(rebase_path)
@@ -484,14 +571,14 @@ func restart_after_crash() -> void:
 	var tween := create_tween()
 	tween.tween_property(_curtain, "color", Color(0.0, 0.0, 0.0, 0.0), FADE_TIME)
 
-func _transition(action: Callable) -> void:
+func _transition(action: Callable, fade: float = FADE_TIME) -> void:
 	_transitioning = true
 	var tween := create_tween()
-	tween.tween_property(_curtain, "color:a", 1.0, FADE_TIME)
+	tween.tween_property(_curtain, "color:a", 1.0, fade)
 	await tween.finished
 	action.call()
 	tween = create_tween()
-	tween.tween_property(_curtain, "color:a", 0.0, FADE_TIME)
+	tween.tween_property(_curtain, "color:a", 0.0, fade)
 	await tween.finished
 	_transitioning = false
 

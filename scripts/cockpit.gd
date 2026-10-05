@@ -33,6 +33,8 @@ const HUD_TEXT_COLOR := Color(0.4, 0.95, 1.0)
 const HUD_BACKGROUND_COLOR := Color(0.02, 0.05, 0.08, 0.6)
 const DOCK_PROMPT_TEXT := "DOCK  [F]"
 const DOCK_PROMPT_COLOR := Color(0.3, 1.0, 0.4)
+# Landed on a Selene pad: down into the base.
+const BASE_PROMPT_TEXT := "BASE  [H]"
 const CRUISE_TEXT := "CRUISE"
 const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
 const BRAKE_TEXT := "BRAKE"
@@ -117,6 +119,9 @@ func set_speed_limit(limit: float, braking: bool) -> void:
 
 func set_dock_prompt(available: bool) -> void:
 	(get_node("Hud/Panel/Lines/DockLabel") as Label).visible = available
+
+func set_base_prompt(available: bool) -> void:
+	(get_node("Hud/Panel/Lines/BaseLabel") as Label).visible = available
 
 func set_cruise(active: bool) -> void:
 	(get_node("Hud/Panel/Lines/CruiseLabel") as Label).visible = active
@@ -309,6 +314,10 @@ func _build_hud() -> void:
 	var dock_label: Label = lines.get_node("DockLabel")
 	dock_label.text = DOCK_PROMPT_TEXT
 	dock_label.visible = false
+	_add_hud_label(lines, "BaseLabel", dock_settings)
+	var base_label: Label = lines.get_node("BaseLabel")
+	base_label.text = BASE_PROMPT_TEXT
+	base_label.visible = false
 
 	# Bottom-left corner, clear of the text panel at the top.
 	var cross: Control = VelocityCrossScript.new()
