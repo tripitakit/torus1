@@ -30,10 +30,11 @@ static func frame_points(frame: int) -> PackedVector3Array:
 	bake()
 	return _points[frame]
 
-# {mesh, positions, normals, idle, frames, vertices, bones}: the walk mesh
+# {mesh, positions, normals, idle, frames, vertices, bones, frame}: the walk mesh
 # (frame 0 points; UV.x the part, UV.y the vertex's texel), the frames'
 # points and normals (texel vertex + frame * vertices, ROW to a row), the
-# idle pose as a plain mesh, and each vertex's heaviest bone. Baked once.
+# idle pose as a plain mesh, each vertex's heaviest bone, and the frame
+# taking the glTF scene to 1.8 m tall, feet on y = 0, facing +Z. Baked once.
 static func bake() -> Dictionary:
 	if not _baked.is_empty():
 		return _baked
@@ -108,7 +109,7 @@ static func bake() -> Dictionary:
 	root.free()
 
 	_baked = {"mesh": mesh, "positions": _texture(points), "normals": _texture(normals), "idle": idle_mesh,
-		"frames": FRAMES, "vertices": count, "bones": bones}
+		"frames": FRAMES, "vertices": count, "bones": bones, "frame": frame}
 	return _baked
 
 # Points and normals of the skin posed by `animation` at `time`.

@@ -10,6 +10,7 @@ extends Node3D
 # world is detached while the pilot is in here.
 
 const SeleneLayout = preload("res://scripts/selene_layout.gd")
+const SeleneCrew = preload("res://scripts/selene_crew.gd")
 
 # Whoever is in here (the pilot, the crew): doors open for them.
 const PEOPLE_GROUP := "selene_people"
@@ -498,8 +499,39 @@ func _build_environment() -> void:
 	world.environment = environment
 	add_child(world)
 
+# Main Mission's operators at their desks, the crew at work on their feet,
+# the walkers on their rounds; all open the doors.
 func _build_crew() -> void:
-	pass
+	if crew_count == 0:
+		return
+	var crew := Node3D.new()
+	crew.name = "Crew"
+	add_child(crew)
+	var members := []
+	for seat: Transform3D in SeleneLayout.seats():
+		var member := SeleneCrew.new_member("main_mission")
+		member.transform = seat
+		members.append(member)
+		crew.add_child(member)
+		member.sit()
+	for worker in SeleneLayout.workers():
+		var member := SeleneCrew.new_member(worker.department)
+		member.transform = worker.transform
+		crew.add_child(member)
+		members.append(member)
+		if worker.department == "command":
+			member.idle()
+		else:
+			member.work()
+	var routes := SeleneLayout.routes()
+	for k in range(routes.size()):
+		var member := SeleneCrew.new_member(routes[k].department)
+		crew.add_child(member)
+		member.walk_route(routes[k].points, k)
+		members.append(member)
+	for k in range(members.size()):
+		members[k].name = "Member_%02d" % k
+		members[k].add_to_group(PEOPLE_GROUP)
 
 # A sliding door (or the office's sliding wall): its panels slide aside in
 # DOOR_TIME when someone of PEOPLE_GROUP is within DOOR_REACH, and back once
