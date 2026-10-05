@@ -16,6 +16,8 @@ func _initialize():
 	failures += _test_sides_alternate()
 	failures += _test_jump_prints()
 	failures += await _test_walker_leaves_prints()
+	failures += await _test_long_walk_keeps_prints_in_near_blocks()
+	failures += await _test_prints_face_up()
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -93,5 +95,34 @@ func _test_walker_leaves_prints() -> int:
 	var count: int = moon.get_node("Footprints").print_count()
 	if count < 10 or count > 12:
 		print("FAIL _test_walker_leaves_prints: %d prints after 5 s (7.5 m)" % count)
+		return 1
+	return 0
+
+func _prints_node() -> Node3D:
+	var node: Node3D = MoonFootprints.new()
+	root.add_child(node)
+	await process_frame
+	return node
+
+# 200 m in a straight line: the newest print's block starts near it, so the
+# block is drawn (visibility by the block's middle) while you stand there.
+func _test_long_walk_keeps_prints_in_near_blocks() -> int:
+	var node := await _prints_node()
+	for k in range(286):
+		node.add(Vector3(0.0, 0.0, -k * 0.7), Vector3(0.0, 0.0, -1.0), Vector3.UP, 1.0 if k % 2 == 0 else -1.0, MoonFootprints.WALK)
+	var last: Node3D = node.get_child(node.get_child_count() - 1)
+	var gap: float = last.position.distance_to(Vector3(0.0, 0.0, -285 * 0.7))
+	node.free()
+	if gap > 41.0:
+		print("FAIL _test_long_walk_keeps_prints_in_near_blocks: the newest print %.0f m from its block's origin" % gap)
+		return 1
+	return 0
+
+# Not mirrored: lit from above as the ground is. (Headless, a MultiMesh
+# keeps no instances to read back: the transform is checked as built.)
+func _test_prints_face_up() -> int:
+	var det: float = MoonFootprints.print_transform(Vector3.ZERO, Vector3(0.0, 0.0, -1.0), Vector3.UP, 1.0, MoonFootprints.WALK).basis.determinant()
+	if det <= 0.0:
+		print("FAIL _test_prints_face_up: a print's basis is mirrored (determinant %.4f)" % det)
 		return 1
 	return 0

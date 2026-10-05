@@ -46,6 +46,7 @@ func _initialize():
 		failures += await _test_boulder_shapes_follow_the_moon()
 		failures += await _test_walker_stops_at_a_boulder()
 		failures += await _test_rover_stops_at_a_boulder()
+		failures += await _test_no_stones_built_from_high_up()
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -154,3 +155,19 @@ func _test_rover_stops_at_a_boulder() -> int:
 		print("FAIL _test_rover_stops_at_a_boulder: %.2f m from the middle of a %.1f m boulder" % [gap, _boulder.size])
 		result = 1
 	return result
+
+# Two kilometres up (the ship flying) no stones are worth building: none of
+# the sizes is seen from there.
+func _test_no_stones_built_from_high_up() -> int:
+	var rocks := _moon.get_node("Rocks")
+	await _ticks(120)
+	var d: Vector3 = MoonOrbit.direction_of(30.0, -60.0)
+	rocks.follow(d * (MoonOrbit.RADIUS + MoonTerrain.height(d) + 2000.0), false)
+	var busy := 0
+	for task in rocks._tasks:
+		if task >= 0:
+			busy += 1
+	if busy > 0:
+		print("FAIL _test_no_stones_built_from_high_up: %d builds started 2 km up" % busy)
+		return 1
+	return 0

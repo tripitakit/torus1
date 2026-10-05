@@ -1,5 +1,7 @@
 extends Node3D
 
+const MoonPatch = preload("res://scripts/moon_patch.gd")
+
 # Boot prints on the regolith, a child of the moon (its axes): one every
 # WALK_STRIDE walking, JOG_STRIDE jogging (longer, deeper), left and right
 # of the line SIDE_OFFSET out in turn; two side by side at a jump's
@@ -19,6 +21,9 @@ const LANDING_SCALE := 1.4
 # The landing's splash reaches this far round the print (share of it).
 const SPLASH := 1.6
 const BLOCK := 512
+# A block holds prints within this of its first one (it is drawn by its
+# middle's distance): a print further off starts a new block.
+const BLOCK_SPAN := 40.0
 const MAX_BLOCKS := 200
 const REACH := 150.0
 
@@ -37,7 +42,7 @@ void vertex() {
 void fragment() {
 	// UV across 0..1, along 0..1 (toe at 1); the sole fills the middle of a
 	// splash-sized square.
-	vec2 p = (UV - 0.5) * splash + 0.5;
+	vec2 p = (vec2(UV.x, 1.0 - UV.y) - 0.5) * splash + 0.5;
 	vec2 q = abs(p - 0.5) - vec2(0.36, 0.42);
 	float sole = 1.0 - smoothstep(0.0, 0.06, length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
 	float ridges = 0.6 + 0.4 * step(0.45, fract(p.y * 9.0));
@@ -95,11 +100,37 @@ func _ready() -> void:
 func print_count() -> int:
 	return _count
 
+# A print's transform (the unit plane scaled to it) by the feet at `feet`:
+# right-handed, so the plane faces up and is lit from above (a mirrored
+# basis faces it down); the toe lies toward -z, as the shader reads it.
+static func print_transform(feet: Vector3, nose: Vector3, up: Vector3, side: float, kind: int) -> Transform3D:
+	var y := up.normalized()
+	var z := -(nose - y * nose.dot(y)).normalized()
+	var x := y.cross(z)
+	var size := PRINT_SIZE
+	if kind == JOG:
+		size.y *= JOG_LENGTH
+	elif kind == LANDING:
+		size *= LANDING_SCALE
+	var splash := SPLASH if kind == LANDING else 1.0
+	return Transform3D(Basis(x * size.x * splash, y, z * size.y * splash), feet + x * side * SIDE_OFFSET)
+
+# `point` (moon axes) put on the ground as the patch draws it (unchanged
+# off the moon: tests).
+func _on_drawn_ground(point: Vector3) -> Vector3:
+	var patch := get_parent().get_node_or_null("Patch") if get_parent() != null else null
+	if patch == null:
+		return point
+	var direction := point.normalized()
+	var face: int = patch.face if patch.face >= 0 else MoonPatch.face_of(direction, -1)
+	return direction * MoonPatch.drawn_radius(face, direction)
+
 # A print by the feet at `feet` (moon axes), the walk going `nose`, `up` the
 # local up, `side` -1 left, +1 right.
 func add(feet: Vector3, nose: Vector3, up: Vector3, side: float, kind: int) -> void:
 	var block: MultiMeshInstance3D = null if _blocks.is_empty() else _blocks[-1]
-	if block == null or block.multimesh.visible_instance_count >= BLOCK:
+	feet = _on_drawn_ground(feet)
+	if block == null or block.multimesh.visible_instance_count >= BLOCK or feet.distance_to(block.position) > BLOCK_SPAN:
 		block = MultiMeshInstance3D.new()
 		var multimesh := MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -110,26 +141,16 @@ func add(feet: Vector3, nose: Vector3, up: Vector3, side: float, kind: int) -> v
 		block.multimesh = multimesh
 		block.material_override = _material
 		block.position = feet
-		block.visibility_range_end = REACH
-		block.custom_aabb = AABB(-Vector3.ONE * REACH, Vector3.ONE * REACH * 2.0)
+		block.visibility_range_end = REACH + BLOCK_SPAN
+		block.custom_aabb = AABB(-Vector3.ONE * BLOCK_SPAN * 1.5, Vector3.ONE * BLOCK_SPAN * 3.0)
 		block.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(block)
 		_blocks.append(block)
 		if _blocks.size() > MAX_BLOCKS:
 			(_blocks[0] as Node).queue_free()
 			_blocks.remove_at(0)
-	var y := up.normalized()
-	var z := -(nose - y * nose.dot(y)).normalized()
-	var x := y.cross(z)
-	var size := PRINT_SIZE
-	if kind == JOG:
-		size.y *= JOG_LENGTH
-	elif kind == LANDING:
-		size *= LANDING_SCALE
-	var splash := SPLASH if kind == LANDING else 1.0
-	var at := feet + x * side * SIDE_OFFSET - block.position
 	var n := block.multimesh.visible_instance_count
-	block.multimesh.set_instance_transform(n, Transform3D(Basis(x * size.x * splash, y, -z * size.y * splash), at))
-	block.multimesh.set_instance_custom_data(n, Color(float(kind), splash, side, 0.0))
+	block.multimesh.set_instance_transform(n, print_transform(feet - block.position, nose, up, side, kind))
+	block.multimesh.set_instance_custom_data(n, Color(float(kind), SPLASH if kind == LANDING else 1.0, side, 0.0))
 	block.multimesh.visible_instance_count = n + 1
 	_count += 1

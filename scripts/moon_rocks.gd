@@ -120,7 +120,13 @@ func follow(point: Vector3, collide: bool) -> void:
 		for kind in range(3):
 			_windows[kind] = Vector2i(-999999, -999999)
 	var plane := MoonPatch.plane_coords(direction, face)
+	# Higher up than a size is seen from (the ship flying): not built, hidden.
+	var altitude := point.length() - MoonOrbit.RADIUS - MoonTerrain.height(direction)
 	for kind in range(3):
+		var seen: bool = altitude < CLASSES[kind].reach * 1.2
+		(get_node("Stones%d" % kind) as Node3D).visible = seen
+		if not seen:
+			continue
 		var step: float = CLASSES[kind].step
 		var window := Vector2i(roundi(plane.x / step), roundi(plane.y / step))
 		if window != _windows[kind] and _tasks[kind] < 0:
@@ -140,7 +146,7 @@ func _build(kind: int, face: int, window: Vector2i) -> void:
 	for n in range(stones.size()):
 		var stone: Dictionary = stones[n]
 		var up: Vector3 = stone.direction
-		var ground: Vector3 = up * (MoonOrbit.RADIUS + MoonTerrain.height(up))
+		var ground: Vector3 = up * MoonPatch.drawn_radius(face, up)
 		var size: float = stone.size
 		var high: float = size * stone.squash
 		var side := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()

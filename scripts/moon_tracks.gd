@@ -1,5 +1,7 @@
 extends Node3D
 
+const MoonPatch = preload("res://scripts/moon_patch.gd")
+
 # The Moon Buggy's tracks on the regolith, a child of the moon (its axes):
 # two strips WIDTH wide under the wheels of each side, a sample every
 # SPACING of road on the ground; in the air the tracks break and start
@@ -14,8 +16,10 @@ const MIN_SPEED := 0.3
 const BREAK_GAP := 2.0
 const WIDTH := 0.3
 const HALF_TRACK := 0.9
-const BLOCK := 200
-const MAX_BLOCKS := 2000
+# Each sample rebuilds its block's mesh: 25 m blocks keep that cheap; the
+# last 100 km are kept.
+const BLOCK := 50
+const MAX_BLOCKS := 4000
 const REACH := 600.0
 
 const SHADER := """
@@ -85,9 +89,25 @@ func _ready() -> void:
 func sample_count() -> int:
 	return _count
 
+# The newest block's left-hand points (moon axes), for the tests.
+func last_points() -> Array:
+	return [] if _blocks.is_empty() else _blocks[-1].left
+
+# `point` (moon axes) put on the ground as the patch draws it (unchanged
+# off the moon: tests).
+func _on_drawn_ground(point: Vector3) -> Vector3:
+	var patch := get_parent().get_node_or_null("Patch") if get_parent() != null else null
+	if patch == null:
+		return point
+	var direction := point.normalized()
+	var face: int = patch.face if patch.face >= 0 else MoonPatch.face_of(direction, -1)
+	return direction * MoonPatch.drawn_radius(face, direction)
+
 # A sample (moon axes); `new_strip` starts the tracks afresh (after a jump).
 func add(left: Vector3, right: Vector3, up: Vector3, new_strip: bool) -> void:
 	_count += 1
+	left = _on_drawn_ground(left)
+	right = _on_drawn_ground(right)
 	var block: Dictionary = {} if _blocks.is_empty() else _blocks[-1]
 	if new_strip or block.is_empty() or block.left.size() >= BLOCK:
 		var carry := not new_strip and not block.is_empty()

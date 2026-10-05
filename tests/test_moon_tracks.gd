@@ -15,6 +15,7 @@ func _initialize():
 	failures += _test_one_sample_every_half_metre()
 	failures += _test_no_samples_in_the_air_or_standing()
 	failures += _test_new_strip_after_a_jump()
+	failures += _test_small_blocks()
 	failures += await _test_rover_leaves_tracks()
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -101,5 +102,32 @@ func _test_rover_leaves_tracks() -> int:
 	var count: int = moon.get_node("Tracks").sample_count()
 	if count < 70 or count > 80:
 		print("FAIL _test_rover_leaves_tracks: %d samples a side after 5 s (37.5 m)" % count)
+		return 1
+	# Out among the craters (the base's ground is flat, true and drawn the
+	# same): on the ground as the patch draws it (its 8 m lattice), not the
+	# true one.
+	const MoonPatch = preload("res://scripts/moon_patch.gd")
+	# The world origin has moved since: the base's place now.
+	base = moon.base_transform()
+	var far: Vector3 = base * Vector3(0.0, sqrt(r * r - 3200.0 * 3200.0) - r, 3200.0)
+	rover.place(far, base.basis.x)
+	for i in range(240):
+		await physics_frame
+	var face: int = moon.get_node("Patch").face
+	var samples: Array = moon.get_node("Tracks").last_points()
+	if samples.size() < 20 or (samples[-1] as Vector3).distance_to(moon.to_local(rover.global_position)) > 5.0:
+		print("FAIL _test_rover_leaves_tracks: out among the craters, %d samples in the newest block" % samples.size())
+		return 1
+	for sample: Vector3 in samples:
+		var drawn: float = MoonPatch.drawn_radius(face, sample.normalized())
+		if absf(sample.length() - drawn) > 0.001:
+			print("FAIL _test_rover_leaves_tracks: a sample %.3f m off the drawn ground" % (sample.length() - drawn))
+			return 1
+	return 0
+
+# A block's mesh is rebuilt on every sample: small blocks keep that cheap.
+func _test_small_blocks() -> int:
+	if MoonTracks.BLOCK * MoonTracks.SPACING > 25.0:
+		print("FAIL _test_small_blocks: %.0f m a block" % (MoonTracks.BLOCK * MoonTracks.SPACING))
 		return 1
 	return 0

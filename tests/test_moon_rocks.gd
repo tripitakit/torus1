@@ -15,6 +15,7 @@ func _initialize():
 	failures += _test_denser_on_crater_rims()
 	failures += _test_none_at_selene()
 	failures += _test_sizes_in_range()
+	failures += _test_drawn_radius_on_the_lattice()
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -82,4 +83,23 @@ func _test_sizes_in_range() -> int:
 			if stone.size < cls.low - 1e-9 or stone.size > cls.high + 1e-9:
 				print("FAIL _test_sizes_in_range: class %d size %.2f" % [kind, stone.size])
 				return 1
+	return 0
+
+# The ground as the patch's finest ring draws it: at a lattice point the
+# point's own height, halfway along a lattice edge the mean of its ends.
+func _test_drawn_radius_on_the_lattice() -> int:
+	var face := MoonPatch.face_of(_far_place(), -1)
+	var plane := MoonPatch.plane_coords(_far_place(), face)
+	var i := floori(plane.x / 8.0)
+	var j := floori(plane.y / 8.0)
+	var a := MoonPatch.plane_direction(face, Vector2(i, j) * 8.0)
+	var b := MoonPatch.plane_direction(face, Vector2(i + 1, j) * 8.0)
+	var mid := MoonPatch.plane_direction(face, Vector2(i + 0.5, j) * 8.0)
+	var ra := MoonOrbit.RADIUS + MoonTerrain.height(a)
+	var rb := MoonOrbit.RADIUS + MoonTerrain.height(b)
+	var at_a: float = MoonPatch.drawn_radius(face, a)
+	var at_mid: float = MoonPatch.drawn_radius(face, mid)
+	if absf(at_a - ra) > 1e-6 or absf(at_mid - (ra + rb) * 0.5) > 1e-4:
+		print("FAIL _test_drawn_radius_on_the_lattice: %.4f vs %.4f, %.4f vs %.4f" % [at_a, ra, at_mid, (ra + rb) * 0.5])
+		return 1
 	return 0

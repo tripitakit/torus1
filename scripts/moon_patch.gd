@@ -358,3 +358,24 @@ static func _skirt(points: PackedVector3Array, normals: PackedVector3Array, morp
 			indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
 		else:
 			indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+
+# The ground's radius under `direction` (moon axes, unit) as the finest ring
+# draws it on `on_face`: the 8 m lattice's triangles (a-b-c, b-d-c, split
+# on the b-c diagonal as _ring lays them). Uncached (safe on any thread):
+# stones, tracks and prints sit on what is drawn, not on the true ground
+# between lattice points (which differs by tens of centimetres on crater
+# rims).
+static func drawn_radius(on_face: int, direction: Vector3) -> float:
+	var spacing: float = SPACINGS[0]
+	var p := plane_coords(direction, on_face) / spacing
+	var i := floori(p.x)
+	var j := floori(p.y)
+	var fx := p.x - i
+	var fy := p.y - j
+	var corner := func(di: int, dj: int) -> float:
+		return MoonOrbit.RADIUS + MoonTerrain.height(plane_direction(on_face, Vector2(i + di, j + dj) * spacing), 1.0, SMALLEST[0])
+	if fx + fy <= 1.0:
+		var ra: float = corner.call(0, 0)
+		return ra + (corner.call(1, 0) - ra) * fx + (corner.call(0, 1) - ra) * fy
+	var rd: float = corner.call(1, 1)
+	return rd + (corner.call(0, 1) - rd) * (1.0 - fx) + (corner.call(1, 0) - rd) * (1.0 - fy)
