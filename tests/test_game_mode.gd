@@ -47,6 +47,10 @@ func _initialize():
 	_failures += await _test_k_from_the_eagle_walks()
 	_failures += await _test_k_far_does_nothing()
 	_failures += await _test_k_by_the_pad_boards()
+	_failures += await _test_base_prompt_only_on_a_selene_pad()
+	_failures += await _test_b_enters_the_base()
+	_failures += await _test_tube_ride_from_game_mode()
+	_failures += await _test_k_by_the_lift_returns_to_the_eagle()
 	_failures += await _test_k_from_the_rover_parks_it()
 	_failures += await _test_k_by_the_rover_drives_again()
 	_failures += await _test_k_by_the_eagle_stows_the_rover()
@@ -661,3 +665,78 @@ func _test_k_by_the_cruiser_boards() -> int:
 	_game_mode.exit_interior()
 	await _frames(3)
 	return result
+
+func _base_label() -> Label:
+	return _void_cruiser.get_node("Cockpit/Hud/Panel/Lines/BaseLabel") as Label
+
+# Landed on a Selene pad the cockpit offers the base; in flight it does not.
+func _test_base_prompt_only_on_a_selene_pad() -> int:
+	await _land_on_pad_1()
+	await _frames(2)
+	var on_pad := _base_label().visible
+	_void_cruiser.is_landed = false
+	await _frames(2)
+	var flying := _base_label().visible
+	await _land_on_pad_1()
+	await _frames(2)
+	if not on_pad or flying:
+		print("FAIL _test_base_prompt_only_on_a_selene_pad: on the pad %s, flying %s" % [on_pad, flying])
+		return 1
+	return 0
+
+var _ship_on_pad: Vector3
+
+func _test_b_enters_the_base() -> int:
+	var pad: Transform3D = _moon().pad_transform(1)
+	_ship_on_pad = pad.affine_inverse() * _void_cruiser.global_position
+	_press("base")
+	await _wait_for_transition()
+	var base := _scene.get_node_or_null("SeleneInterior") as Node3D
+	var walker := base.get_node_or_null("BaseWalker") as CharacterBody3D if base != null else null
+	if _game_mode.mode != _game_mode.Mode.IN_BASE or base == null or walker == null:
+		print("FAIL _test_b_enters_the_base: mode %d, base %s, walker %s" % [_game_mode.mode, base, walker])
+		return 1
+	# The outside (moon, station, its sky) is off the tree, the base's own
+	# environment the only one.
+	var outside_gone: bool = _scene.get_node_or_null("PlanetSystem") == null and _scene.get_node_or_null("WorldEnvironment") == null
+	if not outside_gone or not base.near_lift(walker.position) or not walker.camera().current:
+		print("FAIL _test_b_enters_the_base: outside gone %s, by the lift %s, camera %s" % [outside_gone, base.near_lift(walker.position), walker.camera().current])
+		return 1
+	return 0
+
+func _test_tube_ride_from_game_mode() -> int:
+	const SeleneLayout = preload("res://scripts/selene_layout.gd")
+	var base := _scene.get_node("SeleneInterior") as Node3D
+	var walker := base.get_node("BaseWalker") as CharacterBody3D
+	var stops := SeleneLayout.tube_stops()
+	walker.place((stops.dock as Transform3D).origin, Vector3(0.0, 0.0, -1.0))
+	await physics_frame
+	_press("board")
+	await _wait_for_transition()
+	var there := SeleneLayout.room_at(walker.position)
+	# And back to the dock, by the lift.
+	_press("board")
+	await _wait_for_transition()
+	var back := SeleneLayout.room_at(walker.position)
+	if there != "tube_centre" or back != "tube_dock":
+		print("FAIL _test_tube_ride_from_game_mode: rode to '%s', back to '%s'" % [there, back])
+		return 1
+	return 0
+
+# Out by the lift: aboard the Eagle again, still on its pad.
+func _test_k_by_the_lift_returns_to_the_eagle() -> int:
+	var base := _scene.get_node("SeleneInterior") as Node3D
+	var walker := base.get_node("BaseWalker") as CharacterBody3D
+	var spawn: Transform3D = base.spawn_transform()
+	walker.place(spawn.origin, -spawn.basis.z)
+	await physics_frame
+	_press("board")
+	await _wait_for_transition()
+	await _frames(30)
+	var pilot := _void_cruiser.get_node("Cockpit/PilotCamera") as Camera3D
+	var pad: Transform3D = _moon().pad_transform(1)
+	var drift: float = (pad.affine_inverse() * _void_cruiser.global_position).distance_to(_ship_on_pad)
+	if _game_mode.mode != _game_mode.Mode.VOID or _scene.get_node_or_null("SeleneInterior") != null or not pilot.current or _void_cruiser.parked or drift > 0.1:
+		print("FAIL _test_k_by_the_lift_returns_to_the_eagle: mode %d, pilot camera %s, parked %s, %.2f m off its place on the pad" % [_game_mode.mode, pilot.current, _void_cruiser.parked, drift])
+		return 1
+	return 0

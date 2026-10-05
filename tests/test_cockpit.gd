@@ -111,7 +111,7 @@ func _test_hud_lines_in_display_order() -> int:
 	var names: Array = []
 	for child in lines.get_children():
 		names.append(String(child.name))
-	var expected := ["SpeedLabel", "LimitLabel", "CruiseLabel", "BrakeLabel", "ThrustLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel"]
+	var expected := ["SpeedLabel", "LimitLabel", "CruiseLabel", "BrakeLabel", "ThrustLabel", "BowLabel", "SternLabel", "PortLabel", "StarboardLabel", "DorsalLabel", "VentralLabel", "DockLabel", "BaseLabel"]
 	if names != expected:
 		print("FAIL _test_hud_lines_in_display_order: %s expected %s" % [names, expected])
 		result = 1
