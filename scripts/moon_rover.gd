@@ -206,3 +206,4 @@ func _physics_process(delta: float) -> void:
 	velocity = (global_position - start) / delta
 	if not parked:
 		moon.follow_patch(global_position, true, velocity)
+		moon.follow_rocks(global_position, true)

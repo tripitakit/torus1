@@ -67,3 +67,148 @@ static func stones_in(face: int, kind: int, low: Vector2, high: Vector2) -> Arra
 				"shape": mini(2, int(MoonTerrain._part(more, 3) * 3.0)),
 			})
 	return found
+
+# Boulders within this of the one walking or driving get a sphere each
+# (RockBody), rebuilt every COLLIDE_STEP they move.
+const COLLIDE_REACH := 60.0
+const COLLIDE_STEP := 10.0
+# A stone sits a quarter of its height in the ground.
+const SINK := 0.25
+const COLOUR := Color(0.46, 0.45, 0.43)
+
+var _face := -1
+var _windows := [Vector2i(-999999, -999999), Vector2i(-999999, -999999), Vector2i(-999999, -999999)]
+var _tasks := [-1, -1, -1]
+# The boulders last built: [position (moon axes), size] each.
+var _boulders := []
+var _collide_at := Vector3.INF
+var _meshes := []
+var _material: StandardMaterial3D
+
+func _ready() -> void:
+	var body := StaticBody3D.new()
+	body.name = "RockBody"
+	add_child(body)
+	_material = StandardMaterial3D.new()
+	_material.albedo_color = COLOUR
+	_material.roughness = 1.0
+	for kind in range(3):
+		_meshes.append(rock_mesh(kind))
+		var node := MultiMeshInstance3D.new()
+		node.name = "Stones%d" % kind
+		var multimesh := MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.mesh = _meshes[kind]
+		node.multimesh = multimesh
+		node.material_override = _material
+		node.visibility_range_end = CLASSES[kind].reach * 1.2
+		add_child(node)
+
+func _exit_tree() -> void:
+	for kind in range(3):
+		if _tasks[kind] >= 0:
+			WorkerThreadPool.wait_for_task_completion(_tasks[kind])
+			_tasks[kind] = -1
+
+# The player at `point` (moon axes): the stones round them, rebuilt on a
+# worker as they move; with `collide`, spheres on the near boulders.
+func follow(point: Vector3, collide: bool) -> void:
+	var direction := point.normalized()
+	var face := MoonPatch.face_of(direction, _face)
+	if face != _face:
+		_face = face
+		for kind in range(3):
+			_windows[kind] = Vector2i(-999999, -999999)
+	var plane := MoonPatch.plane_coords(direction, face)
+	for kind in range(3):
+		var step: float = CLASSES[kind].step
+		var window := Vector2i(roundi(plane.x / step), roundi(plane.y / step))
+		if window != _windows[kind] and _tasks[kind] < 0:
+			_windows[kind] = window
+			_tasks[kind] = WorkerThreadPool.add_task(_build.bind(kind, face, window), true, "moon stones")
+	if collide and point.distance_to(_collide_at) > COLLIDE_STEP:
+		_collide_round(point)
+
+func _build(kind: int, face: int, window: Vector2i) -> void:
+	var cls: Dictionary = CLASSES[kind]
+	var centre := Vector2(window) * float(cls.step)
+	var origin := MoonPatch.plane_direction(face, centre) * MoonOrbit.RADIUS
+	var stones := stones_in(face, kind, centre - Vector2.ONE * cls.reach, centre + Vector2.ONE * cls.reach)
+	var buffer := PackedFloat32Array()
+	buffer.resize(stones.size() * 12)
+	var boulders := []
+	for n in range(stones.size()):
+		var stone: Dictionary = stones[n]
+		var up: Vector3 = stone.direction
+		var ground: Vector3 = up * (MoonOrbit.RADIUS + MoonTerrain.height(up))
+		var size: float = stone.size
+		var high: float = size * stone.squash
+		var side := up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT).normalized()
+		var basis := Basis(side, up, side.cross(up)) * Basis(Vector3.UP, stone.spin)
+		basis = basis * Basis.from_scale(Vector3(size, high, size * 0.85))
+		var at := ground + up * high * (0.5 - SINK) - origin
+		var t := Transform3D(basis, at)
+		for r in range(3):
+			buffer[n * 12 + r * 4] = t.basis[0][r]
+			buffer[n * 12 + r * 4 + 1] = t.basis[1][r]
+			buffer[n * 12 + r * 4 + 2] = t.basis[2][r]
+			buffer[n * 12 + r * 4 + 3] = t.origin[r]
+		if kind == BOULDER:
+			boulders.append([ground, size])
+	_apply.call_deferred(kind, origin, buffer, stones.size(), boulders)
+
+func _apply(kind: int, origin: Vector3, buffer: PackedFloat32Array, count: int, boulders: Array) -> void:
+	if _tasks[kind] >= 0:
+		WorkerThreadPool.wait_for_task_completion(_tasks[kind])
+	_tasks[kind] = -1
+	var node := get_node("Stones%d" % kind) as MultiMeshInstance3D
+	node.position = origin
+	node.multimesh.instance_count = count
+	if count > 0:
+		node.multimesh.buffer = buffer
+	node.custom_aabb = AABB(-Vector3.ONE * CLASSES[kind].reach * 1.5, Vector3.ONE * CLASSES[kind].reach * 3.0)
+	if kind == BOULDER:
+		_boulders = boulders
+		_collide_at = Vector3.INF
+
+# A sphere for each boulder within COLLIDE_REACH of `point` (moon axes).
+func _collide_round(point: Vector3) -> void:
+	if _boulders.is_empty():
+		return
+	_collide_at = point
+	var body := get_node("RockBody") as StaticBody3D
+	for child in body.get_children():
+		body.remove_child(child)
+		child.free()
+	for boulder: Array in _boulders:
+		var ground: Vector3 = boulder[0]
+		if ground.distance_to(point) > COLLIDE_REACH:
+			continue
+		var size: float = boulder[1]
+		var sphere := SphereShape3D.new()
+		sphere.radius = size * 0.45
+		var shape := CollisionShape3D.new()
+		shape.shape = sphere
+		shape.position = ground + ground.normalized() * size * 0.2
+		body.add_child(shape)
+
+# A low-poly stone about 1 m across: a coarse sphere with its corners pulled
+# in and out (a different pull for each size), flat-shaded.
+static func rock_mesh(kind: int) -> ArrayMesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 1.0
+	sphere.radial_segments = 7
+	sphere.rings = 4
+	var arrays := sphere.get_mesh_arrays()
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in range(indices.size()):
+		var p := points[indices[k]]
+		var key := Vector3i((p * 100.0).round())
+		var pull := 0.75 + 0.5 * MoonTerrain._part(MoonTerrain._hash(kind, 0, key.x * 131 + key.y, key.z), 0)
+		st.add_vertex(p * pull)
+	st.generate_normals()
+	return st.commit()

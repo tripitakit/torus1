@@ -10,6 +10,7 @@ const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
 const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 const MoonPatch = preload("res://scripts/moon_patch.gd")
+const MoonRocks = preload("res://scripts/moon_rocks.gd")
 const MoonMesh = preload("res://scripts/moon_mesh.gd")
 const PortalScript = preload("res://scripts/portal.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
@@ -149,9 +150,10 @@ func _place() -> void:
 	# tree flushes transform notifications, and an animatable (kinematic)
 	# body only moves at the next physics step: either way a tick late, ~32 m
 	# off under a ship on a pad. A static body, told now, moves at once.
-	var base := get_node_or_null("Base") as CollisionObject3D
-	if base != null and base.is_inside_tree():
-		PhysicsServer3D.body_set_state(base.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, base.global_transform)
+	for body_path in ["Base", "Rocks/RockBody"]:
+		var body := get_node_or_null(body_path) as CollisionObject3D
+		if body != null and body.is_inside_tree():
+			PhysicsServer3D.body_set_state(body.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, body.global_transform)
 	var portal := get_node_or_null("Portal")
 	if portal != null:
 		portal.sync_body()
@@ -267,6 +269,14 @@ func build() -> void:
 	patch.visible = false
 	patch.rebuilt.connect(_on_patch_rebuilt.bind(patch, material, patch_material))
 	add_child(patch)
+	# Stones and boulders round the player (MoonRocks).
+	var old_rocks := get_node_or_null("Rocks")
+	if old_rocks != null:
+		remove_child(old_rocks)
+		old_rocks.queue_free()
+	var rocks: Node3D = MoonRocks.new()
+	rocks.name = "Rocks"
+	add_child(rocks)
 	var old_base := get_node_or_null("Base")
 	if old_base != null:
 		remove_child(old_base)
@@ -312,6 +322,13 @@ static func in_hole(direction: Vector3, up: Vector3, x: Vector3, z: Vector3, cen
 		return false
 	var on_plane := Vector2(direction.dot(x), direction.dot(z)) * radius / facing - centre
 	return absf(on_plane.x) < half and absf(on_plane.y) < half
+
+# The stones round `point` (world); with `collide` (rover, walker) the near
+# boulders' spheres too.
+func follow_rocks(point: Vector3, collide: bool) -> void:
+	var rocks := get_node_or_null("Rocks")
+	if rocks != null:
+		rocks.follow(global_transform.affine_inverse() * point, collide)
 
 # New rings in place: the whole moon's hole and the patch's offset follow.
 func _on_patch_rebuilt(patch: Node3D, material: ShaderMaterial, patch_material: ShaderMaterial) -> void:

@@ -154,3 +154,4 @@ func _physics_process(delta: float) -> void:
 	global_transform = Transform3D(GroundVehicle.heading_basis(-basis.z, here_up), here)
 	velocity = (global_position - start) / delta
 	moon.follow_patch(global_position, true, velocity)
+	moon.follow_rocks(global_position, true)

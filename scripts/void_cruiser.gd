@@ -804,6 +804,9 @@ func _physics_process(delta: float) -> void:
 	var moon := moon_node()
 	if moon != null:
 		moon.follow_patch(global_position, in_moon_frame, velocity)
+		# The stones only to look at: the ship lands through them.
+		if in_moon_frame:
+			moon.follow_rocks(global_position, false)
 	_fly(delta)
 
 # The nearest portal: {portal, centre (world), distance}; empty without one.
