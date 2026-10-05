@@ -34,7 +34,7 @@ const HUD_BACKGROUND_COLOR := Color(0.02, 0.05, 0.08, 0.6)
 const DOCK_PROMPT_TEXT := "DOCK  [F]"
 const DOCK_PROMPT_COLOR := Color(0.3, 1.0, 0.4)
 # Landed on a Selene pad: down into the base.
-const BASE_PROMPT_TEXT := "BASE  [B]"
+const BASE_PROMPT_TEXT := "BASE  [H]"
 const CRUISE_TEXT := "CRUISE"
 const CRUISE_COLOR := Color(1.0, 0.8, 0.3)
 const BRAKE_TEXT := "BRAKE"

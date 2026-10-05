@@ -401,7 +401,7 @@ func board_rover_on_foot() -> void:
 	_track(_rover)
 	mode = Mode.ROVER
 
-# Landed on one of Selene's pads, the pilot may go down into the base.
+# Landed on one of Selene's pads, the pilot may go down into the base (H).
 func _can_enter_base() -> bool:
 	return _can_leave_ship_now() and not _ship_pad().is_empty()
 

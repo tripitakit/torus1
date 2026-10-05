@@ -61,7 +61,7 @@ Il renderer è **Compatibility** (OpenGL 3.3).
   sui bordi dei crateri; i massi grandi fermano rover e pedone. Il Moon Buggy lascia le **tracce** del
   battistrada e il pedone le **orme** degli stivali (diverse per camminata, corsa e salto): restano per tutta
   la sessione.
-- **Dentro Selene**, in omaggio a Base Alpha di *Spazio 1999*: con l'Eagle posata su un pad della base, B fa
+- **Dentro Selene**, in omaggio a Base Alpha di *Spazio 1999*: con l'Eagle posata su un pad della base, H fa
   scendere nella sala di sbarco sotto il pad. La Travel Tube porta al centro: corridoio a pannelli beige con le
   luci curve e la colonna di comunicazione, Main Mission (vetrata sulla luna, Big Screen, scrivanie con le
   lampade a globo e i computer a luci lampeggianti, l'ufficio del Comandante in cima ai gradini), infermeria,
@@ -130,10 +130,11 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 | Q / E | rollio | — | — |
 | Mouse | orientamento | guardarsi attorno | girarsi, guardare su / giù |
 | C | cruise (mantiene la velocità) | — | — |
-| B | freno; posata su un pad di Selene: scendi nella base | freno a mano | — |
+| B | freno | freno a mano | — |
 | F | attracco / sgancio (anche all'interno) | — | — |
 | T | scegli il bersaglio del computer di bordo | — | — |
 | G | arrivo automatico al bersaglio | — | — |
+| H | scendi nella base (nave posata su un pad di Selene) | — | — |
 | V | scendi sul rover (nave posata sulla luna) | risali sulla nave | — |
 | K | scendi a piedi (nave posata; cruiser: posa sulla piazzola) | scendi a piedi | risali sul mezzo vicino; in Selene: Travel Tube, all'ascensore risali sull'Eagle |
 | J | — | — | corsa (tenere premuto) |

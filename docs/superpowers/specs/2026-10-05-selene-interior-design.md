@@ -6,7 +6,7 @@ alloggi, sala comune. L'equipaggio cammina nei corridoi, lavora alle console e i
 
 ## Scelte dell'utente
 
-- Si entra **dall'Eagle posata su un pad di Selene**, con il nuovo tasto **B** (HUD `B BASE`). K resta "a
+- Si entra **dall'Eagle posata su un pad di Selene**, con il nuovo tasto **H** (HUD `BASE  [H]`). K resta "a
   piedi in superficie" come oggi.
 - **Nucleo iconico:** una decina di ambienti fatti a mano.
 - **Equipaggio con vita di routine:** chi cammina, chi è seduto alle console, chi lavora in piedi.
@@ -32,13 +32,13 @@ alloggi, sala comune. L'equipaggio cammina nei corridoi, lavora alle console e i
 - `scripts/selene_layout.gd` — funzioni pure: stanze, porte, percorsi dell'equipaggio, posti alle console.
 - `scripts/selene_crew.gd` — l'equipaggio: modello Quaternius con scheletro e animazioni vere (pochi, da vicino),
   colori per reparto, camminata sui percorsi, seduti, al lavoro.
-- `scripts/game_mode.gd` — nuovo modo `IN_BASE`, tasto B, uscita con K.
-- `project.godot` — azione `base` sul tasto B (66).
+- `scripts/game_mode.gd` — nuovo modo `IN_BASE`, tasto H, uscita con K.
+- `project.godot` — azione `base` sul tasto H (72).
 
 ## Entrata e uscita
 
 - **Entrata:** a bordo dell'Eagle posata su un pad di Selene (`_ship_pad()` non vuoto), l'HUD della nave mostra
-  `B BASE`; B: dissolvenza (2 s, "il pad scende nell'hangar"), il mondo esterno si stacca (come
+  `BASE  [H]`; H: dissolvenza (2 s, "il pad scende nell'hangar"), il mondo esterno si stacca (come
   `enter_interior`), si è a piedi nella **sala di sbarco**, accanto alla piattaforma dell'ascensore.
 - **Uscita:** a piedi entro 3 m dalla piattaforma dell'ascensore l'HUD mostra `K EAGLE`; K: dissolvenza, il mondo
   esterno torna, si è a bordo dell'Eagle sullo stesso pad, ferma.
@@ -113,7 +113,7 @@ TDD; solo i test nuovi o toccati.
   chiude quando si allontana; la Travel Tube porta all'altra fermata; la parete dell'ufficio si apre.
 - `tests/test_selene_crew.gd`: i colori per reparto (manica sinistra); un camminatore avanza sul suo percorso e si
   ferma con il giocatore davanti; la posa seduta ha le ginocchia piegate (anche più basse in piedi).
-- `tests/test_game_mode.gd` (toccato): `B BASE` solo con l'Eagle posata su un pad di Selene; B → `IN_BASE`, mondo
+- `tests/test_game_mode.gd` (toccato): `BASE  [H]` solo con l'Eagle posata su un pad di Selene; H → `IN_BASE`, mondo
   esterno staccato; K vicino all'ascensore → di nuovo sull'Eagle sullo stesso pad.
 - **Prova GPU:** sala di sbarco, corridoio con la colonna, Main Mission con le persone sedute, infermeria; FPS.
 
@@ -124,9 +124,8 @@ TDD; solo i test nuovi o toccati.
 
 ## Cambiato durante l'esecuzione
 
-- **Il tasto B era già il freno** (nave) e il freno a mano (rover). B porta nella base solo con l'Eagle posata su un
-  pad di Selene, dove il freno non serve; in volo B frena come prima.
-- **Invito in cabina:** `BASE  [B]`, nello stile di `DOCK  [F]`.
+- **Tasto H, non B:** B era già il freno (nave) e il freno a mano (rover); su richiesta dell'utente la base è su H.
+- **Invito in cabina:** `BASE  [H]`, nello stile di `DOCK  [F]`.
 - **Al lavoro in piedi:** la clip "Working" del modello è in ginocchio a martellare il pavimento; medici, tecnico e
   Comandante stanno in piedi con la clip Idle.
 - **Seduti senza movimento del busto:** la clip Idle riscriverebbe le gambe piegate.
