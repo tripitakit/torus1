@@ -829,12 +829,23 @@ func _test_walkers_in_the_town_chunks() -> int:
 			print("FAIL _test_walkers_in_the_town_chunks: chunk %s %s" % [key, node])
 			result = 1
 			break
-		# Within DETAIL_TO the animated model on the same data, beyond it the
-		# plain one.
-		var near := world.get_node_or_null("Chain/Section_0/WalkersNear_%02d_%02d" % [key.x, key.y]) as MultiMeshInstance3D
-		if near == null or near.multimesh.buffer != node.multimesh.buffer or near.multimesh.mesh != PeopleModel.bake().mesh or not is_equal_approx(near.visibility_range_end, TownWalkers.NEAR_VISIBLE_TO) \
-				or not is_equal_approx(near.material_override.get_shader_parameter("detail_to"), LoopTraffic.DETAIL_TO) or not is_equal_approx(node.material_override.get_shader_parameter("detail_from"), LoopTraffic.DETAIL_TO):
-			print("FAIL _test_walkers_in_the_town_chunks: chunk %s animated %s" % [key, near])
+		# Within DETAIL_TO the animated model, in small groups (one per lot)
+		# each drawn while the camera is within DETAIL_TO of one of its
+		# walkers; beyond, the plain one.
+		var near_count := 0
+		var k := 0
+		while true:
+			var near := world.get_node_or_null("Chain/Section_0/WalkersNear_%02d_%02d_%d" % [key.x, key.y, k]) as MultiMeshInstance3D
+			if near == null:
+				break
+			near_count += near.multimesh.instance_count
+			if near.multimesh.mesh != PeopleModel.bake().mesh or not is_equal_approx(near.visibility_range_end, TownWalkers.near_range(near.custom_aabb)) \
+					or not is_equal_approx(near.material_override.get_shader_parameter("detail_to"), LoopTraffic.DETAIL_TO):
+				print("FAIL _test_walkers_in_the_town_chunks: chunk %s group %d" % [key, k])
+				result = 1
+			k += 1
+		if near_count != node.multimesh.instance_count or not is_equal_approx(node.material_override.get_shader_parameter("detail_from"), LoopTraffic.DETAIL_TO):
+			print("FAIL _test_walkers_in_the_town_chunks: chunk %s has %d animated walkers of %d" % [key, near_count, node.multimesh.instance_count])
 			result = 1
 			break
 	world.free()

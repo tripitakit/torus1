@@ -19,6 +19,7 @@ func _initialize():
 	_plan = SectionGenerator.generate(5, RADIUS, LENGTH)
 	_failures += _test_walkers_in_open_town_ground()
 	_failures += _test_plenty_in_every_built_lot()
+	_failures += _test_near_groups_cover_their_walkers()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -91,4 +92,35 @@ func _test_plenty_in_every_built_lot() -> int:
 	if per_lot.size() < built * 0.9 or total < built * TownWalkers.PER_LOT.x * 0.8:
 		print("FAIL _test_plenty_in_every_built_lot: %d walkers in %d of %d built lots" % [total, per_lot.size(), built])
 		return 1
+	return 0
+
+# The animated walkers go in small groups (one per lot), each drawn while
+# the camera is within LoopTraffic.DETAIL_TO of any of its walkers: its
+# bounds hold every walker (feet and head) all round their loops, and its
+# visibility range (measured to the bounds' centre) reaches DETAIL_TO past
+# the bounds' farthest corner.
+func _test_near_groups_cover_their_walkers() -> int:
+	for loops: Array in TownWalkers.loops_by_chunk(_plan).values():
+		var groups := TownWalkers.near_groups(loops)
+		var count := 0
+		for group in groups:
+			count += (group.loops as Array).size()
+			var bounds: AABB = group.bounds
+			var reach: float = TownWalkers.near_range(bounds)
+			if reach < LoopTraffic.DETAIL_TO + bounds.size.length() * 0.5:
+				print("FAIL _test_near_groups_cover_their_walkers: range %.1f for bounds %s" % [reach, bounds.size])
+				return 1
+			if reach > LoopTraffic.DETAIL_TO + 400.0:
+				print("FAIL _test_near_groups_cover_their_walkers: range %.1f, the group is too big" % reach)
+				return 1
+			for loop: Dictionary in group.loops:
+				for k in range(12):
+					var pose := LoopTraffic.pose(loop, LoopTraffic.loop_length(loop) * k / 12.0)
+					for point in [pose.origin, pose.origin + pose.basis.y * 1.8]:
+						if not bounds.grow(0.01).has_point(point):
+							print("FAIL _test_near_groups_cover_their_walkers: %s outside %s" % [point, bounds])
+							return 1
+		if count != loops.size():
+			print("FAIL _test_near_groups_cover_their_walkers: %d of %d walkers grouped" % [count, loops.size()])
+			return 1
 	return 0
