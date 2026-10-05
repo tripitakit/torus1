@@ -12,6 +12,7 @@ const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 const MoonPatch = preload("res://scripts/moon_patch.gd")
 const MoonRocks = preload("res://scripts/moon_rocks.gd")
 const MoonTracks = preload("res://scripts/moon_tracks.gd")
+const MoonFootprints = preload("res://scripts/moon_footprints.gd")
 const MoonMesh = preload("res://scripts/moon_mesh.gd")
 const PortalScript = preload("res://scripts/portal.gd")
 const PortalRules = preload("res://scripts/portal_rules.gd")
@@ -283,6 +284,11 @@ func build() -> void:
 		var tracks: Node3D = MoonTracks.new()
 		tracks.name = "Tracks"
 		add_child(tracks)
+	# The boot prints, kept for the session (MoonFootprints).
+	if get_node_or_null("Footprints") == null:
+		var prints: Node3D = MoonFootprints.new()
+		prints.name = "Footprints"
+		add_child(prints)
 	var old_base := get_node_or_null("Base")
 	if old_base != null:
 		remove_child(old_base)
