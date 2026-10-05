@@ -45,6 +45,9 @@ func _ready() -> void:
 	add_child(hud)
 	floor_snap_length = FLOOR_SNAP
 	floor_max_angle = deg_to_rad(45.0)
+	# In Selene the Travel Tube carries its riders itself: no platform drift.
+	if flat:
+		platform_floor_layers = 0
 
 # Toward the axis from `point` (interior coordinates).
 static func up_at(point: Vector3) -> Vector3:

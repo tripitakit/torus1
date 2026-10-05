@@ -709,19 +709,27 @@ func _test_tube_ride_from_game_mode() -> int:
 	var base := _scene.get_node("SeleneInterior") as Node3D
 	var walker := base.get_node("BaseWalker") as CharacterBody3D
 	var stops := SeleneLayout.tube_stops()
-	walker.place((stops.dock as Transform3D).origin, Vector3(0.0, 0.0, -1.0))
-	await physics_frame
+	walker.place((stops.dock as Transform3D).origin + Vector3(0.5, 0.1, 0.3), Vector3(1.0, 0.0, 0.0))
+	await _frames(5)
+	var prompt: String = (walker.get_node("Hud/BoardLabel").get_child(0) as Label).text
 	_press("board")
-	await _wait_for_transition()
+	await _until_car_at(base, "centre")
 	var there := SeleneLayout.room_at(walker.position)
-	# And back to the dock, by the lift.
 	_press("board")
-	await _wait_for_transition()
+	await _until_car_at(base, "dock")
 	var back := SeleneLayout.room_at(walker.position)
-	if there != "tube_centre" or back != "tube_dock":
-		print("FAIL _test_tube_ride_from_game_mode: rode to '%s', back to '%s'" % [there, back])
+	if prompt != "K CENTRO" or there != "tube_centre" or back != "tube_dock":
+		print("FAIL _test_tube_ride_from_game_mode: prompt '%s', rode to '%s', back to '%s'" % [prompt, there, back])
 		return 1
 	return 0
+
+func _until_car_at(base: Node3D, stop: String) -> void:
+	await create_timer(0.5).timeout
+	for i in range(80):
+		if base.car_stop() == stop:
+			break
+		await create_timer(0.25).timeout
+	await _frames(10)
 
 # Out by the lift: aboard the Eagle again, still on its pad.
 func _test_k_by_the_lift_returns_to_the_eagle() -> int:

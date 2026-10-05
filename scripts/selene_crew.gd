@@ -242,11 +242,19 @@ class CrewMember extends AnimatableBody3D:
 		return false
 
 	# Seated: the idle pose with the thighs turned forward level, the shins
-	# straight down, the hips lowered until the feet are back on the floor.
+	# straight down, the hips lowered until the feet are back on the floor,
+	# the forearms on the desk.
 	func sit() -> void:
 		_seated = true
 		_route = PackedVector3Array()
 		_player.stop()
+		_player.active = false
+		if not is_inside_tree():
+			# Posed again once in the scene.
+			ready.connect(_pose_seated, CONNECT_ONE_SHOT)
+		_pose_seated()
+
+	func _pose_seated() -> void:
 		var animation := _player.get_animation(PeopleModel.IDLE)
 		_skeleton.reset_bone_poses()
 		for t in range(animation.get_track_count()):
@@ -281,6 +289,21 @@ class CrewMember extends AnimatableBody3D:
 		var rise := (seated[foot_bone].origin - standing[foot_bone].origin).dot(-down)
 		var hips := _skeleton.find_bone("Hips")
 		_skeleton.set_bone_pose_position(hips, _skeleton.get_bone_pose_position(hips) + down * rise)
+		# Forearms on the desk: upper arms forward and down, forearms level.
+		for side in ["Left", "Right"]:
+			_aim(side + "Arm", side + "ForeArm", (forward * 0.6 + down * 0.8).normalized())
+			_aim(side + "ForeArm", side + "Hand", forward)
+
+	# Turn `bone` so the way to its child `toward` points along `direction`
+	# (skeleton space), the child following.
+	func _aim(bone_name: String, toward: String, direction: Vector3) -> void:
+		var global := _globals()
+		var bone := _skeleton.find_bone(bone_name)
+		var child := _skeleton.find_bone(toward)
+		var parent := _skeleton.get_bone_parent(bone)
+		var now := (global[child].origin - global[bone].origin).normalized()
+		var turned := Basis(Quaternion(now, direction)) * global[bone].basis
+		_skeleton.set_bone_pose_rotation(bone, (global[parent].basis.inverse() * turned).get_rotation_quaternion())
 
 	# Where a bone is now (world).
 	func bone_point(bone_name: String) -> Vector3:

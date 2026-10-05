@@ -62,12 +62,15 @@ Il renderer è **Compatibility** (OpenGL 3.3).
   battistrada e il pedone le **orme** degli stivali (diverse per camminata, corsa e salto): restano per tutta
   la sessione.
 - **Dentro Selene**, in omaggio a Base Alpha di *Spazio 1999*: con l'Eagle posata su un pad della base, H fa
-  scendere nella sala di sbarco sotto il pad. La Travel Tube porta al centro: corridoio a pannelli beige con le
-  luci curve e la colonna di comunicazione, Main Mission (vetrata sulla luna, Big Screen, scrivanie con le
-  lampade a globo e i computer a luci lampeggianti, l'ufficio del Comandante in cima ai gradini), infermeria,
-  alloggi, sala comune. Le porte scorrono da sole. Una ventina di persone dell'equipaggio, in tuta color avena
-  con la manica del reparto, cammina nei corridoi (si ferma se le si è davanti), siede alle console o sta al
-  lavoro. All'ascensore K riporta sull'Eagle.
+  scendere nell'hangar sotto il pad. La **Travel Tube** porta al centro con un viaggio vero nel tunnel (K in
+  cabina; davanti alla porta, se la cabina è all'altra fermata, K la chiama). Al centro: corridoi larghi a
+  pannelli beige con le luci curve, soffitti a cassettoni, banchi di computer con le bobine, piante; la colonna
+  di comunicazione con il videotelefono, la console di pulsanti e i cartelli con le frecce; la Main Mission
+  (vetrata sulla luna, Big Screen fra i banchi di computer, console alla vetrata, scrivanie con monitor e lampade
+  a globo, l'ufficio del Comandante dietro la parete di vetro); infermeria, alloggi, sala comune. Le porte
+  scorrono da sole. Dodici persone in tuta color avena con la manica del reparto: quattro siedono alle
+  scrivanie con le braccia sul piano, altre camminano (si fermano se le si è davanti). All'ascensore K riporta
+  sull'Eagle.
 - **Base Selene**, nel cratere Platone, in stile Base Alpha (Spazio 1999): settori, cupole, tubi, una torre
   con faro e sei pad di atterraggio.
 - **Due portali**, vicino alla Terra e sopra la luna, per attraversare in un attimo la distanza fra i due.
@@ -136,7 +139,7 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 | G | arrivo automatico al bersaglio | — | — |
 | H | scendi nella base (nave posata su un pad di Selene) | — | — |
 | V | scendi sul rover (nave posata sulla luna) | risali sulla nave | — |
-| K | scendi a piedi (nave posata; cruiser: posa sulla piazzola) | scendi a piedi | risali sul mezzo vicino; in Selene: Travel Tube, all'ascensore risali sull'Eagle |
+| K | scendi a piedi (nave posata; cruiser: posa sulla piazzola) | scendi a piedi | risali sul mezzo vicino; in Selene: viaggio o chiamata della Travel Tube, all'ascensore risali sull'Eagle |
 | J | — | — | corsa (tenere premuto) |
 | Spazio | — | — | salto |
 | L | — | fari | — |

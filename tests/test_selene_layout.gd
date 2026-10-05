@@ -12,6 +12,8 @@ func _init():
 	failures += _test_one_seat_per_desk()
 	failures += _test_room_at()
 	failures += _test_wall_pieces_short()
+	failures += _test_corners_closed()
+	failures += _test_post_arrows()
 
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -27,10 +29,10 @@ func _room(name: String) -> Dictionary:
 
 # The spec's table (width x depth, either way round, and height).
 func _test_rooms_sizes() -> int:
-	var expected := {"dock": [12.0, 9.6, 4.8], "tube_dock": [2.4, 3.6, 2.4], "tube_centre": [2.4, 3.6, 2.4],
-		"reception": [4.8, 4.8, 2.4], "corridor": [2.4, 18.0, 2.4], "side_left": [9.6, 1.8, 2.4], "side_right": [9.6, 1.8, 2.4],
-		"main_mission": [20.0, 12.0, 4.8], "office": [6.0, 7.2, 4.2], "medical": [9.6, 7.2, 2.4],
-		"quarters_a": [4.8, 4.8, 2.4], "quarters_b": [4.8, 4.8, 2.4], "lounge": [9.6, 9.6, 2.4]}
+	var expected := {"dock": [12.0, 12.0, 8.0], "tube_dock": [4.8, 3.6, 3.0], "tube_centre": [4.8, 3.6, 3.0], "tunnel": [195.2, 3.6, 3.6],
+		"reception": [7.2, 6.0, 3.6], "corridor": [4.8, 21.6, 3.6], "side_left": [9.6, 3.0, 3.6], "side_right": [9.6, 3.0, 3.6],
+		"main_mission": [24.0, 14.4, 6.0], "office": [6.0, 7.2, 5.4], "medical": [9.6, 7.2, 3.6],
+		"quarters_a": [4.8, 4.8, 3.6], "quarters_b": [4.8, 4.8, 3.6], "lounge": [9.6, 9.6, 3.6]}
 	var result := 0
 	if SeleneLayout.rooms().size() != expected.size():
 		print("FAIL _test_rooms_sizes: %d rooms" % SeleneLayout.rooms().size())
@@ -64,6 +66,9 @@ func _test_every_centre_room_reached_from_reception() -> int:
 	while changed:
 		changed = false
 		for door in SeleneLayout.doors():
+			# The tunnel is the Travel Tube's, not a way on foot.
+			if door.kind == "tunnel":
+				continue
 			if reached.has(door.a) != reached.has(door.b):
 				reached[door.a] = true
 				reached[door.b] = true
@@ -95,7 +100,7 @@ func _flat(p: Vector3) -> Vector2:
 	return Vector2(p.x, p.z)
 
 func _test_routes_cross_walls_only_at_doors() -> int:
-	if SeleneLayout.routes().size() != 10:
+	if SeleneLayout.routes().size() != 6:
 		print("FAIL _test_routes_cross_walls_only_at_doors: %d routes" % SeleneLayout.routes().size())
 		return 1
 	for route in SeleneLayout.routes():
@@ -163,7 +168,8 @@ func _test_one_seat_per_desk() -> int:
 	return 0
 
 func _test_room_at() -> int:
-	var cases := {Vector3(0.0, 0.0, 2.0): "reception", Vector3(0.0, 0.0, -10.0): "corridor", Vector3(0.0, 0.0, -25.0): "main_mission",
+	var cases := {Vector3(0.0, 0.0, 2.0): "reception", Vector3(0.0, 0.0, -10.0): "corridor", Vector3(0.0, 0.0, -28.0): "main_mission",
+		Vector3(100.0, 0.0, 7.8): "tunnel",
 		SeleneLayout.lift_centre(): "dock", Vector3(500.0, 0.0, 0.0): ""}
 	for point: Vector3 in cases:
 		if SeleneLayout.room_at(point) != cases[point]:
@@ -181,4 +187,66 @@ func _test_wall_pieces_short() -> int:
 		if (wall.from as Vector2).distance_to(wall.to) > 12.0 + 1e-6:
 			print("FAIL _test_wall_pieces_short: %s to %s" % [wall.from, wall.to])
 			return 1
+	return 0
+
+func _covered(p: Vector2) -> bool:
+	for wall in SeleneLayout.walls():
+		var a: Vector2 = wall.from
+		var b: Vector2 = wall.to
+		if _distance_to_segment(p, a, b) <= SeleneLayout.WALL_THICK * 0.5 + 1e-4:
+			# Not beyond the ends (a box, not a capsule).
+			var along := (b - a).normalized()
+			var t := (p - a).dot(along)
+			if t >= -1e-4 and t <= a.distance_to(b) + 1e-4:
+				return true
+	return false
+
+# Round every corner of every room (but where the tunnel meets its
+# stations) no point of a 0.2 m square is left open.
+func _test_corners_closed() -> int:
+	var half := SeleneLayout.WALL_THICK * 0.5
+	for room in SeleneLayout.rooms():
+		if room.name == "tunnel":
+			continue
+		var r: Rect2 = room.rect
+		for corner in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			if room.name.begins_with("tube_") and (is_equal_approx(corner.x, 2.4) or is_equal_approx(corner.x, SeleneLayout.DOCK_X - 2.4)):
+				continue
+			for dx in [-half, 0.0, half]:
+				for dz in [-half, 0.0, half]:
+					var p: Vector2 = corner + Vector2(dx, dz)
+					if not _covered(p):
+						print("FAIL _test_corners_closed: %s corner %s open at %s" % [room.name, corner, p])
+						return 1
+	return 0
+
+# The comm post's signs: on each face, every place with an arrow that
+# points (for one reading that face) toward it.
+func _test_post_arrows() -> int:
+	var signs := SeleneLayout.post_signs()
+	if signs.size() != 4:
+		print("FAIL _test_post_arrows: %d faces" % signs.size())
+		return 1
+	var centres := {}
+	for room in SeleneLayout.rooms():
+		if room.name in ["tunnel", "tube_dock"]:
+			continue
+		var c: Vector2 = (room.rect as Rect2).get_center()
+		centres[room.label] = Vector3(c.x, 0.0, c.y)
+	centres["CREW QUARTERS"] = Vector3(-7.2, 0.0, -9.0)
+	for face in signs:
+		var n: Vector3 = face.normal
+		var ahead := -n
+		var right := ahead.cross(Vector3.UP)
+		var arrows := {"↑": ahead, "↓": -ahead, "→": right, "←": -right}
+		if (face.lines as Array).size() != 5:
+			print("FAIL _test_post_arrows: %d lines" % (face.lines as Array).size())
+			return 1
+		for line in face.lines:
+			var label: String = line[0]
+			var to: Vector3 = centres[label] - SeleneLayout.POST
+			to.y = 0.0
+			if (arrows[line[1]] as Vector3).dot(to.normalized()) < 0.5:
+				print("FAIL _test_post_arrows: face %s, %s %s" % [n, label, line[1]])
+				return 1
 	return 0
