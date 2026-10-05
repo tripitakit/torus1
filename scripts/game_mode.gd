@@ -24,9 +24,8 @@ enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE, IN_BASE }
 @export var rebase_path: NodePath = NodePath("../WorldOriginRebase")
 
 const FADE_TIME := 0.4
-# Down into Selene (the pad's lift) and the Travel Tube ride: each way.
+# Down into Selene (the pad's lift): each way.
 const BASE_FADE_TIME := 1.0
-const TUBE_FADE_TIME := 0.75
 # The void-cruiser reappears this far out from the port it docked at.
 const UNDOCK_CLEARANCE := 60.0
 const KEPT_WHILE_INSIDE := ["WorldEnvironment"]
@@ -109,15 +108,7 @@ func _process(_delta: float) -> void:
 	elif mode == Mode.IN_BASE and _base != null:
 		var walker := _base.get_node("BaseWalker") as CharacterBody3D
 		var hud := walker.get_node("Hud")
-		var stop: String = _base.tube_stop_at(walker.position)
-		if _base.near_lift(walker.position):
-			hud.set_prompt("K EAGLE")
-		elif stop == "dock":
-			hud.set_prompt("K CENTRO")
-		elif stop == "centre":
-			hud.set_prompt("K SBARCO")
-		else:
-			hud.set_prompt("")
+		hud.set_prompt(_base_prompt(walker.position))
 		hud.set_place(_base.room_name(walker.position))
 	elif mode == Mode.ON_FOOT_INSIDE and _interior:
 		var walker := _interior.get_node_or_null("InteriorWalker")
@@ -143,10 +134,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_transition(board_cruiser)
 		elif mode == Mode.IN_BASE:
 			var walker := _base.get_node("BaseWalker") as Node3D
+			var stop: String = _base.car_stop()
+			var door: String = _base.near_tube_door(walker.position)
 			if _base.near_lift(walker.position):
 				_transition(exit_base, BASE_FADE_TIME)
-			elif _base.tube_stop_at(walker.position) != "":
-				_transition(ride_tube, TUBE_FADE_TIME)
+			elif _base.in_car(walker.position) and stop != "":
+				_base.start_ride()
+			elif door != "" and stop != "" and stop != door:
+				_base.call_car(door)
 		elif mode == Mode.ON_FOOT:
 			var target := _board_target()
 			if target == "ship":
@@ -449,13 +444,18 @@ func exit_base() -> void:
 	_track(_void_cruiser)
 	mode = Mode.VOID
 
-# The Travel Tube to its other stop, the walker where it stood in the cabin.
-func ride_tube() -> void:
-	var walker := _base.get_node("BaseWalker") as CharacterBody3D
-	var stop: String = _base.tube_stop_at(walker.position)
-	var here: Transform3D = SeleneLayout.tube_stops()[stop]
-	walker.transform = _base.tube_ride(stop) * (here.affine_inverse() * walker.transform)
-	walker.velocity = Vector3.ZERO
+# What K does in Selene where the pilot stands: up the lift, ride the
+# Travel Tube (aboard, stopped), call it (before its door, the car away).
+func _base_prompt(point: Vector3) -> String:
+	var stop: String = _base.car_stop()
+	var door: String = _base.near_tube_door(point)
+	if _base.near_lift(point):
+		return "K EAGLE"
+	if _base.in_car(point) and stop != "":
+		return "K CENTRO" if stop == "dock" else "K SBARCO"
+	if door != "" and stop != "" and stop != door:
+		return "K CHIAMA"
+	return ""
 
 # The world origin shift follows `node`.
 func _track(node: Node3D) -> void:
