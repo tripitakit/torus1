@@ -12,6 +12,8 @@ func _init():
 	failures += _test_hud_has_only_the_flight_markers_and_section_panel()
 	failures += _test_section_id_panel_shows_the_current_section()
 	failures += _test_small_hull()
+	failures += _test_model_seen_from_outside_only()
+	failures += _test_landing_survives_a_rebase_and_parks()
 	failures += _test_ramp_stops_at_10x()
 	failures += _test_top_speed_about_1_km_s_after_the_ramp()
 	failures += _test_same_mouse_sensitivity_as_void_cruiser()
@@ -39,16 +41,19 @@ func _test_first_person_camera() -> int:
 	return result
 
 func _test_hud_has_only_the_flight_markers_and_section_panel() -> int:
-	# No cockpit panels inside: just the boresight/motion marker and the
-	# current-section readout, nothing else.
+	# No cockpit panels inside: just the boresight/motion marker, the
+	# current-section readout, and for the landing pads (on_foot spec) the
+	# "K LAND" panel and the PAD marker.
 	var cruiser := _make_cruiser()
 	cruiser.build_hud()
 	var result := 0
 	var layers := cruiser.find_children("*", "CanvasLayer", true, false)
 	var markers := cruiser.get_node_or_null("Hud/FlightMarkers") as Control
 	var panel := cruiser.get_node_or_null("Hud/SectionPanel") as Control
-	if layers.size() != 1 or markers == null or panel == null or cruiser.get_node("Hud").get_child_count() != 2 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
-		print("FAIL _test_hud_has_only_the_flight_markers_and_section_panel: the internal-cruiser's HUD must be just the flight markers and the section panel")
+	var land := cruiser.get_node_or_null("Hud/LandPanel") as Control
+	var pad := cruiser.get_node_or_null("Hud/PadMarker") as Control
+	if layers.size() != 1 or markers == null or panel == null or land == null or pad == null or cruiser.get_node("Hud").get_child_count() != 4 or cruiser.get_node_or_null("Cockpit") != null or markers.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		print("FAIL _test_hud_has_only_the_flight_markers_and_section_panel: the internal-cruiser's HUD must be just the flight markers, the section panel, the land panel and the pad marker")
 		result = 1
 	cruiser.free()
 	return result
@@ -129,4 +134,44 @@ func _test_same_mouse_sensitivity_as_void_cruiser() -> int:
 		result = 1
 	cruiser.free()
 	void_cruiser.free()
+	return result
+
+# Seen from outside (the pilot on foot by a landing pad): a model inside the
+# hull's box, on the exterior layer the cruiser's own camera never sees.
+func _test_model_seen_from_outside_only() -> int:
+	const CockpitScript = preload("res://scripts/cockpit.gd")
+	var cruiser := _make_cruiser()
+	cruiser.build_model()
+	var model := cruiser.get_node_or_null("Model") as MeshInstance3D
+	var camera := cruiser.get_node("Camera") as Camera3D
+	var result := 0
+	if model == null or model.layers != CockpitScript.SHIP_EXTERIOR_LAYER or (camera.cull_mask & model.layers) != 0:
+		print("FAIL _test_model_seen_from_outside_only: model %s, camera mask %d" % [model, camera.cull_mask])
+		result = 1
+	else:
+		var box: AABB = model.transform * model.mesh.get_aabb()
+		var half: Vector3 = cruiser.HULL_SIZE * 0.5 + Vector3(0.5, 0.2, 0.5)
+		if box.position.x < -half.x or box.end.x > half.x or box.position.y < -half.y or box.end.y > half.y or box.position.z < -half.z or box.end.z > half.z:
+			print("FAIL _test_model_seen_from_outside_only: model %s outside the hull" % box)
+			result = 1
+	cruiser.free()
+	return result
+
+# The interior world shifts the craft along Z mid-landing (rebase): the
+# landing goes on to the same pad, and the craft is parked as it touches.
+func _test_landing_survives_a_rebase_and_parks() -> int:
+	var cruiser := _make_cruiser()
+	cruiser.position = Vector3(0.0, -90.0, 9995.0)
+	cruiser.land_on(Transform3D(Basis(), Vector3(0.0, -100.0, 10010.0)))
+	cruiser._physics_process(1.0 / 60.0)
+	cruiser.position.z -= 10000.0
+	cruiser.shift_landing(-10000.0)
+	for i in range(200):
+		cruiser._physics_process(1.0 / 60.0)
+	var rest := Vector3(0.0, -100.0 + cruiser.HULL_SIZE.y * 0.5, 10.0)
+	var result := 0
+	if cruiser.position.distance_to(rest) > 0.01 or not cruiser.parked:
+		print("FAIL _test_landing_survives_a_rebase_and_parks: at %s (expected %s), parked %s" % [cruiser.position, rest, cruiser.parked])
+		result = 1
+	cruiser.free()
 	return result

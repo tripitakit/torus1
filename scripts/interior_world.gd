@@ -17,6 +17,7 @@ const AirTraffic = preload("res://scripts/air_traffic.gd")
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const LakeBoats = preload("res://scripts/lake_boats.gd")
 const BoatWake = preload("res://scripts/boat_wake.gd")
+const LandingPads = preload("res://scripts/landing_pads.gd")
 const DockCrowd = preload("res://scripts/dock_crowd.gd")
 const TownWalkers = preload("res://scripts/town_walkers.gd")
 
@@ -34,7 +35,10 @@ var ring_sections := 2000
 # lights (see InteriorLayout.count_lights_reaching_band).
 const CHUNKS_AROUND := 16
 const CHUNK_LENGTH := 1000.0
-const CHUNK_ARC_SEGMENTS := 8
+# The flat chunks' collision band in the drawn ground's chords
+# (SectionPlan.RELIEF_POINTS_PER_LOT a lot, CHUNK_LOTS_AROUND lots a chunk):
+# feet on foot stand on what is drawn.
+const CHUNK_ARC_SEGMENTS := 15
 const CHUNK_LENGTH_SEGMENTS := 4
 const CAP_SEGMENTS := 128
 const TUBE_SEGMENTS := 4
@@ -144,6 +148,10 @@ class SectionLoad:
 	# The lakes' piers (LakeBoats.piers) and the life on them, and the town
 	# walkers by chunk (LoopTraffic data).
 	var piers := []
+	# The internal cruiser's landing pads (LandingPads.pads), and their slabs'
+	# frames in the section node once built.
+	var pads := []
+	var pad_frames := []
 	var pier_life := []
 	var walkers := {}
 	var trains := []
@@ -165,6 +173,8 @@ class SectionLoad:
 		air = AirTraffic.instance_buffer(AirTraffic.lanes(plan), plan)
 		boats = LoopTraffic.instance_buffer(LakeBoats.routes(plan), LakeBoats.PAINTS)
 		LakeBoats.drop_pier_buildings(plan, groups)
+		LandingPads.drop_pad_buildings(plan, groups)
+		pads = LandingPads.pads(plan)
 		piers = LakeBoats.piers(plan)
 		var people := []
 		var carts := []
@@ -220,6 +230,7 @@ var _hall_mesh: ArrayMesh
 var _platform_mesh: ArrayMesh
 var _lift_mesh: ArrayMesh
 var _lift_glass_mesh: ArrayMesh
+var _pad_mesh: ArrayMesh
 var _lift_glass_material: ShaderMaterial
 var _rider_materials: Array = []
 var _cruiser_mesh: ArrayMesh
@@ -278,6 +289,7 @@ func build() -> void:
 	_platform_mesh = SpineTrain.platform_mesh()
 	_lift_mesh = SpineTrain.lift_mesh()
 	_lift_glass_mesh = SpineTrain.lift_glass_mesh()
+	_pad_mesh = LandingPads.pad_mesh()
 	_lift_glass_material = SpineTrain.lift_glass_material()
 	_rider_materials.clear()
 	for suit in DockCrowd.SUITS:
@@ -329,15 +341,30 @@ func stream_step(focus_z: float, chunk_budget: int, free_budget: int) -> int:
 	_free_unloading(free_budget)
 	return dressed
 
+# What the streaming and the rebase follow: the pilot on foot if out of
+# the craft, else the craft.
+func focus() -> Node3D:
+	var walker := get_node_or_null("InteriorWalker") as Node3D
+	return walker if walker != null else get_node_or_null("InternalCruiser") as Node3D
+
+# Back near the origin along Z with `craft`; the craft and the pilot on foot
+# (whichever is not `craft`) move with it.
 func rebase_around(craft: Node3D) -> void:
 	if absf(craft.position.z) <= REBASE_DISTANCE:
 		return
 	var shift: float = craft.position.z
 	_chain.position.z -= shift
-	craft.position.z -= shift
+	for mover_name in ["InternalCruiser", "InteriorWalker"]:
+		var mover := get_node_or_null(mover_name) as Node3D
+		if mover != null:
+			mover.position.z -= shift
+			if mover.has_method("shift_landing"):
+				mover.shift_landing(-shift)
+	if craft.get_parent() != self:
+		craft.position.z -= shift
 
 func _process(_delta: float) -> void:
-	var craft := get_node_or_null("InternalCruiser") as Node3D
+	var craft := focus()
 	if craft != null and _chain != null:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)
 	if _chain != null:
@@ -387,7 +414,7 @@ func restore_ambient() -> void:
 # Before the craft moves this tick (a parent runs before its children); the
 # static bodies follow their moved parent.
 func _physics_process(_delta: float) -> void:
-	var craft := get_node_or_null("InternalCruiser") as Node3D
+	var craft := focus()
 	if craft != null and _chain != null:
 		rebase_around(craft)
 	update_trains(game_seconds())
@@ -532,6 +559,7 @@ func _finish_plan(state: SectionLoad, focus_z: float) -> void:
 		state.node.add_child(LoopTraffic.multimesh_instance("BoatWakes", state.boats, _wake_mesh, _wake_material, lake_bounds))
 		state.boats = PackedFloat32Array()
 	_build_piers(state)
+	_build_pads(state)
 	var start_z: float = InteriorLayout.section_slot_z(state.slot, period()) - section_length * 0.5
 	var chunks := []
 	var grounds := []
@@ -863,6 +891,47 @@ func _build_piers(state: SectionLoad) -> void:
 	for k in range(parts.size()):
 		state.node.add_child(LoopTraffic.multimesh_instance(parts[k][0], state.pier_life[k], parts[k][1], parts[k][2], bounds))
 	state.pier_life = []
+
+# The section's landing pads: a slab standing LandingPads.PROUD above the
+# ground at each pad's centre, up toward the axis, with its collision.
+func _build_pads(state: SectionLoad) -> void:
+	var plan = state.plan
+	state.pad_frames.clear()
+	for k in range(state.pads.size()):
+		var frame := pad_frame(plan, state.pads[k], section_radius, section_length)
+		var body := StaticBody3D.new()
+		body.name = "Pad_%d" % k
+		body.transform = frame
+		body.add_child(_structure_mesh("Mesh", _pad_mesh, _station_material))
+		_add_box(body, Vector3(LandingPads.SIZE, LandingPads.THICK, LandingPads.SIZE), Vector3.ZERO)
+		state.node.add_child(body)
+		state.pad_frames.append(frame)
+
+# A pad's slab frame in its section's node, standing LandingPads.PROUD on
+# the collision ground. The ground (relief or the flat band alike) runs in
+# chords a height-grid cell wide, and a lot's middle is a cell's middle:
+# the pad lies square on that cell's chord.
+static func pad_frame(plan, pad: Dictionary, radius: float, length: float) -> Transform3D:
+	var centre: Vector2 = pad.centre
+	var half_cell: float = plan.lot_width / LandingPads.SectionPlanScript.RELIEF_POINTS_PER_LOT * 0.5 / radius
+	var ground: float = (radius - plan.height_at(centre.x, centre.y)) * cos(half_cell)
+	return SpineTrain.spine_frame(centre.x / radius, ground - (LandingPads.PROUD - LandingPads.THICK * 0.5), centre.y - length * 0.5)
+
+# The landing pad nearest `point` (this node's coordinates): {transform (its
+# top's centre, y toward the axis), distance}; empty with none loaded.
+func nearest_pad(point: Vector3) -> Dictionary:
+	var best := {}
+	for state: SectionLoad in _sections.values():
+		if state.node == null:
+			continue
+		var section := _chain.transform * state.node.transform
+		for frame: Transform3D in state.pad_frames:
+			var slab := section * frame
+			var top := Transform3D(slab.basis, slab.origin + slab.basis.y.normalized() * LandingPads.THICK * 0.5)
+			var distance := point.distance_to(top.origin)
+			if best.is_empty() or distance < best.distance:
+				best = {"transform": top, "distance": distance}
+	return best
 
 # The interior panels in `dir` (color, roughness, normal, emission).
 func _panel_material(dir: String) -> StandardMaterial3D:

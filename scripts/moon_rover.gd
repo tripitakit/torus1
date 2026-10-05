@@ -44,6 +44,8 @@ const LOOK_RETURN_SPEED := 4.1887902  # 240 degrees/s: 120 degrees in 0.5 s
 var ship: Node3D
 var body := {}
 var lights_on := true
+# Left standing while the pilot walks (GameMode): see park().
+var parked := false
 # When not empty, used instead of the keyboard (tests).
 var controls := {}
 var _look := Vector2.ZERO
@@ -121,7 +123,16 @@ func is_clear() -> bool:
 func set_board_prompt(shown: bool) -> void:
 	(get_node("Hud") as CanvasLayer).set_board_prompt(shown)
 
+# Left standing while the pilot is out on foot: handbrake on, no keys, no
+# HUD, the moon's patch left to the walker; still carried with the moon.
+func park(on: bool) -> void:
+	parked = on
+	set_process_unhandled_input(not on)
+	(get_node("Hud") as CanvasLayer).visible = not on
+
 func read_controls() -> Dictionary:
+	if parked:
+		return {"throttle": 0.0, "steer": 0.0, "handbrake": true}
 	if not controls.is_empty():
 		return controls
 	return {
@@ -193,4 +204,5 @@ func _physics_process(delta: float) -> void:
 	body = GroundVehicle.settle(body, moon, delta)
 	global_transform = body.transform
 	velocity = (global_position - start) / delta
-	moon.follow_patch(global_position, true, velocity)
+	if not parked:
+		moon.follow_patch(global_position, true, velocity)
