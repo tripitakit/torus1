@@ -691,8 +691,69 @@ func _build_environment() -> void:
 	world.environment = environment
 	add_child(world)
 
+# --- the Travel Tube ----------------------------------------------------
+
+var _car: TubeCar
+
+func tube_car() -> Node3D:
+	return _car
+
+# The stop the car stands at ("dock", "centre"), "" while it runs.
+func car_stop() -> String:
+	return _car.stop
+
+func in_car(point: Vector3) -> bool:
+	return _car.holds(point)
+
+# Off to the other stop with whoever is aboard; false while it runs.
+func start_ride() -> bool:
+	if _car.stop == "":
+		return false
+	_car.run_to("centre" if _car.stop == "dock" else "dock")
+	return true
+
+# The car, empty, to `stop` (from in front of its door).
+func call_car(stop: String) -> bool:
+	if _car.stop == "" or _car.stop == stop:
+		return false
+	_car.run_to(stop)
+	return true
+
+# The stop whose Travel Tube door a point stands before, or "".
+func near_tube_door(point: Vector3) -> String:
+	for stop in ["dock", "centre"]:
+		var door := (SeleneLayout.tube_stops()[stop] as Transform3D).origin + Vector3(0.0, 0.0, -1.8)
+		var room := "dock" if stop == "dock" else "reception"
+		if SeleneLayout.room_at(point) == room and Vector2(point.x - door.x, point.z - door.z).length() <= 2.5:
+			return stop
+	return ""
+
+# The tunnel between the stations: floor, walls, roof, a rail, light rings
+# every 6 m; and the car, at the hangar's stop.
 func _build_tube() -> void:
-	pass
+	var r := SeleneLayout.room_rect("tunnel")
+	var tube := Node3D.new()
+	tube.name = "Tube"
+	add_child(tube)
+	var centre := r.get_center()
+	var height := 3.6
+	_box(tube, Vector3(r.size.x, 0.2, r.size.y + 0.4), _mat(FLOOR_GREY.darkened(0.3)), _at(centre.x, -0.1, centre.y))
+	_collide(Vector3(r.size.x, 0.2, r.size.y), _at(centre.x, -0.1, centre.y))
+	_box(tube, Vector3(r.size.x, 0.2, r.size.y + 0.4), _mat(STEEL.darkened(0.4)), _at(centre.x, height + 0.1, centre.y))
+	for z in [r.position.y - 0.1, r.end.y + 0.1]:
+		_box(tube, Vector3(r.size.x, height, 0.2), _mat(STEEL.darkened(0.3)), _at(centre.x, height * 0.5, z))
+	for z in [centre.y - 0.8, centre.y + 0.8]:
+		_box(tube, Vector3(r.size.x, 0.08, 0.1), _mat(STEEL), _at(centre.x, 0.04, z))
+	var x := r.position.x + 3.0
+	while x < r.end.x:
+		for z in [r.position.y + 0.05, r.end.y - 0.05]:
+			_box(tube, Vector3(0.25, height, 0.1), _mat(STRIP, 2.0), _at(x, height * 0.5, z))
+		_box(tube, Vector3(0.25, 0.1, r.size.y), _mat(STRIP, 2.0), _at(x, height - 0.05, centre.y))
+		x += 6.0
+	_car = TubeCar.new()
+	_car.name = "Car"
+	add_child(_car)
+	_car.setup(self)
 
 # Main Mission's operators at their desks, the crew at work on their feet,
 # the walkers on their rounds; all open the doors.
@@ -724,6 +785,144 @@ func _build_crew() -> void:
 	for k in range(members.size()):
 		members[k].name = "Member_%02d" % k
 		members[k].add_to_group(PEOPLE_GROUP)
+
+# The Travel Tube's car: a kinematic box with benches, windows, a control
+# panel with the line's map, a door on its -Z side that is shut while it
+# runs. It runs along X from stop to stop (2 s up to speed, 2 s braking,
+# ~10 s in all), carrying whoever is aboard.
+class TubeCar extends AnimatableBody3D:
+	const SIZE := Vector3(4.4, 2.8, 3.2)
+	const DOOR_WIDTH := 1.8
+	const RAMP := 2.0
+	const TOP_SPEED := 25.0
+	var stop := "dock"
+	var _from := 0.0
+	var _to := 0.0
+	var _time := 0.0
+	var _target := ""
+	var _door := 0.0
+	var _door_panel: Node3D
+	var _door_shape: CollisionShape3D
+	var _map: ShaderMaterial
+
+	const MAP_SHADER := """
+shader_type spatial;
+render_mode unshaded;
+uniform float progress = 0.0;
+void fragment() {
+	vec3 colour = vec3(0.04, 0.06, 0.1);
+	float line = step(abs(UV.y - 0.5), 0.03) * step(0.08, UV.x) * step(UV.x, 0.92);
+	colour = mix(colour, vec3(0.3, 0.6, 1.0), line);
+	for (int i = 0; i < 2; i++) {
+		float end = i == 0 ? 0.08 : 0.92;
+		colour = mix(colour, vec3(1.0), step(length(vec2((UV.x - end) * 2.0, UV.y - 0.5)), 0.06));
+	}
+	float x = mix(0.08, 0.92, progress);
+	float dot_on = step(length(vec2((UV.x - x) * 2.0, UV.y - 0.5)), 0.09) * step(0.5, fract(TIME * 2.0));
+	ALBEDO = mix(colour, vec3(1.0, 0.6, 0.1), dot_on);
+}
+"""
+
+	func setup(base) -> void:
+		sync_to_physics = false
+		transform = SeleneLayout.tube_stops().dock
+		var white: Material = base._mat(WHITE)
+		var dark: Material = base._mat(DARK)
+		var half := SIZE * 0.5
+		# Floor and roof.
+		base._box(self, Vector3(SIZE.x, 0.1, SIZE.z), base._mat(FLOOR_GREY), Transform3D(Basis(), Vector3(0.0, 0.0, 0.0)))
+		base._collide(Vector3(SIZE.x, 0.1, SIZE.z), Transform3D(Basis(), Vector3(0.0, 0.0, 0.0)), self)
+		base._box(self, Vector3(SIZE.x, 0.1, SIZE.z), white, Transform3D(Basis(), Vector3(0.0, SIZE.y, 0.0)))
+		base._box(self, Vector3(SIZE.x - 0.6, 0.02, 0.5), base._mat(GLOW, 0.9), Transform3D(Basis(), Vector3(0.0, SIZE.y - 0.06, 0.0)))
+		# The back (+Z) and the ends: low walls, windows, a band above.
+		for wall in [[Vector3(0.0, 0.0, half.z), Vector3(SIZE.x, 0.0, 0.1)], [Vector3(half.x, 0.0, 0.0), Vector3(0.1, 0.0, SIZE.z)], [Vector3(-half.x, 0.0, 0.0), Vector3(0.1, 0.0, SIZE.z)]]:
+			var at: Vector3 = wall[0]
+			var size: Vector3 = wall[1]
+			base._box(self, Vector3(maxf(size.x, 0.1), 1.0, maxf(size.z, 0.1)), white, Transform3D(Basis(), at + Vector3(0.0, 0.5, 0.0)))
+			base._box(self, Vector3(maxf(size.x, 0.1), 1.0, maxf(size.z, 0.1)), base._glass(), Transform3D(Basis(), at + Vector3(0.0, 1.5, 0.0)))
+			base._box(self, Vector3(maxf(size.x, 0.1), 0.8, maxf(size.z, 0.1)), white, Transform3D(Basis(), at + Vector3(0.0, 2.4, 0.0)))
+			base._box(self, Vector3(maxf(size.x, 0.1) + 0.02, 0.06, maxf(size.z, 0.1) + 0.02), base._mat(ORANGE), Transform3D(Basis(), at + Vector3(0.0, 1.0, 0.0)))
+			base._collide(Vector3(maxf(size.x, 0.1), SIZE.y, maxf(size.z, 0.1)), Transform3D(Basis(), at + Vector3(0.0, SIZE.y * 0.5, 0.0)), self)
+		# The front (-Z): wall either side of the door, the door.
+		var side := (SIZE.x - DOOR_WIDTH) * 0.5
+		for sx in [-1.0, 1.0]:
+			var at := Vector3(sx * (DOOR_WIDTH * 0.5 + side * 0.5), SIZE.y * 0.5, -half.z)
+			base._box(self, Vector3(side, SIZE.y, 0.1), white, Transform3D(Basis(), at))
+			base._collide(Vector3(side, SIZE.y, 0.1), Transform3D(Basis(), at), self)
+		_door_panel = Node3D.new()
+		add_child(_door_panel)
+		base._box(_door_panel, Vector3(DOOR_WIDTH, SIZE.y - 0.3, 0.06), white, Transform3D(Basis(), Vector3(0.0, (SIZE.y - 0.3) * 0.5, -half.z)))
+		base._box(_door_panel, Vector3(DOOR_WIDTH, 0.1, 0.08), base._mat(ORANGE), Transform3D(Basis(), Vector3(0.0, 1.0, -half.z)))
+		_door_shape = base._collide(Vector3(DOOR_WIDTH, SIZE.y, 0.1), Transform3D(Basis(), Vector3(0.0, SIZE.y * 0.5, -half.z)), self)
+		base._box(self, Vector3(DOOR_WIDTH, 0.3, 0.1), white, Transform3D(Basis(), Vector3(0.0, SIZE.y - 0.15, -half.z)))
+		# Benches along the ends, the panel with the map by the door.
+		for sx in [-1.0, 1.0]:
+			base._box(self, Vector3(0.5, 0.45, SIZE.z - 0.6), base._mat(ORANGE), Transform3D(Basis(), Vector3(sx * (half.x - 0.35), 0.25, 0.1)))
+			base._box(self, Vector3(0.1, 0.5, SIZE.z - 0.6), white, Transform3D(Basis(), Vector3(sx * (half.x - 0.12), 0.7, 0.1)))
+		var panel_at := Transform3D(Basis(), Vector3(-half.x + 1.0, 1.4, -half.z + 0.06))
+		base._box(self, Vector3(0.9, 0.7, 0.06), dark, panel_at)
+		_map = ShaderMaterial.new()
+		_map.shader = Shader.new()
+		_map.shader.code = MAP_SHADER
+		base._quad(self, Vector2(0.8, 0.3), _map, panel_at * Transform3D(Basis(), Vector3(0.0, 0.15, 0.035)))
+		base._quad(self, Vector2(0.8, 0.25), base._blink, panel_at * Transform3D(Basis(), Vector3(0.0, -0.17, 0.035)))
+		var sign: Label3D = base._label("TRAVEL TUBE", 0.12, Color(0.12, 0.12, 0.14))
+		sign.transform = Transform3D(Basis(), Vector3(0.0, SIZE.y - 0.15, -half.z - 0.06)) * Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
+		add_child(sign)
+
+	func holds(point: Vector3) -> bool:
+		var local := to_local(point)
+		return absf(local.x) < SIZE.x * 0.5 and absf(local.z) < SIZE.z * 0.5 and local.y > -0.5 and local.y < SIZE.y
+
+	func door_closed() -> bool:
+		return not _door_shape.disabled
+
+	func run_to(target: String) -> void:
+		_target = target
+		_from = position.x
+		_to = (SeleneLayout.tube_stops()[target] as Transform3D).origin.x
+		_time = 0.0
+		stop = ""
+
+	# Distance covered `t` seconds into a run of `length`.
+	static func covered(t: float, length: float) -> float:
+		var accel := TOP_SPEED / RAMP
+		var ramp_distance := 0.5 * TOP_SPEED * RAMP
+		var cruise := (length - 2.0 * ramp_distance) / TOP_SPEED
+		if t < RAMP:
+			return 0.5 * accel * t * t
+		if t < RAMP + cruise:
+			return ramp_distance + TOP_SPEED * (t - RAMP)
+		var left := maxf(2.0 * RAMP + cruise - t, 0.0)
+		return length - 0.5 * accel * left * left
+
+	func _physics_process(delta: float) -> void:
+		var wanted := 0.0
+		if stop != "":
+			for person in get_tree().get_nodes_in_group(PEOPLE_GROUP):
+				var p := to_local((person as Node3D).global_position)
+				if absf(p.x) < DOOR_WIDTH and absf(p.z + SIZE.z * 0.5) < DOOR_REACH:
+					wanted = 1.0
+		_door = move_toward(_door, wanted, delta / DOOR_TIME)
+		_door_panel.position.x = DOOR_WIDTH * _door
+		_door_shape.disabled = stop != "" and _door > 0.3
+		if stop != "":
+			return
+		# Shut first, then away.
+		if _door > 0.0:
+			return
+		_time += delta
+		var length := absf(_to - _from)
+		var x := _from + signf(_to - _from) * covered(_time, length)
+		var dx := x - position.x
+		for person in get_tree().get_nodes_in_group(PEOPLE_GROUP):
+			if holds((person as Node3D).global_position):
+				(person as Node3D).global_position.x += dx
+		position.x = x
+		_map.set_shader_parameter("progress", clampf(x / SeleneLayout.DOCK_X, 0.0, 1.0))
+		if _time >= 2.0 * RAMP + (length - TOP_SPEED * RAMP) / TOP_SPEED:
+			position.x = _to
+			stop = _target
 
 # A sliding door (or the office's sliding glass wall): its panels slide
 # aside in DOOR_TIME when someone of PEOPLE_GROUP is within DOOR_REACH, and
