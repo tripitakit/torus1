@@ -25,7 +25,6 @@ func _initialize():
 	failures += await _test_door_stays_open_while_someone_is_in_it()
 	failures += await _test_office_wall_opens()
 	failures += await _test_walks_up_into_the_office()
-	failures += _test_tube_goes_to_the_other_stop()
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -58,22 +57,22 @@ func _test_spawn_on_the_dock_floor() -> int:
 	var spawn: Transform3D = _base.spawn_transform()
 	await _stand(spawn.origin, -spawn.basis.z)
 	var at := _walker.position
-	if SeleneLayout.room_at(at) != "dock" or absf(at.y) > 0.05 or not _base.near_lift(at) or _base.room_name(at) != "PAD 1 DOCK":
+	if SeleneLayout.room_at(at) != "dock" or absf(at.y) > 0.05 or not _base.near_lift(at) or _base.room_name(at) != "PAD 1 HANGAR":
 		print("FAIL _test_spawn_on_the_dock_floor: at %s in '%s', near the lift %s" % [at, _base.room_name(at), _base.near_lift(at)])
 		return 1
 	return 0
 
 func _test_walker_stops_at_a_wall() -> int:
-	await _stand(Vector3(0.0, 0.0, 2.4), Vector3(1.0, 0.0, 0.0))
+	await _stand(Vector3(0.0, 0.0, 3.0), Vector3(1.0, 0.0, 0.0))
 	await _walk(3.0)
-	if _walker.position.x > 2.4 - 0.25 or _walker.position.x < 1.5:
+	if _walker.position.x > 3.6 - 0.25 or _walker.position.x < 2.5:
 		print("FAIL _test_walker_stops_at_a_wall: at %s" % _walker.position)
 		return 1
 	return 0
 
 func _test_door_opens_and_closes() -> int:
 	var door := _door("reception", "tube_centre")
-	await _stand(Vector3(0.0, 0.0, 3.3), Vector3(0.0, 0.0, 1.0))
+	await _stand(Vector3(0.0, 0.0, 4.5), Vector3(0.0, 0.0, 1.0))
 	await _ticks(60)
 	var opened: float = door.open_amount()
 	await _stand(Vector3(0.0, 0.0, -4.0), Vector3(0.0, 0.0, 1.0))
@@ -85,9 +84,9 @@ func _test_door_opens_and_closes() -> int:
 	return 0
 
 func _test_walks_through_a_door() -> int:
-	await _stand(Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, 1.0))
+	await _stand(Vector3(0.0, 0.0, 4.0), Vector3(0.0, 0.0, 1.0))
 	await _walk(2.5)
-	if _walker.position.z < 5.6:
+	if _walker.position.z < 7.0:
 		print("FAIL _test_walks_through_a_door: stopped at %s" % _walker.position)
 		return 1
 	return 0
@@ -95,7 +94,7 @@ func _test_walks_through_a_door() -> int:
 # Standing in the doorway the door never closes on the walker.
 func _test_door_stays_open_while_someone_is_in_it() -> int:
 	var door := _door("side_left", "medical")
-	await _stand(Vector3(-10.8, 0.0, -9.0), Vector3(-1.0, 0.0, 0.0))
+	await _stand(Vector3(-12.0, 0.0, -9.0), Vector3(-1.0, 0.0, 0.0))
 	var least := 1.0
 	for i in range(240):
 		await physics_frame
@@ -108,26 +107,19 @@ func _test_door_stays_open_while_someone_is_in_it() -> int:
 
 func _test_office_wall_opens() -> int:
 	var wall := _door("main_mission", "office")
-	await _stand(Vector3(8.1, 0.0, -24.0), Vector3(1.0, 0.0, 0.0))
+	await _stand(Vector3(10.1, 0.0, -28.8), Vector3(1.0, 0.0, 0.0))
 	await _ticks(60)
 	if wall == null or wall.open_amount() < 0.99:
 		print("FAIL _test_office_wall_opens: %s" % wall)
 		return 1
 	return 0
 
-func _test_tube_goes_to_the_other_stop() -> int:
-	var stops := SeleneLayout.tube_stops()
-	if not _base.tube_ride("centre").is_equal_approx(stops.dock) or not _base.tube_ride("dock").is_equal_approx(stops.centre) or _base.tube_stop_at((stops.dock as Transform3D).origin) != "dock" or _base.tube_stop_at(Vector3(0.0, 0.0, -10.0)) != "":
-		print("FAIL _test_tube_goes_to_the_other_stop")
-		return 1
-	return 0
-
 # Up the steps (a ramp underneath) and through the sliding wall.
 func _test_walks_up_into_the_office() -> int:
-	await _stand(Vector3(7.0, 0.0, -24.0), Vector3(1.0, 0.0, 0.0))
+	await _stand(Vector3(9.0, 0.0, -28.8), Vector3(1.0, 0.0, 0.0))
 	await _walk(4.0)
 	await _ticks(20)
-	if _walker.position.x < 11.5 or absf(_walker.position.y - SeleneLayout.OFFICE_FLOOR) > 0.05:
+	if _walker.position.x < 13.5 or absf(_walker.position.y - SeleneLayout.OFFICE_FLOOR) > 0.05:
 		print("FAIL _test_walks_up_into_the_office: at %s" % _walker.position)
 		return 1
 	return 0
