@@ -18,6 +18,9 @@ const ROAD_CLEAR := 2.0
 const CORNER := 2.0
 const SPEEDS := Vector2(1.0, 1.5)
 const VISIBLE_TO := 500.0
+# The animated walkers' chunk is drawn this close (each one within
+# LoopTraffic.DETAIL_TO).
+const NEAR_VISIBLE_TO := 150.0
 
 static func _built(zone: int) -> bool:
 	return zone == SectionPlanScript.Zone.TOWN or zone == SectionPlanScript.Zone.CITY

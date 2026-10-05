@@ -95,6 +95,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 - **Traffico stradale**, **traffico aereo** (incrociatori sci-fi), **treno** sulla spina centrale con
   stazioni, piloni e **ascensori di vetro** con persone dentro.
 - **Barche** sui laghi con la loro scia, **moli** con persone, carrelli e droni, **pedoni** in città.
+- Le persone vicine (entro 80 m) sono un umano low poly che **cammina** con il passo giusto per la sua velocità;
+  più lontano restano sagome semplici. Nelle cabine degli ascensori stanno in piedi, ferme.
 - Le sezioni vicine si caricano e si scaricano mentre si vola lungo l'anello.
 - In ogni paese e in ogni città c'è una **piazzola d'atterraggio**; l'HUD del cruiser indica la più vicina
   (`PAD`) e, sopra di essa e quasi fermi, propone `K LAND`: il cruiser si posa da solo.
@@ -135,8 +137,9 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 ## Struttura del progetto
 
 - `scenes/torus1_system.tscn` — la scena principale.
-- `scripts/` — tutto il codice. Quasi tutti i modelli (navi, edifici, mezzi, persone) sono costruiti a codice,
-  low poly.
+- `scripts/` — tutto il codice. Quasi tutti i modelli (navi, edifici, mezzi) sono costruiti a codice, low poly.
+- `assets/people/animated_human.glb` — il modello delle persone; letto all'avvio, la camminata è cotta in una
+  texture per lo shader. In un gioco esportato il file va incluso fra le risorse.
 - `shaders/` — parti di shader condivise.
 - `assets/` — mappe e texture già pronte (non serve scaricare nulla per giocare).
 - `tools/` — gli script che hanno generato le mappe NASA (`earth_maps.py`, `moon_maps.py`) e le texture
@@ -160,4 +163,5 @@ scena intera e richiedono un minuto o più.
 
 - Mappe della Terra e della Luna: NASA (Visible Earth, Blue Marble, Black Marble, SVS CGI Moon Kit — LRO e
   LOLA), GEBCO. Pubblico dominio.
+- Persone: "Animated Human" di [Quaternius](https://quaternius.com), CC0 (pubblico dominio).
 - Eagle, Moon Buggy e Base Alpha sono omaggi alla serie *Spazio 1999*.
