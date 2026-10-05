@@ -247,6 +247,13 @@ class CrewMember extends AnimatableBody3D:
 		_seated = true
 		_route = PackedVector3Array()
 		_player.stop()
+		_player.active = false
+		if not is_inside_tree():
+			# Posed again once in the scene.
+			ready.connect(_pose_seated, CONNECT_ONE_SHOT)
+		_pose_seated()
+
+	func _pose_seated() -> void:
 		var animation := _player.get_animation(PeopleModel.IDLE)
 		_skeleton.reset_bone_poses()
 		for t in range(animation.get_track_count()):

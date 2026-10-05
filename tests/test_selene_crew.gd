@@ -13,7 +13,8 @@ func _initialize():
 	failures += await _test_walker_stops_for_the_player()
 	failures += await _test_walker_waits_then_goes_on()
 	failures += await _test_seated_knees_bent()
-	failures += await _test_twenty_in_the_base()
+	failures += await _test_twelve_in_the_base()
+	failures += await _test_seated_after_entering_the_scene()
 	if failures == 0:
 		print("ALL TESTS PASSED")
 	else:
@@ -125,7 +126,7 @@ func _test_seated_knees_bent() -> int:
 		return 1
 	return 0
 
-func _test_twenty_in_the_base() -> int:
+func _test_twelve_in_the_base() -> int:
 	var base: Node3D = SeleneInteriorScript.new()
 	base.build()
 	root.add_child(base)
@@ -138,8 +139,8 @@ func _test_twenty_in_the_base() -> int:
 				seated += 1
 	var count := crew.get_child_count() if crew != null else 0
 	base.free()
-	if count < 18 or count > 24 or seated != 8:
-		print("FAIL _test_twenty_in_the_base: %d crew, %d seated" % [count, seated])
+	if count != 12 or seated != 4:
+		print("FAIL _test_twelve_in_the_base: %d crew, %d seated" % [count, seated])
 		return 1
 	return 0
 
@@ -163,3 +164,24 @@ func _test_hair_on_the_head() -> int:
 		print("FAIL _test_hair_on_the_head: %d hair vertices" % hair)
 		return 1
 	return 0
+
+# Seated in the base as built (posed before the base enters the scene),
+# after a while in it: still seated.
+func _test_seated_after_entering_the_scene() -> int:
+	var base: Node3D = SeleneInteriorScript.new()
+	base.build()
+	root.add_child(base)
+	await _ticks(60)
+	var result := 0
+	for member in base.get_node("Crew").get_children():
+		if not member.is_seated():
+			continue
+		var hips: Vector3 = member.bone_point("LeftUpLeg")
+		var knee: Vector3 = member.bone_point("LeftLeg")
+		var ahead: Vector3 = -member.global_transform.basis.z
+		if hips.y > 0.65 or (knee - hips).dot(ahead) < 0.3 or absf(knee.y - hips.y) > 0.15:
+			print("FAIL _test_seated_after_entering_the_scene: %s hips %s knee %s" % [member.name, hips, knee])
+			result = 1
+			break
+	base.free()
+	return result
