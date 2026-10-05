@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 # The HUD on foot, in the ship's HUD style (cockpit.gd): top left ON FOOT
-# and the speed, top centre "K BOARD" when a vehicle is near enough, a
+# (or another title), the speed and the place, top centre "K BOARD" when a vehicle is near enough, a
 # marker on each vehicle (beacon_marker.gd) with its distance.
 
 const CockpitScript = preload("res://scripts/cockpit.gd")
@@ -18,12 +18,13 @@ func _ready() -> void:
 	var lines := VBoxContainer.new()
 	lines.name = "Lines"
 	panel.add_child(lines)
-	for line in [["TitleLabel", "ON FOOT"], ["SpeedLabel", ""]]:
+	for line in [["TitleLabel", "ON FOOT"], ["SpeedLabel", ""], ["PlaceLabel", ""]]:
 		var label := Label.new()
 		label.name = line[0]
 		label.text = line[1]
 		label.label_settings = _settings()
 		lines.add_child(label)
+	(lines.get_node("PlaceLabel") as Label).visible = false
 	var board := PanelContainer.new()
 	board.name = "BoardLabel"
 	board.anchor_left = 0.5
@@ -42,7 +43,22 @@ func show_speed(speed: float) -> void:
 	(get_node("Panel/Lines/SpeedLabel") as Label).text = "SPD  %.1f m/s" % speed
 
 func set_board_prompt(shown: bool) -> void:
-	(get_node("BoardLabel") as Control).visible = shown
+	set_prompt("K BOARD" if shown else "")
+
+func set_title(text: String) -> void:
+	(get_node("Panel/Lines/TitleLabel") as Label).text = text
+
+# The prompt at the top centre; empty hides it.
+func set_prompt(text: String) -> void:
+	var prompt := get_node("BoardLabel") as Control
+	(prompt.get_child(0) as Label).text = text
+	prompt.visible = text != ""
+
+# Where the walker is (a room's name); empty hides the line.
+func set_place(text: String) -> void:
+	var place := get_node("Panel/Lines/PlaceLabel") as Label
+	place.text = text
+	place.visible = text != ""
 
 # A marker on each of `targets` ([name, Node3D]), seen by `camera`; markers
 # of vehicles no longer listed hide.

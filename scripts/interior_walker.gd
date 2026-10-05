@@ -16,6 +16,8 @@ const FLOOR_SNAP := 0.3
 
 # When not empty, used instead of the keyboard (tests): {move, jog, jump}.
 var controls := {}
+# On a flat floor (Selene's interior): up is +Y everywhere.
+var flat := false
 var _carry := Vector3.ZERO
 var _turn := 0.0
 var _pitch := 0.0
@@ -48,17 +50,20 @@ func _ready() -> void:
 static func up_at(point: Vector3) -> Vector3:
 	return -Vector3(point.x, point.y, 0.0).normalized()
 
+func _up(point: Vector3) -> Vector3:
+	return Vector3.UP if flat else up_at(point)
+
 func camera() -> Camera3D:
 	return get_node("Camera") as Camera3D
 
 func speed() -> float:
-	var up := up_at(position)
+	var up := _up(position)
 	return (velocity - up * velocity.dot(up)).length()
 
 # Feet at `point` (interior coordinates), facing `facing`; gravity settles
 # them onto what is below.
 func place(point: Vector3, facing: Vector3) -> void:
-	transform = Transform3D(GroundVehicle.heading_basis(facing, up_at(point)), point)
+	transform = Transform3D(GroundVehicle.heading_basis(facing, _up(point)), point)
 	velocity = Vector3.ZERO
 	_carry = Vector3.ZERO
 
@@ -98,9 +103,9 @@ func _process(_delta: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	# On the axis (not placed yet) there is no up.
-	if Vector2(position.x, position.y).length() < 1.0:
+	if not flat and Vector2(position.x, position.y).length() < 1.0:
 		return
-	var up := up_at(position)
+	var up := _up(position)
 	var basis := GroundVehicle.heading_basis(-transform.basis.z, up).rotated(up, _turn)
 	_turn = 0.0
 	transform = Transform3D(basis, position)
