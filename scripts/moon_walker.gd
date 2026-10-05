@@ -12,6 +12,7 @@ const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const GroundVehicle = preload("res://scripts/ground_vehicle.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
 const WalkerHud = preload("res://scripts/walker_hud.gd")
+const MoonFootprints = preload("res://scripts/moon_footprints.gd")
 
 const MOON_GRAVITY := 1.62
 # Further than this over the ground with no jump (an edge): falling.
@@ -28,6 +29,8 @@ var airborne := false
 var vertical := 0.0
 var _carry := Vector3.ZERO
 var _turn := 0.0
+# Leaves the boot prints (MoonFootprints) as it walks.
+var _gait := MoonFootprints.Gait.new()
 var _pitch := 0.0
 
 func _ready() -> void:
@@ -120,6 +123,7 @@ func _physics_process(delta: float) -> void:
 	global_transform = Transform3D(basis, start)
 	var c := read_controls()
 	var walk := Vector3.ZERO
+	var was_airborne := airborne
 	if airborne:
 		walk = _carry
 		vertical -= MOON_GRAVITY * delta
@@ -153,4 +157,11 @@ func _physics_process(delta: float) -> void:
 		here -= here_up * height
 	global_transform = Transform3D(GroundVehicle.heading_basis(-basis.z, here_up), here)
 	velocity = (global_position - start) / delta
+	var prints := moon.get_node_or_null("Footprints")
+	if prints != null:
+		var moved := 0.0 if airborne or was_airborne else (global_position - start).length()
+		var to_moon: Transform3D = moon.global_transform.affine_inverse()
+		for footprint: Dictionary in _gait.step(moved, c.jog, airborne and not was_airborne and vertical > 0.0, was_airborne and not airborne):
+			prints.add(to_moon * (start if footprint.kind == MoonFootprints.TAKEOFF else global_position), to_moon.basis * -basis.z, to_moon.basis * here_up, footprint.side, footprint.kind)
 	moon.follow_patch(global_position, true, velocity)
+	moon.follow_rocks(global_position, true)

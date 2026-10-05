@@ -82,3 +82,25 @@ TDD; solo i test nuovi o toccati.
 
 - Polvere sollevata, tracce dell'Eagle all'atterraggio, salvataggio delle tracce fra una sessione e l'altra.
 - Collisioni dei sassi con l'Eagle.
+
+## Cambiato durante l'esecuzione
+
+- **Una forma per taglia:** una sola mesh di pietra per taglia (sfera grossolana deformata), varietà da rotazione,
+  schiacciamento e scala, invece di tre forme.
+- **Campioni delle tracce esattamente ogni 0,5 m:** a 20 m/s un tick copre 0,33 m; i campioni si mettono lungo il
+  tratto percorso, non solo dove capita il tick (prima cadevano ogni 0,5–0,83 m).
+- **Orme:** il passo sa da solo di essere in volo fra stacco e atterraggio.
+- **Test delle pietre sulla scena** in un file a parte (`test_moon_rocks_scene.gd`). Il corpo dei massi si
+  aggiorna a ogni tick come la base, anche se il test passa pure senza (qui arriva comunque in tempo).
+- **Prova GPU:** tracce a chevron dietro il rover, orme di camminata, corsa e salto, massi e sassi a 3 km dalla
+  base; 54–57 FPS guidando lontano dalla base.
+- **Dopo la revisione finale:**
+  - **Sul suolo disegnato:** pietre, tracce e orme stanno sul suolo come lo disegna la toppa (il reticolo di 8 m,
+    `MoonPatch.drawn_radius`), non su quello vero: fra i crateri i due differiscono di decine di centimetri, e tracce
+    e orme finivano sotto il suolo in un terzo dei punti.
+  - **Blocchi di orme vicini:** un'orma oltre 40 m dalla prima del suo blocco ne apre uno nuovo (un blocco si
+    disegna in base alla distanza dal suo centro: prima le orme sotto i piedi sparivano dopo 150 m di cammino).
+  - **Orme illuminate dall'alto:** la loro base era specchiata, e il piano risultava rivolto in giù.
+  - **Tracce a blocchi di 25 m:** ogni campione ricostruisce il suo blocco; prima (100 m) costava 2–4 ms per tick.
+  - **Pietre solo se visibili:** volando con l'Eagle più in alto di quanto una taglia si vede, quella taglia non si
+    ricostruisce (prima due core lavoravano senza sosta per pietre invisibili).
