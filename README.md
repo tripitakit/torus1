@@ -57,6 +57,10 @@ Il renderer è **Compatibility** (OpenGL 3.3).
   orbita sull'equatore. Le sezioni ruotano per dare gravità; ogni ponte ha un attracco.
 - **La luna** (raggio 250 km, a 20.000 km) con le mappe NASA (colori LRO, rilievo LOLA), crateri piccoli
   generati, e una toppa di terreno fine che segue il giocatore.
+- **La superficie lunare**: sassolini, sassi e massi sparsi (sempre gli stessi negli stessi posti), più fitti
+  sui bordi dei crateri; i massi grandi fermano rover e pedone. Il Moon Buggy lascia le **tracce** del
+  battistrada e il pedone le **orme** degli stivali (diverse per camminata, corsa e salto): restano per tutta
+  la sessione.
 - **Base Selene**, nel cratere Platone, in stile Base Alpha (Spazio 1999): settori, cupole, tubi, una torre
   con faro e sei pad di atterraggio.
 - **Due portali**, vicino alla Terra e sopra la luna, per attraversare in un attimo la distanza fra i due.
@@ -101,7 +105,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
   su una piazzola. Vista in prima persona: i mezzi si vedono da fuori.
 - Camminata (1,5 m/s) e corsa (4 m/s), salti: sulla luna balzi lenti con la gravità lunare, dentro le sezioni un
   salto normale con la gravità verso la parete del cilindro.
-- Si urtano edifici, pad e mezzi; dentro le sezioni il terreno, gli alberi e gli edifici hanno collisioni.
+- Si urtano edifici, pad, mezzi e massi; dentro le sezioni il terreno, gli alberi e gli edifici hanno
+  collisioni. Sulla luna si lasciano le orme.
 - HUD a piedi: velocità, marcatori sui mezzi (`SHIP`, `ROVER`, `CRUISER`) con la distanza, `K BOARD` quando si è
   abbastanza vicini (8 m) per risalire. Il rover resta parcheggiato dove lo si lascia; se si risale sull'Eagle
   torna nella stiva.
