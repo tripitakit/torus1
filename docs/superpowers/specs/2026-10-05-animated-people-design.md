@@ -73,3 +73,13 @@ TDD; solo i test nuovi o toccati.
 - Corsa, lavoro, saluti; persone che si fermano o si girano verso il giocatore.
 - Più modelli (donne, bambini); vestiti diversi oltre al colore della tuta.
 - Ombre delle persone.
+
+## Cambiato durante l'esecuzione
+
+- **Verso dalla camminata:** il modello cammina in diagonale rispetto alle sue punte dei piedi; il verso +Z si
+  prende dal piede a terra, che scivola all'indietro, non da punte contro caviglie.
+- **Pose globali delle ossa calcolate a mano:** fuori dall'albero della scena lo scheletro non le aggiorna.
+- **Test dei piedi:** lo scambio si misura dal passo più lungo, non dal fotogramma 0 (lì i piedi si incrociano).
+- **Prova GPU:** l'utente ha visto a schermo i pedoni camminare con l'animazione giusta; 60 FPS con e senza le
+  persone animate (limitati dal vsync). Gli scatti automatici non sono serviti: il tempo dello shader non
+  coincide con l'orologio della prova.
