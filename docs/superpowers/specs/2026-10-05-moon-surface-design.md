@@ -82,3 +82,15 @@ TDD; solo i test nuovi o toccati.
 
 - Polvere sollevata, tracce dell'Eagle all'atterraggio, salvataggio delle tracce fra una sessione e l'altra.
 - Collisioni dei sassi con l'Eagle.
+
+## Cambiato durante l'esecuzione
+
+- **Una forma per taglia:** una sola mesh di pietra per taglia (sfera grossolana deformata), varietà da rotazione,
+  schiacciamento e scala, invece di tre forme.
+- **Campioni delle tracce esattamente ogni 0,5 m:** a 20 m/s un tick copre 0,33 m; i campioni si mettono lungo il
+  tratto percorso, non solo dove capita il tick (prima cadevano ogni 0,5–0,83 m).
+- **Orme:** il passo sa da solo di essere in volo fra stacco e atterraggio.
+- **Test delle pietre sulla scena** in un file a parte (`test_moon_rocks_scene.gd`). Il corpo dei massi si
+  aggiorna a ogni tick come la base, anche se il test passa pure senza (qui arriva comunque in tempo).
+- **Prova GPU:** tracce a chevron dietro il rover, orme di camminata, corsa e salto, massi e sassi a 3 km dalla
+  base; 54–57 FPS guidando lontano dalla base.
