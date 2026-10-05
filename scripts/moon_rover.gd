@@ -12,6 +12,7 @@ const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const RoverModel = preload("res://scripts/rover_model.gd")
 const CockpitScript = preload("res://scripts/cockpit.gd")
 const RoverHud = preload("res://scripts/rover_hud.gd")
+const MoonTracks = preload("res://scripts/moon_tracks.gd")
 
 const MOON_GRAVITY := 1.62
 # A bump keeps half of what is left along the wall; head-on, nothing.
@@ -46,6 +47,8 @@ var body := {}
 var lights_on := true
 # Left standing while the pilot walks (GameMode): see park().
 var parked := false
+# Lays the tracks (MoonTracks) as it drives.
+var _tracks := MoonTracks.Recorder.new()
 # When not empty, used instead of the keyboard (tests).
 var controls := {}
 var _look := Vector2.ZERO
@@ -207,3 +210,8 @@ func _physics_process(delta: float) -> void:
 	if not parked:
 		moon.follow_patch(global_position, true, velocity)
 		moon.follow_rocks(global_position, true)
+	var tracks := moon.get_node_or_null("Tracks")
+	if tracks != null:
+		var here: Transform3D = moon.global_transform.affine_inverse() * global_transform
+		for sample: Array in _tracks.step(here, body.airborne, absf(body.speed)):
+			tracks.add(sample[0], sample[1], sample[2], sample[3])
