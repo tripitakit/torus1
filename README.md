@@ -92,24 +92,40 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
   stazioni, piloni e **ascensori di vetro** con persone dentro.
 - **Barche** sui laghi con la loro scia, **moli** con persone, carrelli e droni, **pedoni** in città.
 - Le sezioni vicine si caricano e si scaricano mentre si vola lungo l'anello.
+- In ogni paese e in ogni città c'è una **piazzola d'atterraggio**; l'HUD del cruiser indica la più vicina
+  (`PAD`) e, sopra di essa e quasi fermi, propone `K LAND`: il cruiser si posa da solo.
+
+### A piedi
+
+- Si scende a piedi con **K** dall'Eagle posata sulla luna, dal Moon Buggy fermo e dall'internal cruiser posato
+  su una piazzola. Vista in prima persona: i mezzi si vedono da fuori.
+- Camminata (1,5 m/s) e corsa (4 m/s), salti: sulla luna balzi lenti con la gravità lunare, dentro le sezioni un
+  salto normale con la gravità verso la parete del cilindro.
+- Si urtano edifici, pad e mezzi; dentro le sezioni il terreno, gli alberi e gli edifici hanno collisioni.
+- HUD a piedi: velocità, marcatori sui mezzi (`SHIP`, `ROVER`, `CRUISER`) con la distanza, `K BOARD` quando si è
+  abbastanza vicini (8 m) per risalire. Il rover resta parcheggiato dove lo si lascia; se si risale sull'Eagle
+  torna nella stiva.
 
 ## Comandi
 
-| Tasto | Nave | Rover |
-|---|---|---|
-| W / S | avanti / indietro (tenere: 1x → 10x → 100x) | gas / freno e retromarcia |
-| A / D | di lato | sterzo |
-| Z / X | su / giù | — |
-| Q / E | rollio | — |
-| Mouse | orientamento | guardarsi attorno |
-| C | cruise (mantiene la velocità) | — |
-| B | freno | freno a mano |
-| F | attracco / sgancio (anche all'interno) | — |
-| T | scegli il bersaglio del computer di bordo | — |
-| G | arrivo automatico al bersaglio | — |
-| V | scendi sul rover (nave posata sulla luna) | risali sulla nave |
-| L | — | fari |
-| R | ripartenza dopo uno schianto | — |
+| Tasto | Nave / cruiser interno | Rover | A piedi |
+|---|---|---|---|
+| W / S | avanti / indietro (tenere: 1x → 10x → 100x) | gas / freno e retromarcia | avanti / indietro |
+| A / D | di lato | sterzo | di lato |
+| Z / X | su / giù | — | — |
+| Q / E | rollio | — | — |
+| Mouse | orientamento | guardarsi attorno | girarsi, guardare su / giù |
+| C | cruise (mantiene la velocità) | — | — |
+| B | freno | freno a mano | — |
+| F | attracco / sgancio (anche all'interno) | — | — |
+| T | scegli il bersaglio del computer di bordo | — | — |
+| G | arrivo automatico al bersaglio | — | — |
+| V | scendi sul rover (nave posata sulla luna) | risali sulla nave | — |
+| K | scendi a piedi (nave posata; cruiser: posa sulla piazzola) | scendi a piedi | risali sul mezzo vicino |
+| J | — | — | corsa (tenere premuto) |
+| Spazio | — | — | salto |
+| L | — | fari | — |
+| R | ripartenza dopo uno schianto | — | — |
 
 ## Struttura del progetto
 
