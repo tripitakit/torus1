@@ -32,13 +32,15 @@ const BOOT_BONES := ["LeftFoot", "LeftToeBase", "LeftToe_End", "RightFoot", "Rig
 const SHADER := """
 shader_type spatial;
 uniform vec3 sleeve : source_color = vec3(0.95, 0.45, 0.1);
-varying float part;
+varying flat float part;
 void vertex() {
 	part = UV.x;
 }
 void fragment() {
 	vec3 colour = vec3(0.78, 0.72, 0.6);
-	if (part > 2.5) {
+	if (part > 3.5) {
+		colour = vec3(0.16, 0.1, 0.06);
+	} else if (part > 2.5) {
 		colour = sleeve;
 	} else if (part > 1.5) {
 		colour = vec3(0.85, 0.66, 0.52);
@@ -77,19 +79,32 @@ static func _scene() -> Node3D:
 					animation.track_set_key_value(t, k, Vector3(start.x, at.y, start.z))
 	return _template
 
-# The skinned mesh with UV.x parts: 0 suit, 1 boots, 2 skin (head, hands),
-# 3 the left sleeve.
+# The skinned mesh with UV.x parts: 0 suit, 1 boots, 2 skin (face, hands),
+# 3 the left sleeve, 4 hair.
 static func member_mesh() -> ArrayMesh:
 	if _mesh != null:
 		return _mesh
 	var source := (_scene().find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).mesh
 	var arrays: Array = source.surface_get_arrays(0)
 	var bones: PackedStringArray = PeopleModel.bake().bones
+	# The head's extent (facing +Z): hair over the top and down the back.
+	var points := PeopleModel.frame_points(0)
+	var low := INF
+	var high := -INF
+	var front := -INF
+	for i in range(bones.size()):
+		if bones[i] == "Head":
+			low = minf(low, points[i].y)
+			high = maxf(high, points[i].y)
+			front = maxf(front, points[i].z)
 	var uv := PackedVector2Array()
 	uv.resize(bones.size())
 	for i in range(bones.size()):
 		var part := 0.0
-		if bones[i] in SLEEVE_BONES:
+		var up := (points[i].y - low) / (high - low)
+		if bones[i] in ["Head", "HeadTop_End"] and (up > 0.72 or (up > 0.35 and points[i].z < front - 0.14)):
+			part = 4.0
+		elif bones[i] in SLEEVE_BONES:
 			part = 3.0
 		elif bones[i] in SKIN_BONES or bones[i].contains("Hand"):
 			part = 2.0

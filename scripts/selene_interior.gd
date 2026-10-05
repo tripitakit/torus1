@@ -367,7 +367,7 @@ func _build_light_panels(parent: Node3D) -> void:
 		while s + PANEL.x * 0.5 < length:
 			var p := a + along * s + inward * (WALL_THICK * 0.5 + 0.06)
 			var bulge := Basis(Vector3.UP, turn)
-			_box(parent, Vector3(0.8, 1.6, 0.08), _mat(Color(1.0, 0.99, 0.95), 1.3), Transform3D(bulge, Vector3(p.x, 1.25, p.y)))
+			_box(parent, Vector3(0.8, 1.6, 0.08), _mat(Color(0.95, 0.93, 0.86), 0.35), Transform3D(bulge, Vector3(p.x, 1.25, p.y)))
 			s += PANEL.x * 2.0
 
 func _build_lift(parent: Node3D) -> void:
@@ -519,10 +519,8 @@ func _build_crew() -> void:
 		member.transform = worker.transform
 		crew.add_child(member)
 		members.append(member)
-		if worker.department == "command":
-			member.idle()
-		else:
-			member.work()
+		# Standing at their work (the clip "Working" kneels to hammer the floor).
+		member.idle()
 	var routes := SeleneLayout.routes()
 	for k in range(routes.size()):
 		var member := SeleneCrew.new_member(routes[k].department)

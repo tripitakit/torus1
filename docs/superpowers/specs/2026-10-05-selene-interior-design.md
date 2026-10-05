@@ -121,3 +121,20 @@ TDD; solo i test nuovi o toccati.
 
 - Parlare con l'equipaggio; vista vera della luna dalla vetrata; altri settori della base; entrare dalla
   superficie a piedi; suoni.
+
+## Cambiato durante l'esecuzione
+
+- **Il tasto B era già il freno** (nave) e il freno a mano (rover). B porta nella base solo con l'Eagle posata su un
+  pad di Selene, dove il freno non serve; in volo B frena come prima.
+- **Invito in cabina:** `BASE  [B]`, nello stile di `DOCK  [F]`.
+- **Al lavoro in piedi:** la clip "Working" del modello è in ginocchio a martellare il pavimento; medici, tecnico e
+  Comandante stanno in piedi con la clip Idle.
+- **Seduti senza movimento del busto:** la clip Idle riscriverebbe le gambe piegate.
+- **Capelli:** parte 4 della mesh, sopra e dietro la testa; le parti non si sfumano fra i vertici (`flat`), così non
+  compaiono righe del colore della manica fra pelle e capelli.
+- **Pannelli luminosi dei corridoi** meno forti (alla prima prova erano macchie bianche).
+- **Equipaggio:** 22 persone (8 sedute, 4 in piedi al lavoro, 10 che camminano).
+- **Test:** il pedone a gravità piatta e le righe dell'HUD in un file piccolo a parte (`test_base_walker.gd`);
+  aggiunto il test della salita all'ufficio.
+- **Prova GPU:** sala di sbarco, corridoio, Main Mission con i seduti e la vetrata, infermeria, sala comune,
+  ufficio; 60 FPS in Main Mission (limitati dal vsync).

@@ -8,6 +8,7 @@ func _initialize():
 	var failures := 0
 	failures += _test_sleeve_is_the_left_arm()
 	failures += _test_department_colours()
+	failures += _test_hair_on_the_head()
 	failures += await _test_walker_follows_route()
 	failures += await _test_walker_stops_for_the_player()
 	failures += await _test_walker_waits_then_goes_on()
@@ -139,5 +140,26 @@ func _test_twenty_in_the_base() -> int:
 	base.free()
 	if count < 18 or count > 24 or seated != 8:
 		print("FAIL _test_twenty_in_the_base: %d crew, %d seated" % [count, seated])
+		return 1
+	return 0
+
+# Part 4: hair, on top and at the back of the head only.
+func _test_hair_on_the_head() -> int:
+	var uv: PackedVector2Array = SeleneCrew.member_mesh().surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var bones: PackedStringArray = PeopleModel.bake().bones
+	var points := PeopleModel.frame_points(0)
+	var hair := 0
+	var top := -INF
+	for i in range(uv.size()):
+		if bones[i] == "Head":
+			top = maxf(top, points[i].y)
+	for i in range(uv.size()):
+		if roundi(uv[i].x) == 4:
+			hair += 1
+			if not (bones[i] in ["Head", "HeadTop_End"]) or points[i].y < top - 0.3:
+				print("FAIL _test_hair_on_the_head: hair on %s at %s" % [bones[i], points[i]])
+				return 1
+	if hair < 20:
+		print("FAIL _test_hair_on_the_head: %d hair vertices" % hair)
 		return 1
 	return 0
