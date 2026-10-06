@@ -76,6 +76,30 @@ void fragment() {
 		float bar = step(UV.x, fract(sin(row * 12.7 + floor(TIME * 0.7)) * 43758.5) * 0.8 + 0.1);
 		float gap = step(0.25, fract(UV.y * 8.0));
 		ALBEDO = vec3(0.05, 0.12, 0.06) + vec3(0.2, 0.9, 0.35) * bar * gap * 0.8;
+	} else if (mode == 3) {
+		// The telescope's view: a spiral galaxy among stars.
+		float r = length(p * vec2(1.0, 1.6));
+		float a = atan(p.y * 1.6, p.x);
+		float arms = pow(0.5 + 0.5 * sin(a * 2.0 - log(r + 0.05) * 6.0 + TIME * 0.05), 3.0);
+		float glow = exp(-r * 3.0) * (0.6 + arms * 1.2) + exp(-r * 18.0) * 2.0;
+		float star = step(0.995, fract(sin(dot(floor(UV * 160.0), vec2(12.99, 78.23))) * 43758.5));
+		ALBEDO = vec3(0.01, 0.01, 0.03) + vec3(0.9, 0.8, 1.0) * glow + vec3(star);
+	} else if (mode == 4 || mode == 5) {
+		// Area 2: the silos' radiation readings (4) or their map (5).
+		vec3 colour = vec3(0.04, 0.08, 0.05);
+		vec2 q = UV * 2.0 - 1.0;
+		float cross_shape = step(abs(q.x), 0.18) * step(abs(q.y), 0.85) + step(abs(q.y), 0.18) * step(abs(q.x), 0.85);
+		colour = mix(colour, vec3(0.12, 0.25, 0.14), clamp(cross_shape, 0.0, 1.0));
+		vec2 cell = floor(UV * vec2(12.0, 12.0));
+		float silo = step(length(fract(UV * 12.0) - 0.5), 0.25) * clamp(cross_shape, 0.0, 1.0);
+		float hot = step(0.85, fract(sin(dot(cell, vec2(3.1, 7.7))) * 437.5));
+		float blink = step(0.5, fract(TIME * 0.8 + cell.x * 0.13));
+		colour = mix(colour, mix(vec3(0.3, 1.0, 0.4), vec3(1.0, 0.3, 0.2) * (0.5 + blink), hot), silo);
+		if (mode == 4) {
+			float bars = step(UV.x, 0.3) * step(fract(UV.y * 10.0), 0.6) * step(1.0 - UV.x / 0.3, fract(sin(floor(UV.y * 10.0) * 9.1 + floor(TIME)) * 4375.5));
+			colour = mix(colour * step(0.3, UV.x), vec3(1.0, 0.8, 0.2), bars);
+		}
+		ALBEDO = colour * lines;
 	} else {
 		// The videophone: a face in a blue field.
 		float head = smoothstep(0.36, 0.33, length((p - vec2(0.0, 0.15)) * vec2(1.0, 0.8)));
@@ -283,7 +307,8 @@ func _build_lintels(parent: Node3D) -> void:
 		var top := OFFICE_DOOR_HEIGHT if door.kind == "office" else DOOR_HEIGHT
 		var high := 0.0
 		for side in [door.a, door.b]:
-			high = maxf(high, by_name[side].floor + by_name[side].height)
+			if by_name.has(side):
+				high = maxf(high, by_name[side].floor + by_name[side].height)
 		if door.kind == "open":
 			top = minf(by_name[door.a].floor + by_name[door.a].height, by_name[door.b].floor + by_name[door.b].height)
 		if high - top < 0.01:
@@ -304,6 +329,9 @@ func _build_doors(parent: Node3D) -> void:
 		if door.kind in ["open", "tunnel"]:
 			continue
 		var height := OFFICE_DOOR_HEIGHT if door.kind == "office" else DOOR_HEIGHT
+		if door.kind == "hatch":
+			_door_frame(parent, door, height, k)
+			continue
 		var node := SlidingDoor.new()
 		node.name = "Door_%d" % k
 		var panel: Material = _glass() if door.kind == "office" else _mat(WHITE)
@@ -327,6 +355,11 @@ func _door_frame(parent: Node3D, door: Dictionary, height: float, number: int) -
 	var by_name := {}
 	for room in layout.rooms():
 		by_name[room.name] = room
+	# Beyond a hatch, the lunar surface: as a room mirrored across the door.
+	if not by_name.has(door.b):
+		var inside: Vector2 = (by_name[door.a].rect as Rect2).get_center()
+		var c := Vector2(door.centre.x, door.centre.z)
+		by_name[door.b] = {"label": "LUNAR SURFACE", "rect": Rect2(c * 2.0 - inside, Vector2.ZERO)}
 	for face in [1.0, -1.0]:
 		var into: Vector2 = (by_name[door.b if face > 0.0 else door.a].rect as Rect2).get_center()
 		var local := frame.transform.affine_inverse() * Vector3(into.x, 0.0, into.y)
@@ -384,6 +417,34 @@ func _build_item(item: Dictionary, parent: Node3D) -> void:
 			_quad(node, Vector2(size.z, size.y), _screen(0), Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(size.x * 0.5 + 0.01, 3.0, 0.0)))
 			_box(node, Vector3(0.2, 0.08, size.z + 0.4), _mat(ORANGE), _at(size.x * 0.5, 0.7, 0.0))
 			solid = false
+		"telescope_screen", "radiation_screen":
+			# A big screen on the wall: the telescope's view, or the silos'
+			# radiation readings.
+			var mode := 3 if item.kind == "telescope_screen" else 4
+			var into := 1.0 if where.origin.x < 0.0 else -1.0
+			_box(node, Vector3(size.x, size.y + 0.3, size.z + 0.3), _mat(DARK), _at(0.0, 2.0, 0.0))
+			_quad(node, Vector2(size.z, size.y), _screen(mode), Transform3D(Basis(Vector3.UP, PI * 0.5 * into), Vector3(into * (size.x * 0.5 + 0.01), 2.0, 0.0)))
+			_box(node, Vector3(0.2, 0.08, size.z + 0.3), _mat(ORANGE), _at(into * size.x * 0.5, 0.7, 0.0))
+			solid = false
+		"map_table":
+			# The silo map, lit from within.
+			_box(node, Vector3(size.x, size.y - 0.05, size.z), _mat(WHITE.darkened(0.08)), _at(0.0, (size.y - 0.05) * 0.5, 0.0))
+			_box(node, Vector3(size.x + 0.04, 0.05, size.z + 0.04), _mat(ORANGE), _at(0.0, size.y - 0.025, 0.0))
+			_quad(node, Vector2(size.x * 0.9, size.z * 0.9), _screen(5), Transform3D(Basis(Vector3.RIGHT, -PI * 0.5), Vector3(0.0, size.y + 0.002, 0.0)))
+		"suit_locker":
+			# An open locker with a spacesuit and its helmet.
+			_box(node, Vector3(size.x, size.y, 0.05), _mat(WHITE), _at(0.0, size.y * 0.5, -size.z * 0.5))
+			for side in [-1.0, 1.0]:
+				_box(node, Vector3(size.x, size.y, 0.05), _mat(WHITE), _at(0.0, size.y * 0.5, side * size.z * 0.5))
+			_box(node, Vector3(0.05, size.y, size.z), _mat(WHITE.darkened(0.1)), _at(-size.x * 0.5, size.y * 0.5, 0.0))
+			_box(node, Vector3(0.3, 0.9, 0.5), _mat(Color(0.85, 0.85, 0.82)), _at(0.0, 1.05, 0.0))
+			_box(node, Vector3(0.3, 0.12, 0.52), _mat(ORANGE), _at(0.0, 1.3, 0.0))
+			_sphere(node, 0.17, _mat(WHITE), _at(0.0, 1.72, 0.0))
+			_box(node, Vector3(0.05, 0.12, 0.2), _mat(Color(0.2, 0.3, 0.4)), _at(0.16, 1.72, 0.0))
+		"bench":
+			_box(node, Vector3(size.x, 0.08, size.z), _mat(ORANGE), _at(0.0, size.y, 0.0))
+			for z in [-size.z * 0.4, size.z * 0.4]:
+				_box(node, Vector3(size.x * 0.6, size.y, 0.08), _mat(STEEL), _at(0.0, size.y * 0.5, z))
 		"computer_bank", "wall_bank":
 			# X5-style bank: dark cabinet, blinking lights, tape reels.
 			var front := Basis(Vector3.UP, PI * 0.5 if where.origin.x < 0.0 else -PI * 0.5)
