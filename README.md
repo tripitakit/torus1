@@ -71,6 +71,14 @@ Il renderer è **Compatibility** (OpenGL 3.3).
   scorrono da sole. Dodici persone in tuta color avena con la manica del reparto: quattro siedono alle
   scrivanie con le braccia sul piano, altre camminano (si fermano se le si è davanti). All'ascensore K riporta
   sull'Eagle.
+- **Gli avamposti della faccia nascosta**, fra i bersagli del computer di bordo (`TELESCOPE`, `AREA 2`), ognuno
+  con il suo pad: l'**UltraTelescopio** nel Mare Moscoviense (una parabola di 60 m che ruota lenta, una cupola
+  ottica, l'edificio di controllo) e l'**Area di Smaltimento Nucleare 2** nel cratere Tsiolkovskiy, omaggio al
+  pilot *Breakaway*: un campo a croce grande come due campi da football con 35 coperchi di silo, il pad degli
+  Eagle con nastro e montacarichi, i cilindri di piombo, il **recinto laser** (con un varco) e il deposito di
+  monitoraggio circolare. Torri faro li illuminano nella notte lunare. A piedi, K al portello dell'airlock entra:
+  dentro, airlock con le tute e la sala (controllo del telescopio con l'immagine della galassia; monitoraggio
+  dei silo con le letture di radioattività), nello stesso stile degli interni di Selene; K al portello per uscire.
 - **Base Selene**, nel cratere Platone, in stile Base Alpha (Spazio 1999): settori, cupole, tubi, una torre
   con faro e sei pad di atterraggio.
 - **Due portali**, vicino alla Terra e sopra la luna, per attraversare in un attimo la distanza fra i due.

@@ -38,6 +38,13 @@ const BUILDINGS := {
 	"area2": {"at": Vector2(60.0, -60.0), "turn": PI * 0.75, "hatch": 11.0},
 }
 const PADS := {"telescope": Vector2(85.0, 85.0), "area2": Vector2(95.0, -95.0)}
+# Floodlight masts lighting each site through the lunar night.
+const FLOODLIGHTS := {
+	"telescope": [Vector2(-30.0, 25.0), Vector2(40.0, -40.0), Vector2(60.0, 60.0)],
+	"area2": [Vector2(-60.0, -60.0), Vector2(60.0, 60.0), Vector2(-60.0, 60.0), Vector2(85.0, -40.0)],
+}
+const FLOOD_HEIGHT := 16.0
+const FLOOD_RANGE := 150.0
 const DISH_AT := Vector2(0.0, -70.0)
 const DOME_AT := Vector2(-50.0, -30.0)
 # One turn of the dish every DISH_PERIOD seconds.
@@ -205,6 +212,8 @@ static func build(body: StaticBody3D, name: String) -> void:
 	var m := {"white": _mat(WHITE), "grey": _mat(GREY), "dark": _mat(DARK), "orange": _mat(ORANGE), "hazard": _mat(HAZARD),
 		"laser": _mat(LASER, 3.0), "field": _mat(FIELD), "lead": _mat(LEAD), "lamp": _mat(Color(1.0, 0.7, 0.3), 2.5), "glass": _mat(Color(0.1, 0.15, 0.22))}
 	_pad(body, name, m)
+	for at: Vector2 in FLOODLIGHTS[name]:
+		_floodlight(body, name, at, m)
 	if name == "telescope":
 		_telescope(body, m)
 		_building_box(body, name, m)
@@ -222,6 +231,21 @@ static func _pad(body: StaticBody3D, name: String, m: Dictionary) -> void:
 		var a := k * PI * 0.5 + PI * 0.25
 		var lamp := Vector3(cos(a), 0.0, sin(a)) * (PAD_RADIUS - 0.8)
 		_cylinder(body, 0.3, 0.2, m.lamp, at * Transform3D(Basis(), lamp + Vector3(0.0, PAD_HEIGHT * 0.5 + 0.1, 0.0)))
+
+# A mast with a lamp head and a light shining over the site.
+static func _floodlight(body: StaticBody3D, name: String, at: Vector2, m: Dictionary) -> void:
+	var foot := _on(name, at, 0.0)
+	_cylinder(body, 0.25, FLOOD_HEIGHT, m.grey, foot * Transform3D(Basis(), Vector3(0.0, FLOOD_HEIGHT * 0.5, 0.0)), 0.15, 8)
+	_box(body, Vector3(2.4, 0.8, 0.8), m.dark, foot * Transform3D(Basis(), Vector3(0.0, FLOOD_HEIGHT, 0.0)))
+	_box(body, Vector3(2.2, 0.6, 0.05), _mat(Color(1.0, 0.95, 0.85), 4.0), foot * Transform3D(Basis(), Vector3(0.0, FLOOD_HEIGHT, 0.42)))
+	_solid(body, _cylinder_shape(0.3, FLOOD_HEIGHT), foot * Transform3D(Basis(), Vector3(0.0, FLOOD_HEIGHT * 0.5, 0.0)))
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.95, 0.85)
+	light.light_energy = 2.0
+	light.omni_range = FLOOD_RANGE
+	light.omni_attenuation = 0.8
+	light.transform = foot * Transform3D(Basis(), Vector3(0.0, FLOOD_HEIGHT + 1.0, 0.0))
+	body.add_child(light)
 
 # The control building (14 x 12 m, 6 high): the hatch on +Z under its
 # hazard bands, the window band toward the dish (-Z), a mast on the roof.

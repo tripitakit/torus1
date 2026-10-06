@@ -96,3 +96,16 @@ TDD; solo i test nuovi o toccati.
 ## Fuori da questo lavoro
 
 - Persone; animazione di Eagle cargo e nastro; rover che entra nel recinto; esplosione dell'Area 2.
+
+## Cambiato durante l'esecuzione
+
+- **Costruttore comune:** `AlphaInterior` ha preso da Selene materiali, stanze, pareti, porte, arredi, finestra,
+  luci; Selene ne è una sottoclasse e i suoi test sono rimasti verdi. Le porte possono dare sull'esterno
+  ("hatch": il portello, mai aperto dentro).
+- **Varco del recinto** largo 12 m (più del passo dei pali, 10 m), sul lato nord del braccio est, verso il
+  deposito.
+- **Torri faro:** la faccia nascosta era al buio alla prova GPU; 3 torri al telescopio e 4 all'Area 2 con una luce
+  ciascuna (150 m).
+- **Vista dalla vetrata del telescopio:** la parabola dipinta più in basso e più grande, perché la finestra mostra
+  la fascia centrale dello sfondo.
+- **Prova GPU:** i due siti da lontano e da terra, il recinto, il deposito, le due sale e gli airlock.

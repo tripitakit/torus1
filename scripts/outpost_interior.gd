@@ -55,7 +55,8 @@ func _view_texture(kind: String) -> ImageTexture:
 	noise.frequency = 0.02
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2024
-	var horizon := 118.0
+	# The window shows the texture's middle band: the horizon low in it.
+	var horizon := 135.0
 	for y in range(h):
 		for x in range(w):
 			if y > horizon + noise.get_noise_1d(x * 0.5) * 6.0:
@@ -67,16 +68,16 @@ func _view_texture(kind: String) -> ImageTexture:
 		image.set_pixelv(Vector2i(rng.randi_range(0, w - 1), rng.randi_range(0, 100)), Color(1, 1, 1) * rng.randf_range(0.4, 1.0))
 	if kind == "dish":
 		# The dish: a white bowl tipped up on its tower; the dome to the side.
-		var centre := Vector2(250.0, 70.0)
+		var centre := Vector2(250.0, 100.0)
 		for y in range(h):
 			for x in range(w):
-				var d := Vector2((x - centre.x) / 70.0, (y - centre.y) / 38.0)
-				if d.length() < 1.0 and y < centre.y + 10.0:
-					image.set_pixel(x, y, Color(0.9, 0.9, 0.88).darkened(0.25 * (1.0 - d.length())))
-				if absf(x - centre.x) < 4.0 + (y - centre.y) * 0.15 and y > centre.y and y < horizon + 4.0:
+				if absf(x - centre.x) < 4.0 + (y - centre.y) * 0.12 and y > centre.y and y < horizon + 4.0:
 					image.set_pixel(x, y, Color(0.6, 0.62, 0.65))
-				var dome := Vector2((x - 420.0) / 34.0, (y - 118.0) / 30.0)
-				if dome.length() < 1.0 and y <= 118:
+				var d := Vector2((x - centre.x) / 80.0, (y - centre.y + 6.0) / 30.0)
+				if d.length() < 1.0:
+					image.set_pixel(x, y, Color(0.92, 0.92, 0.9).darkened(0.3 * (1.0 - d.length())))
+				var dome := Vector2((x - 420.0) / 34.0, (y - 135.0) / 26.0)
+				if dome.length() < 1.0 and y <= 135:
 					image.set_pixel(x, y, Color(0.85, 0.86, 0.88) if absf(x - 420.0) > 4.0 else Color(0.05, 0.05, 0.06))
 	else:
 		# The silo field: a pale cross on the ground, dark caps, the fence's
