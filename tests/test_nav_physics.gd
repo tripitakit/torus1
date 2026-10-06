@@ -36,10 +36,10 @@ func _press(action: String) -> void:
 
 func _test_t_walks_the_targets() -> int:
 	var seen := []
-	for i in range(5):
+	for i in range(7):
 		_press("nav_target")
 		seen.append(_ship.nav_target)
-	if seen != ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE", ""]:
+	if seen != ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE", "TELESCOPE", "AREA 2", ""]:
 		print("FAIL _test_t_walks_the_targets: %s" % [seen])
 		return 1
 	return 0
@@ -66,6 +66,13 @@ func _test_points_of_the_targets() -> int:
 	if selene.is_empty() or absf(moon.altitude(selene.point) - 500.0) > 5.0 or (selene.velocity as Vector3).length() < 100.0:
 		print("FAIL _test_points_of_the_targets: Selene %s (moving with the moon as seen from the ring)" % selene)
 		result = 1
+	# The outposts: 500 m over their pads (7, 8).
+	for target in [["TELESCOPE", 7], ["AREA 2", 8]]:
+		var outpost := NavTargets.point(target[0], _ship)
+		var pad: Transform3D = moon.pad_transform(target[1])
+		if outpost.is_empty() or (outpost.point as Vector3).distance_to(pad.origin + pad.basis.y.normalized() * 500.0) > 0.01:
+			print("FAIL _test_points_of_the_targets: %s %s" % [target[0], outpost])
+			result = 1
 	_ship.nav_target = "SELENE"
 	var readout: Dictionary = _ship.nav_readout()
 	if readout.is_empty() or readout.lines.nav != "NAV  SELENE via GATE TERRA":

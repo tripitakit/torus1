@@ -8,6 +8,7 @@ extends Node3D
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const OrbitalFrame = preload("res://scripts/orbital_frame.gd")
 const MoonBase = preload("res://scripts/moon_base.gd")
+const MoonSites = preload("res://scripts/moon_sites.gd")
 const MoonTerrain = preload("res://scripts/moon_terrain.gd")
 const MoonPatch = preload("res://scripts/moon_patch.gd")
 const MoonRocks = preload("res://scripts/moon_rocks.gd")
@@ -143,6 +144,9 @@ func advance(delta: float) -> void:
 	last_step = relative_rate() * delta
 	angle += last_step
 	_place()
+	var dish := get_node_or_null("Sites/Telescope/DishTurn") as Node3D
+	if dish != null:
+		dish.rotate_object_local(Vector3.UP, TAU * delta / MoonSites.DISH_PERIOD)
 
 func _place() -> void:
 	var planet := get_node_or_null(planet_path) as Node3D
@@ -152,7 +156,7 @@ func _place() -> void:
 	# tree flushes transform notifications, and an animatable (kinematic)
 	# body only moves at the next physics step: either way a tick late, ~32 m
 	# off under a ship on a pad. A static body, told now, moves at once.
-	for body_path in ["Base", "Rocks/RockBody"]:
+	for body_path in ["Base", "Rocks/RockBody", "Sites/Telescope", "Sites/Area2"]:
 		var body := get_node_or_null(body_path) as CollisionObject3D
 		if body != null and body.is_inside_tree():
 			PhysicsServer3D.body_set_state(body.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, body.global_transform)
@@ -300,6 +304,21 @@ func build() -> void:
 	base.transform = base_local_transform()
 	MoonBase.build(base, ground_radius())
 	add_child(base)
+	# The far-side outposts (MoonSites), static bodies moved with the moon
+	# like the base.
+	var old_sites := get_node_or_null("Sites")
+	if old_sites != null:
+		remove_child(old_sites)
+		old_sites.queue_free()
+	var sites := Node3D.new()
+	sites.name = "Sites"
+	add_child(sites)
+	for site_name: String in MoonSites.SITES:
+		var body := StaticBody3D.new()
+		body.name = MoonSites.node_name(site_name)
+		body.transform = MoonSites.site_local_transform(site_name)
+		MoonSites.build(body, site_name)
+		sites.add_child(body)
 	var old_portal := get_node_or_null("Portal")
 	if old_portal != null:
 		remove_child(old_portal)
@@ -358,8 +377,28 @@ func _on_patch_rebuilt(patch: Node3D, material: ShaderMaterial, patch_material: 
 func beacon_position() -> Vector3:
 	return (get_node("Base/Beacon") as Node3D).global_position
 
-# The top centre of pad `number` (1-6), y the local up (world).
+# An outpost's frame (MoonSites): on its flat ground, y up (world).
+func site_transform(site_name: String) -> Transform3D:
+	return global_transform * MoonSites.site_local_transform(site_name)
+
+# An outpost's hatch: its middle on the ground, +Z outward (world).
+func hatch_transform(site_name: String) -> Transform3D:
+	return site_transform(site_name) * MoonSites.hatch_local(site_name)
+
+# Every pad: Base Selene's 1-6, the telescope's 7, Area 2's 8 (world).
+func all_pads() -> Array:
+	var pads := []
+	for number in range(1, 9):
+		pads.append(pad_transform(number))
+	return pads
+
+# The top centre of pad `number` (1-6 Selene's, 7 the telescope's, 8 Area
+# 2's), y the local up (world).
 func pad_transform(number: int) -> Transform3D:
+	if number == 7:
+		return site_transform("telescope") * MoonSites.pad_local("telescope")
+	if number == 8:
+		return site_transform("area2") * MoonSites.pad_local("area2")
 	var centre: Vector2 = MoonBase.pad_centres()[number - 1]
 	var ground: Transform3D = MoonBase.ground(centre.x, centre.y, ground_radius())
 	return base_transform() * Transform3D(ground.basis, ground.origin + ground.basis.y * MoonBase.PAD_HEIGHT)

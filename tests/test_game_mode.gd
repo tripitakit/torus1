@@ -51,6 +51,8 @@ func _initialize():
 	_failures += await _test_b_enters_the_base()
 	_failures += await _test_tube_ride_from_game_mode()
 	_failures += await _test_k_by_the_lift_returns_to_the_eagle()
+	_failures += await _test_h_only_on_selene_pads()
+	_failures += await _test_k_into_and_out_of_the_telescope()
 	_failures += await _test_k_from_the_rover_parks_it()
 	_failures += await _test_k_by_the_rover_drives_again()
 	_failures += await _test_k_by_the_eagle_stows_the_rover()
@@ -748,3 +750,55 @@ func _test_k_by_the_lift_returns_to_the_eagle() -> int:
 		print("FAIL _test_k_by_the_lift_returns_to_the_eagle: mode %d, pilot camera %s, parked %s, %.2f m off its place on the pad" % [_game_mode.mode, pilot.current, _void_cruiser.parked, drift])
 		return 1
 	return 0
+
+func _land_on_pad(number: int) -> void:
+	var pad: Transform3D = _moon().pad_transform(number)
+	_void_cruiser.set_physics_process(true)
+	_void_cruiser.land_at(Transform3D(pad.basis, pad.origin + pad.basis.y.normalized() * _void_cruiser.HALF_HEIGHT))
+	await physics_frame
+	await physics_frame
+
+# The outposts' pads take no one down into Selene.
+func _test_h_only_on_selene_pads() -> int:
+	await _land_on_pad(7)
+	await _frames(2)
+	if _base_label().visible or _game_mode._can_enter_base():
+		print("FAIL _test_h_only_on_selene_pads: H offered on the telescope's pad")
+		return 1
+	return 0
+
+# Down on the telescope's pad, on foot to its hatch: K AIRLOCK; K in, the
+# hatch behind; K out again, before the hatch outside.
+func _test_k_into_and_out_of_the_telescope() -> int:
+	_press("board")
+	await _wait_for_transition()
+	var walker: Node3D = _game_mode.walker()
+	if _game_mode.mode != _game_mode.Mode.ON_FOOT or walker == null:
+		print("FAIL _test_k_into_and_out_of_the_telescope: not on foot (mode %d)" % _game_mode.mode)
+		return 1
+	var hatch: Transform3D = _moon().hatch_transform("telescope")
+	var out := hatch.basis.z.normalized()
+	walker.place(hatch.origin + out * 2.0, -out)
+	await physics_frame
+	await _frames(3)
+	var prompt: String = (walker.get_node("Hud/BoardLabel").get_child(0) as Label).text
+	_press("board")
+	await _wait_for_transition()
+	var inside := _scene.get_node_or_null("OutpostInterior") as Node3D
+	var mode_inside: int = _game_mode.mode
+	var by_hatch := false
+	if inside != null:
+		by_hatch = inside.near_hatch((inside.get_node("BaseWalker") as Node3D).position)
+	_press("board")
+	await _wait_for_transition()
+	await physics_frame
+	walker = _game_mode.walker()
+	hatch = _moon().hatch_transform("telescope")
+	var outside: float = (walker.global_position - hatch.origin).dot(hatch.basis.z.normalized()) if walker != null else -1.0
+	var result := 0
+	if prompt != "K AIRLOCK" or mode_inside != _game_mode.Mode.IN_OUTPOST or not by_hatch or _game_mode.mode != _game_mode.Mode.ON_FOOT or _scene.get_node_or_null("OutpostInterior") != null or outside < 1.0 or outside > 4.0 or not walker.camera().current:
+		print("FAIL _test_k_into_and_out_of_the_telescope: prompt '%s', inside mode %d by the hatch %s, then mode %d, %.1f m out of the hatch" % [prompt, mode_inside, by_hatch, _game_mode.mode, outside])
+		result = 1
+	_game_mode.board_ship_on_foot()
+	await _land_on_pad_1()
+	return result

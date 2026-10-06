@@ -8,9 +8,9 @@ extends RefCounted
 const CockpitHudFormat = preload("res://scripts/cockpit_hud_format.gd")
 const DockingAssist = preload("res://scripts/docking_assist.gd")
 
-const TARGETS := ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE"]
+const TARGETS := ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE", "TELESCOPE", "AREA 2"]
 # Targets on the moon's side of the gates.
-const MOON_SIDE := ["GATE LUNA", "SELENE"]
+const MOON_SIDE := ["GATE LUNA", "SELENE", "TELESCOPE", "AREA 2"]
 # Arrived: this close to the point and this slow relative to it.
 const ARRIVE_DISTANCE := 5.0
 const ARRIVE_SPEED := 0.5

@@ -198,17 +198,24 @@ func _process(delta: float) -> void:
 			cockpit.update_beacon(Vector3.ZERO, 0.0, false)
 
 # The pad the landing guide points at: {number, pad (top-centre
-# transform)}, within LandingGuide.GUIDE_RANGE of the base in the moon's
-# frame; else empty.
+# transform)}: the nearest of the moon's pads (Base Selene's 1-6, the
+# outposts' 7 and 8) within LandingGuide.GUIDE_RANGE, in the moon's frame;
+# else empty.
 func landing_target() -> Dictionary:
 	var moon := moon_node()
-	if not in_moon_frame or moon == null or global_position.distance_to(moon.base_transform().origin) > LandingGuide.GUIDE_RANGE:
+	if not in_moon_frame or moon == null:
 		return {}
 	var pads := []
-	for number in range(1, 7):
-		pads.append(moon.pad_transform(number))
+	var numbers := []
+	var all: Array = moon.all_pads()
+	for k in range(all.size()):
+		if global_position.distance_to((all[k] as Transform3D).origin) <= LandingGuide.GUIDE_RANGE:
+			pads.append(all[k])
+			numbers.append(k + 1)
+	if pads.is_empty():
+		return {}
 	var index := LandingGuide.target_pad(global_position, pads)
-	return {"number": index + 1, "pad": pads[index]}
+	return {"number": numbers[index], "pad": pads[index]}
 
 # The height of the hull's bottom (as when level) over the ground, or over
 # the target pad near the base, in the moon's frame; INF elsewhere.

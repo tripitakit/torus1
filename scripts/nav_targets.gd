@@ -6,6 +6,8 @@ extends RefCounted
 #  GATE TERRA  the earth portal: GATE_STANDOFF out of its active side
 #  GATE LUNA   the moon portal, the same
 #  SELENE      the nearest of Base Selene's pads: PAD_HEIGHT over it
+#  TELESCOPE   the UltraTelescope's pad (7): PAD_HEIGHT over it
+#  AREA 2      Area 2's monitoring depot's pad (8): PAD_HEIGHT over it
 
 const MoonOrbit = preload("res://scripts/moon_orbit.gd")
 const LandingGuide = preload("res://scripts/landing_guide.gd")
@@ -41,6 +43,11 @@ static func point(target: String, ship: Node3D) -> Dictionary:
 			for number in range(1, 7):
 				pads.append(moon.pad_transform(number))
 			var pad: Transform3D = pads[LandingGuide.target_pad(ship.global_position, pads)]
+			return _on_moon(target, pad.origin + pad.basis.y.normalized() * PAD_HEIGHT, ship, moon)
+		"TELESCOPE", "AREA 2":
+			if moon == null:
+				return {}
+			var pad: Transform3D = moon.pad_transform(7 if target == "TELESCOPE" else 8)
 			return _on_moon(target, pad.origin + pad.basis.y.normalized() * PAD_HEIGHT, ship, moon)
 	return {}
 
