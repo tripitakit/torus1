@@ -382,8 +382,8 @@ func nav_readout() -> Dictionary:
 	var r := FlightComputer.readout(distance, closing, brake_acceleration())
 	return {"lines": FlightComputer.lines(nav_target, leg_name, r, autopilot), "point": target.point, "distance": distance, "leg": leg_name}
 
-# The limit for where the ship is: near Torus1 or a gate, in the moon's
-# frame, or in open space (SpeedLimit).
+# The limit for where the ship is: near Torus1 or a gate, over the moon,
+# in the moon's frame, or in open space (SpeedLimit).
 func current_speed_limit() -> float:
 	var from_ring := INF
 	if has_planet:
@@ -391,7 +391,9 @@ func current_speed_limit() -> float:
 		var section_radius: float = station.section_radius if station != null and "section_radius" in station else 2000.0
 		from_ring = SpeedLimit.ring_distance(_world_position() - planet_center, planet_axis, ring_radius, section_radius)
 	var gate := nearest_portal()
-	return SpeedLimit.limit(from_ring, gate.get("distance", INF), in_moon_frame)
+	var moon := moon_node()
+	var over_moon: float = moon.altitude(_world_position()) if moon != null and moon.is_inside_tree() else INF
+	return SpeedLimit.limit(from_ring, gate.get("distance", INF), in_moon_frame, over_moon)
 
 # Held to the speed limit; over it, braked down at the brake's strength.
 func _limit_velocity(new_velocity: Vector3, delta: float) -> Vector3:
