@@ -31,7 +31,7 @@ da cui si frena in tempo, con un terzo della frenata (`SAFE_BRAKE` = 500 m/s²):
 - Da qualunque modo: prima si torna a bordo dell'Eagle, fuori da interni, basi e avamposti (le uscite che il gioco
   ha già); poi la destinazione; il tutto dentro la dissolvenza di 0,4 s. Ignorato durante uno schianto o una
   dissolvenza.
-- Legenda in basso a destra, carattere piccolo, sempre visibile:
+- Legenda in alto a destra (sotto il riquadro del bersaglio), carattere piccolo, sempre visibile:
   `1 DOCK  2 SEZIONE  3 PIAZZOLA  4 SELENE  5 HANGAR  6 TELESCOPIO  7 AREA 2  8 AIRLOCK  9 ORBITA`.
 
 ## Test
@@ -42,3 +42,9 @@ da cui si frena in tempo, con un terzo della frenata (`SAFE_BRAKE` = 500 m/s²):
   all'anello scende a 1.000.
 - `tests/test_debug_teleport.gd`: ogni tasto porta nel modo e nel posto giusti, partendo anche da dentro una
   sezione, da Selene, a piedi e da un avamposto; la legenda c'è.
+
+## Cambiato durante l'esecuzione
+
+- **Legenda** in alto a destra: in basso a destra copriva la navball.
+- **Test della nave:** la spinta piena ora raggiunge il nuovo limite dello spazio aperto in 20 s (prima 10 s).
+- **Prova:** teletrasporto 7 sulla GPU (Eagle posata sul pad 8, legenda a schermo); test di tutti i tasti.
