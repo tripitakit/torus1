@@ -100,11 +100,13 @@ func _process(_delta: float) -> void:
 			_rover.set_board_prompt(_can_board_now())
 	elif mode == Mode.ON_FOOT:
 		if _walker != null:
+			# Before a hatch, in first: Area 2's depot is within PAD_BOARD
+			# of its pad.
 			var prompt := ""
-			if _board_target() != "":
-				prompt = "K BOARD"
-			elif _near_hatch() != "":
+			if _near_hatch() != "":
 				prompt = "K AIRLOCK"
+			elif _board_target() != "":
+				prompt = "K BOARD"
 			(_walker.get_node("Hud") as CanvasLayer).set_prompt(prompt)
 			var targets := [["SHIP", _void_cruiser]]
 			if _rover != null:
@@ -161,12 +163,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_base.call_car(door)
 		elif mode == Mode.ON_FOOT:
 			var target := _board_target()
-			if target == "ship":
+			if _near_hatch() != "":
+				_transition(enter_outpost.bind(_near_hatch()))
+			elif target == "ship":
 				_transition(board_ship_on_foot)
 			elif target == "rover":
 				_transition(board_rover_on_foot)
-			elif _near_hatch() != "":
-				_transition(enter_outpost.bind(_near_hatch()))
 		elif mode == Mode.IN_OUTPOST:
 			if _outpost.near_hatch((_outpost.get_node("BaseWalker") as Node3D).position):
 				_transition(exit_outpost)
