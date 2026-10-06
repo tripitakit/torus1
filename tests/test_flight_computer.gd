@@ -120,6 +120,8 @@ func _test_route_legs() -> int:
 		["SELENE", false, "GATE TERRA"],
 		["GATE LUNA", false, "GATE TERRA"],
 		["SELENE", true, "SELENE"],
+		["TELESCOPE", false, "GATE TERRA"],
+		["AREA 2", true, "AREA 2"],
 		["DOCK", true, "GATE LUNA"],
 		["GATE TERRA", true, "GATE LUNA"],
 		["DOCK", false, "DOCK"],
@@ -130,7 +132,7 @@ func _test_route_legs() -> int:
 		if leg != c[2]:
 			print("FAIL _test_route_legs: %s with the ship near the moon %s gave %s" % [c[0], c[1], leg])
 			return 1
-	if FlightComputer.TARGETS != ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE"] or FlightComputer.next_target("") != "DOCK" or FlightComputer.next_target("SELENE") != "" or FlightComputer.next_target("DOCK") != "GATE TERRA":
+	if FlightComputer.TARGETS != ["DOCK", "GATE TERRA", "GATE LUNA", "SELENE", "TELESCOPE", "AREA 2"] or FlightComputer.next_target("") != "DOCK" or FlightComputer.next_target("AREA 2") != "" or FlightComputer.next_target("DOCK") != "GATE TERRA":
 		print("FAIL _test_route_legs: the target list")
 		return 1
 	return 0

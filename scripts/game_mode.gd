@@ -191,7 +191,8 @@ func _can_board_now() -> bool:
 	var pad := _ship_pad()
 	return RoverRules.can_board(_rover.global_position, _rover.speed(), _void_cruiser.global_position, not pad.is_empty(), pad.get("centre", Vector3.ZERO))
 
-# The pad the landed ship sits on: {centre (its top's centre, world)}, or
+# The pad the landed ship sits on: {centre (its top's centre, world),
+# number}, or
 # empty when it sits on the bare ground.
 func _ship_pad() -> Dictionary:
 	var target: Dictionary = _void_cruiser.landing_target()
@@ -201,7 +202,7 @@ func _ship_pad() -> Dictionary:
 	var up: Vector3 = pad.basis.y.normalized()
 	var offset: Vector3 = _void_cruiser.global_position - pad.origin
 	var across: Vector3 = offset - up * offset.dot(up)
-	return {"centre": pad.origin} if across.length() < MoonBase.PAD_RADIUS * sqrt(2.0) else {}
+	return {"centre": pad.origin, "number": target.number} if across.length() < MoonBase.PAD_RADIUS * sqrt(2.0) else {}
 
 # The pad shown in the internal cruiser's HUD within this range.
 const PAD_MARKER_RANGE := 3000.0
@@ -398,7 +399,8 @@ func board_rover_on_foot() -> void:
 
 # Landed on one of Selene's pads, the pilot may go down into the base (H).
 func _can_enter_base() -> bool:
-	return _can_leave_ship_now() and not _ship_pad().is_empty()
+	var pad := _ship_pad()
+	return _can_leave_ship_now() and not pad.is_empty() and pad.number <= 6
 
 # Down the pad's lift into Selene: the whole outside world (its sky too)
 # off the tree, the ship parked on its pad; on foot in the dock.
