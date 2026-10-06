@@ -16,8 +16,12 @@ const InteriorWalkerScript = preload("res://scripts/interior_walker.gd")
 const SeleneInteriorScript = preload("res://scripts/selene_interior.gd")
 const SeleneCrew = preload("res://scripts/selene_crew.gd")
 const SeleneLayout = preload("res://scripts/selene_layout.gd")
+const OutpostInteriorScript = preload("res://scripts/outpost_interior.gd")
+const TelescopeLayout = preload("res://scripts/telescope_layout.gd")
+const DepotLayout = preload("res://scripts/depot_layout.gd")
+const MoonSites = preload("res://scripts/moon_sites.gd")
 
-enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE, IN_BASE }
+enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE, IN_BASE, IN_OUTPOST }
 
 @export var station_path: NodePath = NodePath("../PlanetSystem/TorusStation")
 @export var void_cruiser_path: NodePath = NodePath("../VoidCruiser")
@@ -48,6 +52,9 @@ var _interior: Node3D
 var _rover: CharacterBody3D
 var _walker: CharacterBody3D
 var _base: Node3D
+# Inside a far-side outpost: its building, and which site it is.
+var _outpost: Node3D
+var _outpost_site := ""
 var _detached: Array = []
 var _transitioning := false
 var _curtain: ColorRect
@@ -93,11 +100,21 @@ func _process(_delta: float) -> void:
 			_rover.set_board_prompt(_can_board_now())
 	elif mode == Mode.ON_FOOT:
 		if _walker != null:
-			_walker.set_board_prompt(_board_target() != "")
+			var prompt := ""
+			if _board_target() != "":
+				prompt = "K BOARD"
+			elif _near_hatch() != "":
+				prompt = "K AIRLOCK"
+			(_walker.get_node("Hud") as CanvasLayer).set_prompt(prompt)
 			var targets := [["SHIP", _void_cruiser]]
 			if _rover != null:
 				targets.append(["ROVER", _rover])
 			_walker.set_targets(targets)
+	elif mode == Mode.IN_OUTPOST and _outpost != null:
+		var inside := _outpost.get_node("BaseWalker") as CharacterBody3D
+		var hud := inside.get_node("Hud")
+		hud.set_prompt("K USCITA" if _outpost.near_hatch(inside.position) else "")
+		hud.set_place(_outpost.room_name(inside.position))
 	elif mode == Mode.INTERIOR and _interior:
 		var cruiser := _interior.get_node("InternalCruiser") as Node3D
 		_interior.set_undock_ready(_interior.nearest_dock_slot(cruiser.position), _can_undock_now())
@@ -148,6 +165,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				_transition(board_ship_on_foot)
 			elif target == "rover":
 				_transition(board_rover_on_foot)
+			elif _near_hatch() != "":
+				_transition(enter_outpost.bind(_near_hatch()))
+		elif mode == Mode.IN_OUTPOST:
+			if _outpost.near_hatch((_outpost.get_node("BaseWalker") as Node3D).position):
+				_transition(exit_outpost)
 		return
 	if event.is_action_pressed("base"):
 		if mode == Mode.VOID and _can_enter_base():
@@ -445,6 +467,62 @@ func exit_base() -> void:
 		pilot_camera.make_current()
 	_track(_void_cruiser)
 	mode = Mode.VOID
+
+# The outpost whose hatch the pilot on foot stands by, or "".
+const HATCH_REACH := 3.0
+
+func _near_hatch() -> String:
+	var moon: Node3D = _void_cruiser.moon_node()
+	if _walker == null or moon == null:
+		return ""
+	for site: String in MoonSites.SITES:
+		if _walker.global_position.distance_to((moon.hatch_transform(site) as Transform3D).origin) <= HATCH_REACH:
+			return site
+	return ""
+
+# In through the hatch: the outside world off the tree (the pilot on foot
+# kept where they stood), inside the airlock.
+func enter_outpost(site: String) -> void:
+	var parent := get_parent()
+	_detached.clear()
+	for child in parent.get_children():
+		if child != self:
+			_detached.append([child, child.get_index()])
+	for entry in _detached:
+		parent.remove_child(entry[0])
+	_outpost_site = site
+	_outpost = OutpostInteriorScript.new()
+	_outpost.name = "OutpostInterior"
+	_outpost.layout = TelescopeLayout if site == "telescope" else DepotLayout
+	_outpost.build()
+	var walker: CharacterBody3D = InteriorWalkerScript.new()
+	walker.name = "BaseWalker"
+	walker.flat = true
+	walker.add_to_group(OutpostInteriorScript.PEOPLE_GROUP)
+	_outpost.add_child(walker)
+	parent.add_child(_outpost)
+	var spawn: Transform3D = _outpost.spawn_transform()
+	walker.place(spawn.origin, -spawn.basis.z)
+	walker.camera().make_current()
+	(walker.get_node("Hud") as CanvasLayer).set_title("OUTPOST")
+	mode = Mode.IN_OUTPOST
+
+# Out through the hatch: the outside back, on foot before the hatch.
+func exit_outpost() -> void:
+	var parent := get_parent()
+	parent.remove_child(_outpost)
+	_outpost.free()
+	_outpost = null
+	for entry in _detached:
+		parent.add_child(entry[0])
+		parent.move_child(entry[0], entry[1])
+	_detached.clear()
+	var hatch: Transform3D = _void_cruiser.moon_node().hatch_transform(_outpost_site)
+	var out := hatch.basis.z.normalized()
+	_walker.place(hatch.origin + out * 2.5, out)
+	_walker.camera().make_current()
+	_track(_walker)
+	mode = Mode.ON_FOOT
 
 # What K does in Selene where the pilot stands: up the lift, ride the
 # Travel Tube (aboard, stopped), call it (before its door, the car away).
