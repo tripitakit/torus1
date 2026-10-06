@@ -67,6 +67,7 @@ func _ready() -> void:
 	_station = get_node(station_path)
 	_void_cruiser = get_node(void_cruiser_path)
 	_build_fade()
+	_build_debug_legend()
 	if _void_cruiser.has_signal("crashed"):
 		_void_cruiser.crashed.connect(_on_crashed)
 
@@ -100,11 +101,13 @@ func _process(_delta: float) -> void:
 			_rover.set_board_prompt(_can_board_now())
 	elif mode == Mode.ON_FOOT:
 		if _walker != null:
+			# Before a hatch, in first: Area 2's depot is within PAD_BOARD
+			# of its pad.
 			var prompt := ""
-			if _board_target() != "":
-				prompt = "K BOARD"
-			elif _near_hatch() != "":
+			if _near_hatch() != "":
 				prompt = "K AIRLOCK"
+			elif _board_target() != "":
+				prompt = "K BOARD"
 			(_walker.get_node("Hud") as CanvasLayer).set_prompt(prompt)
 			var targets := [["SHIP", _void_cruiser]]
 			if _rover != null:
@@ -140,6 +143,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _transitioning:
 		return
+	for number in range(1, 10):
+		if event.is_action_pressed("teleport_%d" % number):
+			teleport(number)
+			return
 	if event.is_action_pressed("board"):
 		if mode == Mode.VOID and _can_leave_ship_now():
 			_transition(walk_from_ship)
@@ -161,12 +168,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_base.call_car(door)
 		elif mode == Mode.ON_FOOT:
 			var target := _board_target()
-			if target == "ship":
+			if _near_hatch() != "":
+				_transition(enter_outpost.bind(_near_hatch()))
+			elif target == "ship":
 				_transition(board_ship_on_foot)
 			elif target == "rover":
 				_transition(board_rover_on_foot)
-			elif _near_hatch() != "":
-				_transition(enter_outpost.bind(_near_hatch()))
 		elif mode == Mode.IN_OUTPOST:
 			if _outpost.near_hatch((_outpost.get_node("BaseWalker") as Node3D).position):
 				_transition(exit_outpost)
@@ -536,6 +543,123 @@ func _base_prompt(point: Vector3) -> String:
 	if door != "" and stop != "" and stop != door:
 		return "K CHIAMA"
 	return ""
+
+# --- debug teleport (keys 1-9) ------------------------------------------
+
+const TELEPORT_LEGEND := "1 DOCK  2 SEZIONE  3 PIAZZOLA  4 SELENE  5 HANGAR\n6 TELESCOPIO  7 AREA 2  8 AIRLOCK  9 ORBITA"
+# Number 9: this high over Selene.
+const TELEPORT_ORBIT := 5000.0
+
+# A small legend of the teleport keys, top right under the target panel.
+func _build_debug_legend() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "DebugLegend"
+	layer.layer = 90
+	add_child(layer)
+	var label := Label.new()
+	label.name = "Label"
+	label.text = TELEPORT_LEGEND
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(0.75, 0.9, 1.0, 0.7))
+	label.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	label.offset_right = -26.0
+	label.offset_top = 92.0
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(label)
+
+# Debug: to place `number` (TELEPORT_LEGEND) from wherever the pilot is,
+# behind the fade. Ignored in a crash or a fade.
+func teleport(number: int) -> void:
+	if _crashed or _transitioning:
+		return
+	_teleport_flow(number)
+
+func _teleport_flow(number: int) -> void:
+	_transitioning = true
+	var tween := create_tween()
+	tween.tween_property(_curtain, "color:a", 1.0, FADE_TIME)
+	await tween.finished
+	back_aboard()
+	match number:
+		1:
+			_place_by_port(0)
+			_void_cruiser.in_moon_frame = false
+			_void_cruiser.is_landed = false
+			_track(_void_cruiser)
+		2:
+			enter_interior(0)
+		3:
+			enter_interior(0)
+			var cruiser := _interior.get_node("InternalCruiser") as Node3D
+			var pad: Dictionary = {}
+			for i in range(600):
+				pad = _interior.nearest_pad(cruiser.position)
+				if not pad.is_empty():
+					break
+				await get_tree().physics_frame
+			if not pad.is_empty():
+				var top: Transform3D = pad.transform
+				cruiser.transform = Transform3D(top.basis, top.origin + top.basis.y.normalized() * (cruiser.HULL_SIZE.y * 0.5))
+				cruiser.velocity = Vector3.ZERO
+				await get_tree().physics_frame
+				walk_from_cruiser()
+		4, 6, 7:
+			_land_teleport({4: 1, 6: 7, 7: 8}[number])
+		5:
+			_land_teleport(1)
+			enter_base()
+		8:
+			_land_teleport(8)
+			walk_from_ship()
+			if _walker != null:
+				var hatch: Transform3D = _void_cruiser.moon_node().hatch_transform("area2")
+				var out := hatch.basis.z.normalized()
+				_walker.place(hatch.origin + out * 2.0, -out)
+		9:
+			var moon: Node3D = _void_cruiser.moon_node()
+			var base: Transform3D = moon.base_transform()
+			var up := base.basis.y.normalized()
+			_void_cruiser.global_transform = Transform3D(Basis.looking_at(base.basis.x.normalized(), up), base.origin + up * TELEPORT_ORBIT)
+			_void_cruiser.velocity = Vector3.ZERO
+			_void_cruiser.angular_velocity = Vector3.ZERO
+			_void_cruiser.is_landed = false
+			_void_cruiser.in_moon_frame = true
+			_track(_void_cruiser)
+	tween = create_tween()
+	tween.tween_property(_curtain, "color:a", 0.0, FADE_TIME)
+	await tween.finished
+	_transitioning = false
+
+# The ship landed on the moon's pad `number`, the pilot aboard.
+func _land_teleport(number: int) -> void:
+	var pad: Transform3D = _void_cruiser.moon_node().pad_transform(number)
+	_void_cruiser.land_at(Transform3D(pad.basis, pad.origin + pad.basis.y.normalized() * _void_cruiser.HALF_HEIGHT))
+	_track(_void_cruiser)
+
+# Back aboard the void-cruiser from wherever the pilot is, by the ways out
+# the game has (out of an outpost, Selene, a section; off foot or the rover).
+func back_aboard() -> void:
+	match mode:
+		Mode.IN_OUTPOST:
+			exit_outpost()
+			board_ship_on_foot()
+		Mode.IN_BASE:
+			exit_base()
+		Mode.ON_FOOT:
+			board_ship_on_foot()
+		Mode.ROVER:
+			board_ship()
+		Mode.ON_FOOT_INSIDE:
+			board_cruiser()
+			exit_interior()
+		Mode.INTERIOR:
+			exit_interior()
+	_void_cruiser.park(false)
+	var pilot_camera := _void_cruiser.get_node_or_null("Cockpit/PilotCamera") as Camera3D
+	if pilot_camera:
+		pilot_camera.make_current()
 
 # The world origin shift follows `node`.
 func _track(node: Node3D) -> void:

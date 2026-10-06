@@ -37,24 +37,26 @@ func _initialize():
 	quit()
 
 func _test_full_thrust_stops_at_the_open_limit() -> int:
-	# 100 km above the ring, nose along the motion at 2900 m/s, full thrust
-	# for 2 s: held at 3000.
+	# 100 km above the ring (the limit there: Torus1's braking curve),
+	# nose along the motion just under it, full thrust for 2 s: held at it.
 	_ship.global_position = Vector3(0.0, 100000.0, 0.0)
 	_ship.global_transform.basis = Basis.looking_at(Vector3.RIGHT, Vector3.UP)
-	_ship.velocity = Vector3.RIGHT * 2900.0
+	var here: float = _ship.current_speed_limit()
+	_ship.velocity = Vector3.RIGHT * (here - 100.0)
 	Input.action_press("move_forward")
 	var fastest := 0.0
 	for tick in range(120):
 		await physics_frame
 		fastest = maxf(fastest, _ship.velocity.length())
 	Input.action_release("move_forward")
-	if absf(_ship.speed_limit - SpeedLimit.OPEN_LIMIT) > 0.1 or fastest > SpeedLimit.OPEN_LIMIT + 0.5 or fastest < SpeedLimit.OPEN_LIMIT - 1.0:
+	var limit: float = _ship.speed_limit
+	if limit < SpeedLimit.NEAR_LIMIT * 2.0 or fastest > limit + 0.5 or fastest < limit - 30.0:
 		print("FAIL _test_full_thrust_stops_at_the_open_limit: limit %.0f, fastest %.1f" % [_ship.speed_limit, fastest])
 		return 1
 	return 0
 
 func _test_coming_near_the_ring_brakes_down() -> int:
-	# 8 km off the ring's surface at 3000 m/s: the computer brakes to 500
+	# 8 km off the ring's surface at 3000 m/s: the computer brakes to 1000
 	# (10x the base thrust: under 2 s), showing it meanwhile.
 	_ship.global_position = Vector3(0.0, 0.0, 0.0)
 	_ship.velocity = Vector3.RIGHT * 3000.0

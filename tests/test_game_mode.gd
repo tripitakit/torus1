@@ -53,6 +53,7 @@ func _initialize():
 	_failures += await _test_k_by_the_lift_returns_to_the_eagle()
 	_failures += await _test_h_only_on_selene_pads()
 	_failures += await _test_k_into_and_out_of_the_telescope()
+	_failures += await _test_k_airlock_at_the_depot_by_its_pad()
 	_failures += await _test_k_from_the_rover_parks_it()
 	_failures += await _test_k_by_the_rover_drives_again()
 	_failures += await _test_k_by_the_eagle_stows_the_rover()
@@ -800,5 +801,32 @@ func _test_k_into_and_out_of_the_telescope() -> int:
 		print("FAIL _test_k_into_and_out_of_the_telescope: prompt '%s', inside mode %d by the hatch %s, then mode %d, %.1f m out of the hatch" % [prompt, mode_inside, by_hatch, _game_mode.mode, outside])
 		result = 1
 	_game_mode.board_ship_on_foot()
+	await _land_on_pad_1()
+	return result
+
+# Area 2's depot stands within PAD_BOARD of its pad: before its hatch K
+# still goes in (the hatch first), not back aboard.
+func _test_k_airlock_at_the_depot_by_its_pad() -> int:
+	await _land_on_pad(8)
+	_press("board")
+	await _wait_for_transition()
+	var walker: Node3D = _game_mode.walker()
+	var hatch: Transform3D = _moon().hatch_transform("area2")
+	var out := hatch.basis.z.normalized()
+	walker.place(hatch.origin + out * 2.0, -out)
+	await physics_frame
+	await _frames(3)
+	var prompt: String = (walker.get_node("Hud/BoardLabel").get_child(0) as Label).text
+	_press("board")
+	await _wait_for_transition()
+	var mode_after: int = _game_mode.mode
+	var result := 0
+	if prompt != "K AIRLOCK" or mode_after != _game_mode.Mode.IN_OUTPOST:
+		print("FAIL _test_k_airlock_at_the_depot_by_its_pad: prompt '%s', mode %d" % [prompt, mode_after])
+		result = 1
+	if mode_after == _game_mode.Mode.IN_OUTPOST:
+		_game_mode.exit_outpost()
+	if _game_mode.mode == _game_mode.Mode.ON_FOOT:
+		_game_mode.board_ship_on_foot()
 	await _land_on_pad_1()
 	return result

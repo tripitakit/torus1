@@ -93,7 +93,9 @@ Il renderer è **Compatibility** (OpenGL 3.3).
   troppo forte o inclinati.
 - **Computer di bordo**: sceglie il bersaglio (attracco, gate Terra, gate Luna, Selene), calcola la rotta a
   tappe e può arrivare da solo al punto d'ingresso.
-- **Limiti di velocità** per zona, frenata automatica.
+- **Limiti di velocità** per zona, frenata automatica: 1.000 m/s vicino a Torus1 e ai portali, 800 m/s a bassa quota
+  sulla luna, fino a 15.000 m/s sopra la luna e 50.000 m/s nello spazio; le zone lente si annunciano da lontano
+  (curve di frenata), così la nave frena sempre in tempo.
 - **HUD** a zone: croce della velocità, croce delle accelerazioni, navball, marcatori sui bersagli.
 - Visto da fuori è un'**Eagle** di Spazio 1999 (modello low poly).
 
@@ -152,6 +154,7 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 | Spazio | — | — | salto |
 | L | — | fari | — |
 | R | ripartenza dopo uno schianto | — | — |
+| 1–9 | debug: teletrasporto (1 attracco, 2 sezione, 3 piazzola, 4 Selene, 5 hangar, 6 telescopio, 7 Area 2, 8 airlock Area 2, 9 orbita bassa) | sì | sì |
 
 ## Struttura del progetto
 

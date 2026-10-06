@@ -7,6 +7,7 @@ const SpeedLimit = preload("res://scripts/speed_limit.gd")
 func _init():
 	var failures := 0
 	failures += _test_zones()
+	failures += _test_braking_curves_stop_in_time()
 	failures += _test_ring_distance()
 	failures += _test_under_the_limit_untouched()
 	failures += _test_thrust_stops_at_the_limit()
@@ -20,20 +21,50 @@ func _init():
 	quit()
 
 func _test_zones() -> int:
-	# Near Torus1 or a gate 500 m/s, in the moon's frame 800, else 3000.
+	# Near Torus1 or a gate 1000 m/s; low over the moon 800; far from all,
+	# 50000 (15000 in the moon's frame); between, the braking curves.
+	var curve := func(low: float, d: float) -> float: return sqrt(low * low + 2.0 * SpeedLimit.SAFE_BRAKE * d)
 	var cases := [
-		[5000.0, 90000.0, false, SpeedLimit.NEAR_LIMIT, 500.0],
-		[90000.0, 15000.0, false, SpeedLimit.NEAR_LIMIT, 500.0],
-		[90000.0, 90000.0, true, SpeedLimit.MOON_LIMIT, 800.0],
-		[90000.0, 90000.0, false, SpeedLimit.OPEN_LIMIT, 3000.0],
-		# A gate near the moon (the moon portal): the slower wins.
-		[INF, 10000.0, true, SpeedLimit.NEAR_LIMIT, 500.0],
+		[5000.0, INF, false, INF, 1000.0],
+		[INF, 15000.0, false, INF, 1000.0],
+		[INF, INF, true, 1000.0, 800.0],
+		[INF, INF, true, 30000.0, curve.call(800.0, 28000.0)],
+		[INF, INF, true, 400000.0, 15000.0],
+		[INF, INF, false, INF, 50000.0],
+		[120000.0, INF, false, INF, curve.call(1000.0, 100000.0)],
+		[INF, INF, false, 50000.0, curve.call(800.0, 48000.0)],
+		# The moon's gate low over the moon: the slower wins.
+		[INF, 10000.0, true, 1500.0, 800.0],
 	]
+	if SpeedLimit.NEAR_LIMIT != 1000.0 or SpeedLimit.MOON_LOW != 800.0 or SpeedLimit.MOON_TOP != 15000.0 or SpeedLimit.OPEN_LIMIT != 50000.0:
+		print("FAIL _test_zones: the limits")
+		return 1
 	for c in cases:
-		var limit := SpeedLimit.limit(c[0], c[1], c[2])
-		if limit != c[3] or c[3] != c[4]:
-			print("FAIL _test_zones: ring %.0f, gate %.0f, moon %s gave %.0f" % [c[0], c[1], c[2], limit])
+		var limit := SpeedLimit.limit(c[0], c[1], c[2], c[3])
+		if absf(limit - c[4]) > 0.01:
+			print("FAIL _test_zones: ring %.0f, gate %.0f, moon frame %s, altitude %.0f gave %.0f, expected %.0f" % [c[0], c[1], c[2], c[3], limit, c[4]])
 			return 1
+	return 0
+
+# Diving at the limit with the brake (1500 m/s2) holding the ship to it:
+# low over the moon no faster than 800, at Torus1's zone no faster than 1000.
+func _test_braking_curves_stop_in_time() -> int:
+	var dt := 1.0 / 60.0
+	var h := 400000.0
+	var v := SpeedLimit.limit(INF, INF, true, h)
+	while h > SpeedLimit.MOON_LOW_ALTITUDE:
+		var before := v
+		v = SpeedLimit.cap(Vector3(v, 0.0, 0.0), before, SpeedLimit.limit(INF, INF, true, h), 1500.0, dt).x
+		h -= v * dt
+	var d := 2.0e6
+	var w := SpeedLimit.limit(d, INF, false, INF)
+	while d > SpeedLimit.NEAR_RANGE:
+		var before := w
+		w = SpeedLimit.cap(Vector3(w, 0.0, 0.0), before, SpeedLimit.limit(d, INF, false, INF), 1500.0, dt).x
+		d -= w * dt
+	if v > SpeedLimit.MOON_LOW + 30.0 or w > SpeedLimit.NEAR_LIMIT + 30.0:
+		print("FAIL _test_braking_curves_stop_in_time: %.0f m/s at 2 km over the moon, %.0f m/s into Torus1's zone" % [v, w])
+		return 1
 	return 0
 
 func _test_ring_distance() -> int:

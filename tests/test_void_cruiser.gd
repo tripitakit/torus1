@@ -652,20 +652,20 @@ func _test_speed_does_not_fade_but_spin_does() -> int:
 
 func _test_ramp_without_drag_stops_at_the_speed_limit() -> int:
 	# 150 m/s^2 ramped from 1x toward 10x over the first 5 s, nothing to slow
-	# it: 150 * (1 + 2.8) / 2 = 285 m/s after 1 s. By 10 s the open-space
-	# speed limit (3000 m/s) holds it there.
+	# it: 150 * (1 + 2.8) / 2 = 285 m/s after 1 s. By 20 s the open-space
+	# speed limit (50000 m/s) holds it there.
 	var cruiser: Node3D = VoidCruiserScript.new()
 	Input.action_press("move_forward")
 	for i in range(60):
 		cruiser._physics_process(1.0 / 60.0)
 	var at_one: float = cruiser.velocity.length()
-	for i in range(540):
+	for i in range(1140):
 		cruiser._physics_process(1.0 / 60.0)
 	Input.action_release("move_forward")
 	var result := 0
 	var speed: float = cruiser.velocity.length()
 	if absf(at_one - 285.0) > 10.0 or absf(speed - SpeedLimit.OPEN_LIMIT) > 0.5 or cruiser.velocity.z >= 0.0:
-		print("FAIL _test_ramp_without_drag_stops_at_the_speed_limit: %.0f m/s at 1 s, velocity %s (speed %.0f) at 10 s" % [at_one, cruiser.velocity, speed])
+		print("FAIL _test_ramp_without_drag_stops_at_the_speed_limit: %.0f m/s at 1 s, velocity %s (speed %.0f) at 20 s" % [at_one, cruiser.velocity, speed])
 		result = 1
 	cruiser.free()
 	return result
