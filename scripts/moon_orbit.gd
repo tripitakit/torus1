@@ -23,6 +23,12 @@ const START_ANGLE := 13.0 * PI / 18.0  # 130 degrees
 # (longitude 0 under the planet, the moon's local -X; east +Z; north +Y).
 const BASE_LATITUDE := 51.6
 const BASE_LONGITUDE := -9.4
+# The far-side outposts: latitude, longitude, flat ground within `flat` m,
+# blended into the natural ground by `blend` m (as round Base Selene).
+const OUTPOSTS := {
+	"telescope": {"latitude": 27.0, "longitude": 147.0, "flat": 350.0, "blend": 900.0},
+	"area2": {"latitude": -20.0, "longitude": 129.0, "flat": 450.0, "blend": 1200.0},
+}
 # Base Selene's HUD marker shows only this close to the moon's centre: the
 # moon about 6 degrees wide, Torus1 (about 13,000 km off) well outside.
 const MARKER_RANGE := 5.0e6

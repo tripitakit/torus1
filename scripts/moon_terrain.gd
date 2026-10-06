@@ -33,11 +33,30 @@ const BLEND_RADIUS := 2500.0
 
 static var _bytes := PackedByteArray()
 static var _base_height := NAN
+# Base Selene and the outposts: {name, direction, flat, blend, height,
+# reach (cosine of the blend's angle: a quick test before any acos)}.
+static var _flats: Array = []
 
 static func load_heights() -> void:
 	if _bytes.is_empty():
 		_bytes = FileAccess.get_file_as_bytes(HEIGHTS_PATH)
 		_base_height = nasa_height(MoonOrbit.base_direction())
+		var flats := [_flat("selene", MoonOrbit.base_direction(), FLAT_RADIUS, BLEND_RADIUS)]
+		for name: String in MoonOrbit.OUTPOSTS:
+			var site: Dictionary = MoonOrbit.OUTPOSTS[name]
+			flats.append(_flat(name, MoonOrbit.direction_of(site.latitude, site.longitude), site.flat, site.blend))
+		_flats = flats
+
+static func _flat(name: String, direction: Vector3, flat: float, blend: float) -> Dictionary:
+	return {"name": name, "direction": direction, "flat": flat, "blend": blend, "height": nasa_height(direction), "reach": cos(blend / MoonOrbit.RADIUS)}
+
+# The flat ground's height at a site ("selene", or an outpost's name).
+static func site_height(name: String) -> float:
+	load_heights()
+	for site: Dictionary in _flats:
+		if site.name == name:
+			return site.height
+	return NAN
 
 # The ground's height at `direction` (unit, moon axes); `detail` 0..1 scales
 # the small craters (0: NASA's map only); craters of a size class whose
@@ -46,14 +65,20 @@ static func load_heights() -> void:
 # `fine_weight` times (a patch ring fading out what the next one leaves out).
 static func height(direction: Vector3, detail := 1.0, smallest := 0.0, fine_below := 0.0, fine_weight := 1.0) -> float:
 	load_heights()
-	var from_base := MoonOrbit.RADIUS * acos(clampf(direction.dot(MoonOrbit.base_direction()), -1.0, 1.0))
-	if from_base < FLAT_RADIUS:
-		return _base_height
+	for site: Dictionary in _flats:
+		var along := direction.dot(site.direction)
+		if along < site.reach:
+			continue
+		var from := MoonOrbit.RADIUS * acos(clampf(along, -1.0, 1.0))
+		if from < site.flat:
+			return site.height
+		return lerpf(site.height, _natural(direction, detail, smallest, fine_below, fine_weight), smoothstep(site.flat, site.blend, from))
+	return _natural(direction, detail, smallest, fine_below, fine_weight)
+
+static func _natural(direction: Vector3, detail: float, smallest: float, fine_below: float, fine_weight: float) -> float:
 	var natural := nasa_height(direction)
 	if detail > 0.0:
 		natural += crater_height(direction, smallest, fine_below, fine_weight) * detail
-	if from_base < BLEND_RADIUS:
-		return lerpf(_base_height, natural, smoothstep(FLAT_RADIUS, BLEND_RADIUS, from_base))
 	return natural
 
 # The flat ground's height under the base.

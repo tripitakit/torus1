@@ -30,7 +30,8 @@ const RIM_BOOST := 3.0
 const HASH_OCTAVE := 10
 
 # How much likelier a stone is at `direction` (moon axes, unit) than on
-# plain ground: 0 at the base, up to 1 + RIM_BOOST on crater rims.
+# plain ground: 0 at the base and on the outposts' flat ground, up to
+# 1 + RIM_BOOST on crater rims.
 static func density(direction: Vector3) -> float:
 	var from_base := MoonOrbit.RADIUS * acos(clampf(direction.dot(MoonOrbit.base_direction()), -1.0, 1.0))
 	if from_base < NONE_WITHIN:
@@ -38,6 +39,16 @@ static func density(direction: Vector3) -> float:
 	var share := SPARSE
 	if from_base >= SPARSE_WITHIN:
 		share = lerpf(SPARSE, 1.0, smoothstep(SPARSE_WITHIN, FULL_FROM, from_base))
+	# None on the outposts' flat ground, fewer on its blend.
+	for name: String in MoonOrbit.OUTPOSTS:
+		var site: Dictionary = MoonOrbit.OUTPOSTS[name]
+		var along := direction.dot(MoonOrbit.direction_of(site.latitude, site.longitude))
+		if along < cos(site.blend / MoonOrbit.RADIUS):
+			continue
+		var from := MoonOrbit.RADIUS * acos(clampf(along, -1.0, 1.0))
+		if from < site.flat:
+			return 0.0
+		share = minf(share, lerpf(SPARSE, 1.0, smoothstep(site.flat, site.blend, from)))
 	return share * (1.0 + clampf(MoonTerrain.crater_height(direction), 0.0, RIM_BOOST))
 
 # The stones of size `kind` in the cells over the face plane's rectangle
