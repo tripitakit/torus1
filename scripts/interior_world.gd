@@ -9,6 +9,7 @@ extends Node3D
 const InteriorLayout = preload("res://scripts/interior_layout.gd")
 const SectionGeneratorScript = preload("res://scripts/section_generator.gd")
 const TerrainDressingScript = preload("res://scripts/terrain_dressing.gd")
+const NearTreesScript = preload("res://scripts/near_trees.gd")
 const DockPadTexture = preload("res://scripts/dock_pad_texture.gd")
 const Clock = preload("res://scripts/interior_clock.gd")
 const RoadTraffic = preload("res://scripts/road_traffic.gd")
@@ -269,6 +270,10 @@ var _ambient_env: Environment
 var _ambient_energy := 0.0
 
 func build() -> void:
+	# Quaternius' trees round the camera (the simple shapes beyond).
+	var near_trees: Node3D = NearTreesScript.new()
+	near_trees.name = "NearTrees"
+	add_child(near_trees)
 	_tube_material = _panel_material(TUBE_TEXTURE_DIR)
 	_cap_material = _panel_material(CAP_TEXTURE_DIR)
 	_sun_mesh = SphereMesh.new()

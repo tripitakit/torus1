@@ -5,6 +5,8 @@ const SectionPlan = preload("res://scripts/section_plan.gd")
 const TerrainDressing = preload("res://scripts/terrain_dressing.gd")
 const BuildingShapes = preload("res://scripts/building_shapes.gd")
 const TreeShapes = preload("res://scripts/tree_shapes.gd")
+const NearTrees = preload("res://scripts/near_trees.gd")
+const TreeModels = preload("res://scripts/tree_models.gd")
 
 const RADIUS := 2000.0
 
@@ -30,6 +32,7 @@ func _init():
 	failures += _test_forest_density()
 	failures += _test_trees_are_deterministic_and_built_on_workers()
 	failures += _test_tree_nodes()
+	failures += _test_trees_handed_to_near_trees()
 	failures += _test_water_only_where_the_plan_has_lakes()
 	failures += _test_road_colours_where_the_plan_has_roads()
 	failures += _test_building_transform_stands_on_the_wall_facing_the_axis()
@@ -936,4 +939,21 @@ func _test_released_chunks_drop_only_the_shapes_nobody_uses() -> int:
 		result = 1
 	first.free()
 	second.free()
+	return result
+
+# A forest chunk's trees are handed to NearTrees (Quaternius' models near the
+# camera), and the simple shapes stand aside within TreeModels.DETAIL.
+func _test_trees_handed_to_near_trees() -> int:
+	var key := _forest_chunk()
+	var trees := _trees(key)
+	var chunk := _dress(key)
+	var group := chunk.get_node("Trees") as Node3D
+	var result := 0
+	if not group.is_in_group(NearTrees.GROUP) or group.get_meta("near_conifers") != trees[0] or group.get_meta("near_broadleaves") != trees[1] or not is_equal_approx(group.get_meta("near_radius"), _plan.radius):
+		print("FAIL _test_trees_handed_to_near_trees: not registered")
+		result = 1
+	if not is_equal_approx(_dressing.tree_material.get_shader_parameter("detail_from"), TreeModels.DETAIL):
+		print("FAIL _test_trees_handed_to_near_trees: the simple shapes' cut at %s" % _dressing.tree_material.get_shader_parameter("detail_from"))
+		result = 1
+	chunk.free()
 	return result
