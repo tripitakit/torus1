@@ -46,12 +46,12 @@ static func select(buffer: PackedFloat32Array, conifer: bool, camera: Vector3, r
 		var origin := Vector3(buffer[b + 3], buffer[b + 7], buffer[b + 11])
 		if origin.distance_to(camera) > reach:
 			continue
-		var height := radius + TREE_SINK - Vector2(origin.x, origin.y).length()
 		var by := Vector3(buffer[b + 1], buffer[b + 5], buffer[b + 9])
 		var tall := by.length()
 		var side := Vector3(buffer[b], buffer[b + 4], buffer[b + 8]).normalized() * tall
 		var front := Vector3(buffer[b + 2], buffer[b + 6], buffer[b + 10]).normalized() * tall
-		var variant := TreeModels.variant_for(origin, conifer, height)
+		# The chunk's own pick (its impostor shows the same).
+		var variant := roundi(buffer[b + 12] * 32.0)
 		var part: PackedFloat32Array = parts[variant]
 		part.append_array(PackedFloat32Array([side.x, by.x, front.x, origin.x, side.y, by.y, front.y, origin.y, side.z, by.z, front.z, origin.z]))
 		parts[variant] = part

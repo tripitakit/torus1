@@ -616,16 +616,16 @@ func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
 	var group := Node3D.new()
 	group.name = "Trees"
 	var bounds := _chunk_bounds(plan, trees[2])
-	for part in [["Conifers", trees[0], conifer_mesh, far_conifer_mesh], ["Broadleaves", trees[1], broadleaf_mesh, far_broadleaf_mesh]]:
+	# Quaternius' trees as impostors at any distance; within TreeModels.DETAIL
+	# NearTrees draws the models themselves (the impostors make way).
+	for part in [["Conifers", trees[0]], ["Broadleaves", trees[1]]]:
 		var buffer: PackedFloat32Array = part[1]
 		if buffer.is_empty():
 			continue
-		var near := _tree_instance(part[0], part[2], buffer, bounds)
-		near.visibility_range_end = TREE_NEAR_END
-		group.add_child(near)
-		var far := _tree_instance(part[0] + "Far", part[3], buffer, bounds)
-		far.visibility_range_begin = TREE_NEAR_END
-		group.add_child(far)
+		group.add_child(_tree_instance(part[0], TreeModels.impostor_mesh(), buffer, bounds, TreeModels.impostor_material()))
+		# Past TreeModels.IMPOSTOR_FAR, simple shapes in the variant's colour.
+		var far_mesh: ArrayMesh = far_conifer_mesh if part[0] == "Conifers" else far_broadleaf_mesh
+		group.add_child(_tree_instance(part[0] + "Far", far_mesh, buffer, bounds, TreeModels.far_material()))
 	if group.get_child_count() > 0:
 		NearTrees.register(group, trees[0], trees[1], plan.radius, bounds)
 		chunk.add_child(group)
@@ -633,7 +633,7 @@ func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
 		group.free()
 
 @warning_ignore("integer_division")
-func _tree_instance(node_name: String, mesh: ArrayMesh, buffer: PackedFloat32Array, bounds: AABB) -> MultiMeshInstance3D:
+func _tree_instance(node_name: String, mesh: ArrayMesh, buffer: PackedFloat32Array, bounds: AABB, material: Material) -> MultiMeshInstance3D:
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_colors = true
@@ -643,7 +643,7 @@ func _tree_instance(node_name: String, mesh: ArrayMesh, buffer: PackedFloat32Arr
 	var node := MultiMeshInstance3D.new()
 	node.name = node_name
 	node.multimesh = multimesh
-	node.material_override = tree_material
+	node.material_override = material
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.custom_aabb = bounds
 	return node
@@ -694,21 +694,20 @@ static func tree_buffers(plan, chunk_around: int, chunk_along: int) -> Array:
 						continue
 					var conifer: bool = float((bits >> 21) & 127) / 128.0 < lerpf(LOW_CONIFER_SHARE, 1.0, smoothstep(CONIFERS_FROM, CONIFERS_ONLY, h))
 					var tree_height: float = lerpf(TREE_HEIGHTS.x, TREE_HEIGHTS.y, float((bits >> 28) & 127) / 128.0)
-					var width: float = tree_height * lerpf(TREE_WIDTHS.x, TREE_WIDTHS.y, float((bits >> 35) & 127) / 128.0)
 					var yaw: float = TAU * float((bits >> 42) & 127) / 128.0
 					var shade: float = lerpf(0.8, 1.15, float((bits >> 49) & 127) / 128.0)
 					var angle: float = (x - chunk_start.x) / radius
 					var up := Vector3(-cos(angle), -sin(angle), 0.0)
 					var side: Vector3 = Vector3(-sin(angle), cos(angle), 0.0) * cos(yaw) + Vector3(0.0, 0.0, sin(yaw))
 					var front: Vector3 = side.cross(up)
-					# The unit meshes' crowns are narrower than 1 across: scale so
-					# the crown really is `width` wide.
-					var across: float = width / (TreeShapesScript.CONIFER_WIDTH if conifer else TreeShapesScript.BROADLEAF_WIDTH)
-					var bx: Vector3 = side * across
+					# Scaled evenly: Quaternius' models keep their own proportions.
+					var bx: Vector3 = side * tree_height
 					var by: Vector3 = up * tree_height
-					var bz: Vector3 = front * across
+					var bz: Vector3 = front * tree_height
 					var origin: Vector3 = -up * (radius - h + TREE_SINK) + Vector3(0.0, 0.0, z - chunk_start.y)
-					var green: Color = (CONIFER_GREEN if conifer else BROADLEAF_GREEN) * shade
+					# The variant in the colour's red, the shade in its green.
+					var variant := TreeModels.variant_from(hash(bits), conifer, h)
+					var green := Color(variant / 32.0, shade, 0.0, 1.0)
 					var data := PackedFloat32Array([bx.x, by.x, bz.x, origin.x, bx.y, by.y, bz.y, origin.y, bx.z, by.z, bz.z, origin.z, green.r, green.g, green.b, 1.0])
 					if conifer:
 						conifers.append_array(data)
