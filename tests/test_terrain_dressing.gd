@@ -541,12 +541,16 @@ func _tree_origin(buffer: PackedFloat32Array, i: int) -> Vector3:
 func _tree_up(buffer: PackedFloat32Array, i: int) -> Vector3:
 	return Vector3(buffer[i * 16 + 1], buffer[i * 16 + 5], buffer[i * 16 + 9])
 
-# How wide a tree's crown really is, as a share of its height: the side
-# column's scale times the mesh's own crown width.
-func _crown_share(buffer: PackedFloat32Array, i: int, kind: int) -> float:
-	var side := Vector3(buffer[i * 16], buffer[i * 16 + 4], buffer[i * 16 + 8])
-	var mesh_width: float = TreeShapes.CONIFER_WIDTH if kind == 0 else TreeShapes.BROADLEAF_WIDTH
-	return side.length() * mesh_width / _tree_up(buffer, i).length()
+# Conifers are pines (0-4); broadleaves birches, maples, normals (5-19), or
+# dead (20-24) near the treeline only.
+func _variant_fits(variant: int, kind: int, h: float) -> bool:
+	if kind == 0:
+		return variant >= 0 and variant < 5
+	return (variant >= 5 and variant < 20) or (variant >= 20 and variant < 25 and h > TreeModels.DEAD_FROM)
+
+# A tree's basis column (0 side, 1 up, 2 front).
+func _column(buffer: PackedFloat32Array, i: int, k: int) -> Vector3:
+	return Vector3(buffer[i * 16 + k], buffer[i * 16 + 4 + k], buffer[i * 16 + 8 + k])
 
 func _test_trees_stand_on_raised_ground_below_the_treeline() -> int:
 	var checked := 0
@@ -573,8 +577,10 @@ func _test_trees_stand_on_raised_ground_below_the_treeline() -> int:
 					problem = "a broadleaf above 450 m"
 				elif up.length() < 10.0 - 0.001 or up.length() > 25.0 + 0.001 or up.dot(Vector3(-origin.x, -origin.y, 0.0)) <= 0.0:
 					problem = "wrong height or not upright"
-				elif _crown_share(buffer, i, kind) < 0.35 - 0.001 or _crown_share(buffer, i, kind) > 0.5 + 0.001:
-					problem = "crown %.2f of its height across" % _crown_share(buffer, i, kind)
+				elif absf(_column(buffer, i, 0).length() - up.length()) > 0.01 or absf(_column(buffer, i, 2).length() - up.length()) > 0.01:
+					problem = "not scaled evenly (the model keeps its own proportions)"
+				elif not _variant_fits(roundi(buffer[i * 16 + 12] * 32.0), kind, h):
+					problem = "variant %d in its colour for a %s at %.0f m" % [roundi(buffer[i * 16 + 12] * 32.0), "conifer" if kind == 0 else "broadleaf", h]
 				if problem != "":
 					print("FAIL _test_trees_stand_on_raised_ground_below_the_treeline: chunk %s tree at %s (%.0f m) %s" % [key, at, h, problem])
 					return 1
@@ -658,21 +664,16 @@ func _test_tree_nodes() -> int:
 			continue
 		var angle: float = 1.5 * _plan.lot_width / RADIUS
 		var top: Vector3 = Vector3(cos(angle), sin(angle), 0.0) * (RADIUS - float(trees[2]) + 1.0) + Vector3(0.0, 0.0, 500.0)
-		# Instance colours carry the crown green (custom data showed red and
-		# blue crowns in the compatibility renderer).
-		if node == null or not node.multimesh.use_colors or node.multimesh.use_custom_data or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != TerrainDressing.TREE_NEAR_END or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
+		# One impostor each (Quaternius' trees seen from afar), at any
+		# distance; the variant in the instance colour (custom data showed
+		# red and blue in the compatibility renderer).
+		if node == null or not node.multimesh.use_colors or node.multimesh.use_custom_data or node.multimesh.instance_count != buffer.size() / 16 or node.visibility_range_end != 0.0 or node.multimesh.mesh != TreeModels.impostor_mesh() or node.material_override != TreeModels.impostor_material() or node.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or not node.custom_aabb.has_point(top):
 			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % names[kind])
 			result = 1
-	# Far versions of the same trees, drawn from where the near ones stop,
-	# with no far limit: no tree ever appears out of nothing.
-	var far_names := ["ConifersFar", "BroadleavesFar"]
-	for kind in range(2):
-		var buffer: PackedFloat32Array = trees[kind]
-		if buffer.is_empty():
-			continue
-		var far := group.get_node_or_null(far_names[kind]) as MultiMeshInstance3D
-		if far == null or far.multimesh.instance_count != buffer.size() / 16 or far.visibility_range_begin != TerrainDressing.TREE_NEAR_END or far.visibility_range_end != 0.0 or far.multimesh.mesh.get_faces().size() > 8 * 3 or not far.multimesh.use_colors:
-			print("FAIL _test_tree_nodes: %s missing or wrongly set up" % far_names[kind])
+		# Past IMPOSTOR_FAR, the simple far shapes in the variant's colour.
+		var far := group.get_node_or_null(names[kind] + "Far") as MultiMeshInstance3D
+		if far == null or far.multimesh.instance_count != buffer.size() / 16 or far.material_override != TreeModels.far_material() or far.multimesh.mesh.get_faces().size() > 8 * 3 or far.visibility_range_end != 0.0:
+			print("FAIL _test_tree_nodes: %sFar missing or wrongly set up" % names[kind])
 			result = 1
 	chunk.free()
 	# A chunk with no raised lot has no trees.
