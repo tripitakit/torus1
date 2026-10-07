@@ -46,3 +46,21 @@ Quaternius (CC0, poly.pizza) al posto delle forme a tornio generate.
 - **Colori:** sono quelli delle texture di Quaternius: aceri autunnali (rossi, arancio), betulle gialle, alberi
   "normali" verde acceso, pini verde chiaro.
 - **Prova GPU:** sorvolo di un bosco a 30 m dal cruiser interno.
+
+## Dopo la prova dell'utente: impostori
+
+L'utente ha visto il confine fra modelli e forme semplici (metà collina di un tipo e metà dell'altro, un confine
+che segue la camera, alberi che spuntano). Ora:
+
+- **Impostori** cotti una volta sulla GPU (`tools/bake_tree_impostors.gd`) dagli stessi modelli: vista di lato e
+  dall'alto di ogni variante, senza luce, in due atlanti 5 × 5 (`assets/trees/impostors_side.png`, `..._top.png`),
+  i pixel trasparenti col colore medio della variante (salvato in `impostors.json`). Ogni albero lontano è due
+  pannelli incrociati e uno orizzontale (6 triangoli) con la sua variante (scritta nel colore dell'istanza dai pezzi
+  di terreno; `NearTrees` la legge da lì: vicino e lontano coincidono).
+- **Passaggi sfumati** pixel per pixel (retinatura dipendente dalla distanza, pixel complementari): modelli →
+  impostori negli ultimi 50 m prima di `DETAIL`; impostori → sagome lontane colorate come la variante negli
+  ultimi 300 m prima di 3 km.
+- **`DETAIL` a 250 m:** volando bassi radenti sul bosco, a 350 m si scendeva a 30 FPS (vsync); a 250 m 60.
+- **Luce degli impostori:** normale verso l'alto dell'albero su entrambe le facce (visti da dietro erano scuri).
+- **Prova GPU:** avvicinamento a un bosco da 1,5 km a 120 m senza confini visibili; a 1,5 km 46 FPS come su master
+  (44,5), non un peggioramento.

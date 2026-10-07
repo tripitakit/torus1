@@ -117,9 +117,9 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 - **Barche** sui laghi con la loro scia, **moli** con persone, carrelli e droni, **pedoni** in città.
 - Le persone vicine (entro 80 m) sono un umano low poly che **cammina** con il passo giusto per la sua velocità;
   più lontano restano sagome semplici. Nelle cabine degli ascensori stanno in piedi, ferme.
-- Nei boschi, entro 350 m dalla camera, gli alberi sono i modelli low poly di Quaternius (pini in quota,
-  aceri, betulle e altre latifoglie più in basso, qualche albero secco vicino al limite del bosco); più lontano
-  restano le forme semplici.
+- Nei boschi gli alberi sono i modelli low poly di Quaternius (pini in quota, aceri, betulle e altre latifoglie
+  più in basso, qualche albero secco vicino al limite del bosco): entro 250 m i modelli veri, più lontano i loro
+  impostori (immagini degli stessi alberi), oltre 3 km piccole sagome del loro colore; i passaggi sono sfumati.
 - Le sezioni vicine si caricano e si scaricano mentre si vola lungo l'anello.
 - In ogni paese e in ogni città c'è una **piazzola d'atterraggio**; l'HUD del cruiser indica la più vicina
   (`PAD`) e, sopra di essa e quasi fermi, propone `K LAND`: il cruiser si posa da solo.
