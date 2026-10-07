@@ -12,7 +12,7 @@ const PATH := "res://assets/trees/%s.glb"
 # Broadleaves near the treeline: this share of them dead, from this height.
 const DEAD_SHARE := 0.05
 const DEAD_FROM := 450.0
-const DETAIL := 500.0
+const DETAIL := 350.0
 
 const BARK_SHADER := """
 shader_type spatial;
@@ -27,6 +27,9 @@ void vertex() {
 	}
 }
 void fragment() {
+	if (!FRONT_FACING) {
+		NORMAL = -NORMAL;
+	}
 	ALBEDO = texture(albedo_tex, UV).rgb;
 	ROUGHNESS = 0.9;
 }
@@ -45,6 +48,10 @@ void vertex() {
 	}
 }
 void fragment() {
+	// Seen from behind, a leaf is lit as from in front.
+	if (!FRONT_FACING) {
+		NORMAL = -NORMAL;
+	}
 	vec4 c = texture(albedo_tex, UV);
 	ALBEDO = c.rgb;
 	ALPHA = c.a;

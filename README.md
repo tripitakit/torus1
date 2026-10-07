@@ -117,6 +117,9 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 - **Barche** sui laghi con la loro scia, **moli** con persone, carrelli e droni, **pedoni** in città.
 - Le persone vicine (entro 80 m) sono un umano low poly che **cammina** con il passo giusto per la sua velocità;
   più lontano restano sagome semplici. Nelle cabine degli ascensori stanno in piedi, ferme.
+- Nei boschi, entro 350 m dalla camera, gli alberi sono i modelli low poly di Quaternius (pini in quota,
+  aceri, betulle e altre latifoglie più in basso, qualche albero secco vicino al limite del bosco); più lontano
+  restano le forme semplici.
 - Le sezioni vicine si caricano e si scaricano mentre si vola lungo l'anello.
 - In ogni paese e in ogni città c'è una **piazzola d'atterraggio**; l'HUD del cruiser indica la più vicina
   (`PAD`) e, sopra di essa e quasi fermi, propone `K LAND`: il cruiser si posa da solo.
@@ -186,4 +189,6 @@ scena intera e richiedono un minuto o più.
 - Mappe della Terra e della Luna: NASA (Visible Earth, Blue Marble, Black Marble, SVS CGI Moon Kit — LRO e
   LOLA), GEBCO. Pubblico dominio.
 - Persone: "Animated Human" di [Quaternius](https://quaternius.com), CC0 (pubblico dominio).
+- Alberi vicini: pini, betulle, aceri, alberi "normali" e secchi di [Quaternius](https://quaternius.com) da
+  [Poly Pizza](https://poly.pizza), CC0 (pubblico dominio).
 - Eagle, Moon Buggy e Base Alpha sono omaggi alla serie *Spazio 1999*.

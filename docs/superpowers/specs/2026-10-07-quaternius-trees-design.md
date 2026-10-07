@@ -37,3 +37,12 @@ Quaternius (CC0, poly.pizza) al posto delle forme a tornio generate.
   stesse trasformazioni; il gestore costruisce i MultiMesh nei pezzi vicini.
 - `tests/test_interior_world.gd` (toccato): lo shader delle forme semplici ha il taglio a `TREE_DETAIL`.
 - Prova GPU: un bosco da terra e dal cruiser, FPS.
+
+## Cambiato durante l'esecuzione
+
+- **Distanza 350 m invece di 500:** sopra un bosco fitto, a 500 m 2.709 alberi dettagliati davano 40 FPS; a 350 m
+  1.712 alberi, 60 FPS (vsync). Una costante (`TreeModels.DETAIL`), il taglio delle forme semplici la segue.
+- **Foglie viste da dietro:** lo shader gira la normale delle facce posteriori (prima macchie nere fra le foglie).
+- **Colori:** sono quelli delle texture di Quaternius: aceri autunnali (rossi, arancio), betulle gialle, alberi
+  "normali" verde acceso, pini verde chiaro.
+- **Prova GPU:** sorvolo di un bosco a 30 m dal cruiser interno.
