@@ -10,6 +10,8 @@ extends RefCounted
 const SectionPlanScript = preload("res://scripts/section_plan.gd")
 const BuildingShapesScript = preload("res://scripts/building_shapes.gd")
 const TreeShapesScript = preload("res://scripts/tree_shapes.gd")
+const TreeModels = preload("res://scripts/tree_models.gd")
+const NearTrees = preload("res://scripts/near_trees.gd")
 
 const CROP_COLORS := [
 	Color(0.85, 0.72, 0.3),   # wheat
@@ -189,6 +191,15 @@ const TREE_SHADER := """
 shader_type spatial;
 
 uniform vec3 trunk_color : source_color = vec3(0.36, 0.25, 0.16);
+// Within this of the camera NearTrees draws Quaternius' models instead.
+uniform float detail_from = 0.0;
+
+void vertex() {
+	vec3 origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	if (distance(origin, INV_VIEW_MATRIX[3].xyz) < detail_from) {
+		VERTEX = vec3(0.0);
+	}
+}
 
 // COLOR is the vertex colour times the instance's: the crown (white, alpha
 // 1) takes the tree's green; the trunk (alpha 0) stays trunk_color.
@@ -467,6 +478,7 @@ func _init() -> void:
 	tree_material = ShaderMaterial.new()
 	tree_material.shader = tree_shader
 	tree_material.set_shader_parameter("trunk_color", TRUNK_COLOR)
+	tree_material.set_shader_parameter("detail_from", TreeModels.DETAIL)
 
 # `ground` is build_ground's result for this chunk, when a worker thread made
 # it already; empty, it is built here.
@@ -615,6 +627,7 @@ func _add_trees(chunk: StaticBody3D, trees: Array, plan) -> void:
 		far.visibility_range_begin = TREE_NEAR_END
 		group.add_child(far)
 	if group.get_child_count() > 0:
+		NearTrees.register(group, trees[0], trees[1], plan.radius, bounds)
 		chunk.add_child(group)
 	else:
 		group.free()
