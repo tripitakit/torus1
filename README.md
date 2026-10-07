@@ -163,6 +163,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 
 - `scenes/torus1_system.tscn` — la scena principale.
 - `scripts/` — tutto il codice. Quasi tutti i modelli (navi, edifici, mezzi) sono costruiti a codice, low poly.
+- `assets/views/` — le foto dell'esterno vero viste dalle vetrate di Selene, del telescopio e dell'Area 2, scattate
+  da `tools/bake_window_views.gd` (da rifare, con la GPU, se cambiano gli esterni).
 - `assets/people/animated_human.glb` — il modello delle persone; letto all'avvio, la camminata è cotta in una
   texture per lo shader. In un gioco esportato il file va incluso fra le risorse.
 - `shaders/` — parti di shader condivise.

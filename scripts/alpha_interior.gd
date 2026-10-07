@@ -27,6 +27,42 @@ const PANEL := Vector2(1.2, 2.4)
 const WINDOW_SILL := 1.0
 # The wall over a window.
 const WINDOW_HEADER := 0.8
+# What a window looks on (layout.window_view().kind): a photograph of the
+# real outside (tools/bake_window_views.gd), taken with a WINDOW_VIEW_FOV
+# wide (horizontally), WINDOW_VIEW_ASPECT camera looking out of the window,
+# tilted up by WINDOW_PITCH[kind].
+const WINDOW_VIEWS := {
+	"moon": "res://assets/views/selene_main_mission.jpg",
+	"dish": "res://assets/views/telescope_control.jpg",
+	"field": "res://assets/views/area2_monitor.jpg",
+}
+const WINDOW_VIEW_FOV := 110.0
+const WINDOW_VIEW_ASPECT := 2.0
+const WINDOW_PITCH := {"moon": 0.17, "dish": 0.12, "field": -0.05}
+const WINDOW_VIEW_SIZE := Vector2i(3840, 1920)
+
+# The photograph behind the window, by the direction one looks in (as far
+# scenery: no parallax). The room's -Z is the way out of the window.
+const WINDOW_VIEW_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+uniform sampler2D view : source_color, filter_linear_mipmap;
+uniform float tan_half = 1.4281;
+uniform float aspect = 2.0;
+uniform float pitch = 0.0;
+varying vec3 world;
+void vertex() {
+	world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	vec3 dir = normalize(world - CAMERA_POSITION_WORLD);
+	vec3 forward = vec3(0.0, sin(pitch), -cos(pitch));
+	vec3 up = vec3(0.0, cos(pitch), sin(pitch));
+	float z = dot(dir, forward);
+	vec2 uv = vec2(0.5 + dir.x / max(z, 0.001) / (2.0 * tan_half), 0.5 - dot(dir, up) / max(z, 0.001) / (2.0 * tan_half / aspect));
+	ALBEDO = z > 0.0 ? texture(view, clamp(uv, vec2(0.0), vec2(1.0))).rgb : vec3(0.0);
+}
+"""
 const BEIGE := Color(0.86, 0.8, 0.68)
 const FLOOR_GREY := Color(0.22, 0.23, 0.25)
 const CEILING := Color(0.9, 0.88, 0.83)
@@ -549,7 +585,7 @@ func _build_light_panels(parent: Node3D) -> void:
 				s += 2.4
 
 # The window (layout.window_view(): its room, the far edge z0): mullions
-# every two panels and, beyond, a painted view.
+# every two panels and, beyond, the photograph of the outside.
 func _build_window(parent: Node3D) -> void:
 	var view: Dictionary = layout.window_view()
 	if view.is_empty():
@@ -567,53 +603,36 @@ func _build_window(parent: Node3D) -> void:
 		x += PANEL.x * 2.0
 	_box(parent, Vector3(room.size.x, 0.12, 0.4), _mat(WHITE), _at(room.get_center().x, WINDOW_SILL, z))
 	var backdrop := QuadMesh.new()
-	backdrop.size = Vector2(90.0, 34.0)
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_texture = _view_texture(view.kind)
-	_part(parent, backdrop, m, _at(room.get_center().x, 7.0, z - 25.0))
+	backdrop.size = Vector2(room.size.x + 60.0, 40.0)
+	var material := ShaderMaterial.new()
+	material.shader = Shader.new()
+	material.shader.code = WINDOW_VIEW_SHADER
+	material.set_shader_parameter("view", _photograph(view.kind))
+	material.set_shader_parameter("tan_half", tan(deg_to_rad(WINDOW_VIEW_FOV * 0.5)))
+	material.set_shader_parameter("aspect", WINDOW_VIEW_ASPECT)
+	material.set_shader_parameter("pitch", WINDOW_PITCH.get(view.kind, 0.0))
+	_part(parent, backdrop, material, _at(room.get_center().x, 8.0, z - 6.0))
 
-# What a window looks on: "moon" (the surface, the planet in a black sky);
-# the outposts add their own.
-func _view_texture(kind: String) -> ImageTexture:
-	return _moonscape()
-
-func _moonscape() -> ImageTexture:
-	var w := 512
-	var h := 192
-	var image := Image.create_empty(w, h, false, Image.FORMAT_RGB8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 1999
-	noise.frequency = 0.02
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 1999
-	var craters := []
-	for i in range(40):
-		craters.append(Vector3(rng.randf_range(0.0, w), rng.randf_range(125.0, h), rng.randf_range(3.0, 14.0)))
-	for y in range(h):
-		for x in range(w):
-			var horizon := 120.0 + noise.get_noise_1d(x * 0.6) * 14.0
-			if y > horizon:
-				var g := 0.45 + noise.get_noise_2d(x * 2.0, y * 4.0) * 0.06 + (y - horizon) / h * 0.15
-				for c: Vector3 in craters:
-					var d := Vector2((x - c.x) / c.z, (y - c.y) / (c.z * 0.35)).length()
-					if d < 1.0:
-						g += -0.12 * (1.0 - d) if d < 0.8 else 0.1
-				image.set_pixel(x, y, Color(g, g, g * 1.02))
-			else:
-				image.set_pixel(x, y, Color(0.0, 0.0, 0.01))
-	for i in range(160):
-		var star := Vector2i(rng.randi_range(0, w - 1), rng.randi_range(0, 100))
-		var b := rng.randf_range(0.4, 1.0)
-		image.set_pixelv(star, Color(b, b, b))
-	var planet := Vector2(150.0, 45.0)
-	for y in range(h):
-		for x in range(w):
-			var d := Vector2(x, y).distance_to(planet)
-			if d < 26.0:
-				var lit := clampf((x - planet.x + 18.0) / 40.0, 0.0, 1.0)
-				image.set_pixel(x, y, Color(0.12, 0.3, 0.65).lerp(Color(0.85, 0.9, 1.0), lit * 0.6 + noise.get_noise_2d(x * 3.0, y * 3.0) * 0.3))
+# The window's photograph from its raw file (no editor import), mipmapped.
+func _photograph(kind: String) -> ImageTexture:
+	var image := Image.load_from_file(ProjectSettings.globalize_path(WINDOW_VIEWS.get(kind, "")))
+	if image == null or image.is_empty():
+		push_error("AlphaInterior: no window view for '%s'" % kind)
+		return null
+	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
+
+# Where in the photograph (0..1 both ways) one looking along `dir` (the
+# room's axes) sees, the camera tilted up by `pitch`; (-1, -1) behind it.
+# The window shader's projection.
+static func window_uv(dir: Vector3, pitch: float) -> Vector2:
+	var forward := Vector3(0.0, sin(pitch), -cos(pitch))
+	var up := Vector3(0.0, cos(pitch), sin(pitch))
+	var z := dir.dot(forward)
+	if z <= 0.0:
+		return Vector2(-1.0, -1.0)
+	var tan_half := tan(deg_to_rad(WINDOW_VIEW_FOV * 0.5))
+	return Vector2(0.5 + dir.x / z / (2.0 * tan_half), 0.5 - dir.dot(up) / z / (2.0 * tan_half / WINDOW_VIEW_ASPECT))
 
 func _label(text: String, size: float, colour: Color) -> Label3D:
 	var label := Label3D.new()
