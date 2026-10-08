@@ -17,6 +17,7 @@ func _init():
 	failures += _test_parse()
 	failures += _test_visible()
 	failures += _test_pick_and_best()
+	failures += _test_on_topic_and_direct()
 	failures += _test_messages()
 	failures += _test_with_vectors()
 	failures += _test_rejected()
@@ -119,6 +120,27 @@ func _test_pick_and_best() -> int:
 	var other := [{"text": "E", "vector": _v(0.0, 1.0)}]
 	if not is_equal_approx(NpcBrain.best([entries, other], _v(0.0, 1.0)), 1.0) or not is_equal_approx(NpcBrain.best([entries], _v(1.0, 0.0)), 1.0) or NpcBrain.best([entries, other], _v(-0.7071, -0.7071)) > NpcBrain.ON_TOPIC:
 		print("FAIL _test_pick_and_best: best")
+		return 1
+	return 0
+
+# Of the world: a pair's question close enough, or a fact or a memory;
+# else not. A pair close enough is answered as written.
+func _test_on_topic_and_direct() -> int:
+	var pairs := [{"q": "Chi sei?", "a": "Ferrand.", "vector": _v(1.0, 0.0)}]
+	var facts := [{"text": "F", "vector": _v(0.0, 1.0)}]
+	var cases := [
+		[_v(0.6, 0.8), true],   # a fact at 0.8
+		[_v(0.6, -0.8), true],  # the pair at 0.6
+		[_v(0.4, -0.9165), false], # the pair at 0.4, no fact
+	]
+	for c in cases:
+		if NpcBrain.on_topic(pairs, [facts], c[0]) != c[1]:
+			print("FAIL _test_on_topic_and_direct: on topic %s" % [c[0]])
+			return 1
+	var exact: Dictionary = NpcBrain.direct(pairs, _v(1.0, 0.0))
+	var near: Dictionary = NpcBrain.direct(pairs, _v(0.6, 0.8))
+	if exact.get("a", "") != "Ferrand." or not near.is_empty():
+		print("FAIL _test_on_topic_and_direct: direct %s / %s" % [exact, near])
 		return 1
 	return 0
 

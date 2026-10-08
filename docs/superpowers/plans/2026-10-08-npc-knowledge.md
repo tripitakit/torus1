@@ -21,3 +21,14 @@
 
 ## Task 4: prova dal vivo e documenti
 - `test_npc_live.gd` con 20 domande; confronto con le risposte di prima; README; commit.
+
+## Decisioni prese durante l'esecuzione
+
+- I vettori in `knowledge.json` sono base64 dei float32 (2,2 MB invece di ~5): si leggono senza convertire numeri.
+- `embed_many` nel client: i 550 vettori in ~30 s a gruppi di 32.
+- Prima prova dal vivo: anche con la coppia identica nel prompt (somiglianza 1,0) `gemma3:1b` rispondeva altro
+  (Ferrand: "Viktor Brandt" al telescopio). Quindi **risposta scritta** quando la domanda somiglia a una coppia
+  ≥ 0,63 (riformulazioni giuste 0,65–0,91, abbinamenti sbagliati fino a 0,60), il modello solo per il resto.
+- Il filtro fuori tema contava anche le coppie e non scattava più (mondiali: 0,33 con le coppie): ora la domanda è
+  "del mondo" se somiglia ≥ 0,55 a una coppia o ≥ 0,30 a un fatto o a un ricordo.
+- Le frasi delle comparse sono neutre (nome e mestiere possono essere femminili).

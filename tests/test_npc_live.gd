@@ -1,7 +1,7 @@
 extends SceneTree
 
 # The people's minds on the real Ollama (started if not up, stopped after if
-# started here): ten questions each to Ferrand, Okafor and Bastiani through
+# started here): twenty questions each to Ferrand, Okafor and Bastiani through
 # NpcTalk; no reply may be the model speaking as itself. The replies and
 # their times are printed to be read.
 
@@ -10,9 +10,16 @@ const NpcTalk = preload("res://scripts/npc_talk.gd")
 const NpcTerminal = preload("res://scripts/npc_terminal.gd")
 const NpcBrain = preload("res://scripts/npc_brain.gd")
 
+# The ten asked since the first version, ten more, and five in words found
+# in no pair (do they still get a fitting answer?).
 const QUESTIONS := ["Ciao, chi sei?", "Che lavoro fai?", "Chi comanda su Torus1?", "Cosa succede agli avamposti?",
 	"Chi era di turno al telescopio?", "Com'è la Luna?", "Sei un'intelligenza artificiale?",
-	"Chi ha vinto i mondiali di calcio del 2022?", "Cosa mi consigli di fare adesso?", "Grazie, a presto."]
+	"Chi ha vinto i mondiali di calcio del 2022?", "Cosa mi consigli di fare adesso?", "Grazie, a presto.",
+	"Da quanto tempo sei qui?", "Cosa ti tiene sveglio la notte?", "Che tipo è Rhea Lindqvist?", "Hai figli o fratelli?",
+	"Quando hai saputo del silenzio radio?", "Secondo te sono ancora vivi?", "Ti piace il caffè?",
+	"Dove sei cresciuto?", "Cosa faresti se fossi in me?", "Qual è la cosa che ami di più del tuo lavoro?",
+	"Da quanti anni lavori qui?", "Perché non riesci a dormire?", "Credi che l'equipaggio sia vivo?", "Hai una sorella?",
+	"Come passi le serate?"]
 
 func _initialize():
 	var client: Node = OllamaClient.new()
@@ -33,7 +40,7 @@ func _initialize():
 			terminal.submit(q)
 			await talk.replied
 			var lines: PackedStringArray = terminal.log_text().split("\n")
-			var reply: String = lines[-1].get_slice(": ", 1)
+			var reply: String = lines[-1].substr(lines[-1].find(": ") + 2)
 			print("  [%4d ms] %s\n           %s" % [Time.get_ticks_msec() - t, q, reply])
 			if NpcBrain.rejected(reply) or lines[-1].begins_with("ERRORE"):
 				print("FAIL test_npc_live: %s -> '%s'" % [q, lines[-1]])

@@ -2,8 +2,9 @@ extends Node
 
 # One talk with someone, from the question typed on the terminal to the
 # reply written on it: the question's vector (embeddinggemma); off the
-# world, one of their "don't know" lines without asking the model; else
-# their pairs whose question is most like it, their nearest memories and
+# world, one of their "don't know" lines without asking the model; close to
+# one of their pairs, its answer as written; else their pairs whose
+# question is most like it, their nearest memories and
 # the nearest facts they know, their sheet and the talk so far to
 # gemma3:1b, the reply shown as it streams; a reply from the model as
 # itself asked once more, then replaced by "don't know". The named people
@@ -104,10 +105,14 @@ func _answer(question: String, session: int) -> String:
 	var world: Array = knowledge.get("world", [])
 	var pairs := NpcBrain.visible(_person.qa, clues)
 	var memories := NpcBrain.visible(_person.memories, clues)
-	if NpcBrain.best([world, pairs, memories], vector) < NpcBrain.ON_TOPIC:
+	if not NpcBrain.on_topic(pairs, [world, memories], vector):
 		var line := NpcBrain.dunno(_person, _rng)
 		terminal.replace_reply(line)
 		return line
+	var written: Dictionary = NpcBrain.direct(pairs, vector)
+	if not written.is_empty():
+		terminal.replace_reply(written.a)
+		return written.a
 	var facts := NpcBrain.visible(NpcBrain.known_facts(world, _person), clues)
 	var messages := NpcBrain.messages(_person, _texts(NpcBrain.pick(memories, vector, NpcBrain.MEMORIES)),
 		_texts(NpcBrain.pick(facts, vector, NpcBrain.FACTS)), NpcBrain.pick(pairs, vector, NpcBrain.PAIRS), _history, question)

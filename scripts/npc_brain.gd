@@ -13,11 +13,16 @@ extends RefCounted
 const PEOPLE_DIR := "res://assets/npc/people/"
 const FACTS_TEXT := "res://assets/npc/facts.txt"
 const KNOWLEDGE_JSON := "res://assets/npc/knowledge.json"
-# Questions less like everything they could draw on than this are not of
-# the world: the person answers "don't know" without asking the model
-# (measured: the world's questions 0.43-0.62, small talk 0.29-0.33, the real
-# world 0.17-0.22).
-const ON_TOPIC := 0.25
+# Of the world: a question this like one of their pairs' questions, or this
+# like a fact or memory; else they answer "don't know" without the model.
+# This like a pair's question, its written answer is said as it is (the 1B
+# model does not keep to examples it is shown). Measured on Ferrand's: a
+# question as written 1.0, the same in other words 0.65-0.91, a wrong match
+# up to 0.60 (so 0.63, just above); the real world 0.33-0.45 to pairs, under 0.30 to facts and
+# memories.
+const PAIR_TOPIC := 0.55
+const ON_TOPIC := 0.30
+const DIRECT := 0.63
 # Put in the prompt: pairs, memories, world facts; lines of the talk kept.
 const PAIRS := 3
 const MEMORIES := 3
@@ -160,6 +165,16 @@ static func best(lists: Array, vector: PackedFloat32Array) -> float:
 			if e.has("vector"):
 				top = maxf(top, _dot(e.vector, vector))
 	return top
+
+# Whether a question with `vector` is of their world: near one of `pairs`,
+# or one of the entries of `others` (lists of facts, memories).
+static func on_topic(pairs: Array, others: Array, vector: PackedFloat32Array) -> bool:
+	return best([pairs], vector) >= PAIR_TOPIC or best(others, vector) >= ON_TOPIC
+
+# The pair to answer with as written ({} if none is close enough).
+static func direct(pairs: Array, vector: PackedFloat32Array) -> Dictionary:
+	var top := pick(pairs, vector, 1)
+	return top[0] if not top.is_empty() and _dot(top[0].vector, vector) >= DIRECT else {}
 
 # The `count` entries most like `vector`, most alike first (entries without
 # a vector skipped).

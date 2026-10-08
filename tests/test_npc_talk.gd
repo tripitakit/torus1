@@ -21,7 +21,9 @@ class FakeClient extends Node:
 		return up
 	func embed(text: String, _as_query: bool = true) -> PackedFloat32Array:
 		await get_tree().process_frame
-		return PackedFloat32Array([-1.0, 0.0]) if text.contains("calcio") else PackedFloat32Array([1.0, 0.0])
+		if text.contains("calcio"):
+			return PackedFloat32Array([-1.0, 0.0])
+		return PackedFloat32Array([0.0, 1.0]) if text.contains("diretta") else PackedFloat32Array([1.0, 0.0])
 	func chat(messages: Array) -> void:
 		chats += 1
 		last_messages = messages
@@ -54,9 +56,10 @@ func _knowledge() -> Dictionary:
 func _ferrand() -> Dictionary:
 	var sheet := NpcBrain.person("ferrand")
 	sheet.qa = [
-		{"after": "", "q": "Cosa succede?", "a": "Silenzio radio.", "vector": PackedFloat32Array([0.9, 0.1])},
-		{"after": "", "q": "Chi sei?", "a": "Ferrand.", "vector": PackedFloat32Array([0.7, 0.3])},
-		{"after": "segreto", "q": "Il segreto?", "a": "Nascosto.", "vector": PackedFloat32Array([1.0, 0.0])},
+		{"after": "", "q": "Cosa succede?", "a": "Silenzio radio.", "vector": PackedFloat32Array([0.6, -0.8])},
+		{"after": "", "q": "Chi sei?", "a": "Ferrand.", "vector": PackedFloat32Array([0.5, -0.866])},
+		{"after": "", "q": "Una domanda diretta?", "a": "Risposta scritta.", "vector": PackedFloat32Array([0.0, 1.0])},
+		{"after": "segreto", "q": "Il segreto?", "a": "Nascosto.", "vector": PackedFloat32Array([0.55, -0.835])},
 	]
 	sheet.memories = [{"after": "", "text": "Ricordo di Ferrand.", "vector": PackedFloat32Array([0.8, 0.2])}]
 	return sheet
@@ -111,6 +114,11 @@ func _test_talk() -> int:
 	if not with_clue.has("Il segreto?"):
 		print("FAIL _test_talk: the pair behind the clue stayed hidden")
 		return 1
+	# A question close to one of his pairs: the written answer, no model.
+	await _ask(talk, terminal, "Domanda diretta, per favore?")
+	if client.chats != 2 or not terminal.log_text().ends_with("FERRAND: Risposta scritta."):
+		print("FAIL _test_talk: direct answer: %d chats, '%s'" % [client.chats, terminal.log_text()])
+		return 1
 	client.replies = ["Sono un modello linguistico.", "Sono un'intelligenza artificiale."]
 	await _ask(talk, terminal, "Chi sei davvero?")
 	var last: String = terminal.log_text().get_slice("\n", terminal.log_text().get_slice_count("\n") - 1)
@@ -125,7 +133,7 @@ func _test_talk() -> int:
 	var said := []
 	for m in client.last_messages:
 		said.append(m.content)
-	if not terminal.log_text().contains("Cosa succede?") or not said.has("Cosa succede?"):
+	if not terminal.log_text().contains("Domanda diretta, per favore?") or not said.has("Domanda diretta, per favore?"):
 		print("FAIL _test_talk: Ferrand forgot: '%s'" % terminal.log_text())
 		return 1
 	talk.end()
