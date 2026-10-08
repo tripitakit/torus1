@@ -93,6 +93,23 @@ func embed(text: String, as_query: bool = true) -> PackedFloat32Array:
 		return PackedFloat32Array()
 	return PackedFloat32Array(data.embeddings[0])
 
+# The vectors of `texts` in one call (as embed()); [] when the server failed.
+func embed_many(texts: PackedStringArray, as_query: bool) -> Array:
+	var inputs := []
+	for text in texts:
+		inputs.append(("task: search result | query: " if as_query else "title: none | text: ") + text)
+	var body := JSON.stringify({"model": EMBED_MODEL, "input": inputs, "keep_alive": KEEP_ALIVE, "options": {"num_gpu": 0}})
+	var answer: Array = await _request("/api/embed", HTTPClient.METHOD_POST, body, 600.0)
+	if answer[0] != 200:
+		return []
+	var data = JSON.parse_string(answer[1])
+	if not data is Dictionary or (data.get("embeddings", []) as Array).size() != texts.size():
+		return []
+	var out := []
+	for v in data.embeddings:
+		out.append(PackedFloat32Array(v))
+	return out
+
 # The model's reply to `messages`, streamed: `piece` for every bit of
 # text, then `finished`. A new chat or cancel() drops the one running.
 func chat(messages: Array) -> void:

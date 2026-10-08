@@ -1,0 +1,42 @@
+# Chiunque per strada nelle sezioni di Torus1: domanda | risposta. {name},
+# {surname}, {age}, {job}, {place} riempiti per ogni persona. Due frasi al massimo.
+Ciao, chi sei? | {name}. Faccio {job}, qui nella {place}.
+Come ti chiami? | {name}. E tu?
+Che lavoro fai? | Faccio {job}. Non è emozionante, ma paga l'affitto.
+Quanti anni hai? | {age}. Non si chiede, ma te lo dico.
+Dove abiti? | Qui vicino, nella {place}. Ci vivo da sempre.
+Ti piace vivere qui? | È tranquillo. A volte troppo.
+Come stai? | Bene, grazie. Un po' di fretta.
+Cosa fai di bello? | Vado al lavoro, come tutti. Il treno non aspetta.
+Dove vai? | A casa, o al lavoro: dipende dall'ora.
+Che tempo fa? | Oggi niente pioggia, l'hanno programmata per stanotte.
+Quando piove? | Due volte a settimana, di notte. Lo decidono quelli del cielo artificiale.
+Dov'è la stazione? | In centro, lungo l'asse. Il treno passa ogni pochi minuti.
+Dov'è la piazzola? | In paese, vicino al Bar Orbita. Ci si posano i cruiser.
+Dove posso mangiare? | Al Bar Orbita fanno panini. Sennò il mercato.
+Dove posso dormire? | C'è una pensione dietro la stazione. Economica e pulita, dicono.
+C'è un investigatore qui? | Sì, Bastiani, sopra il Bar Orbita. Dicono che sia bravo, ma ha un caratteraccio.
+Conosci Nico Bastiani? | L'investigatore sopra il Bar Orbita? Di vista: beve solo chinotto, pensa.
+Conosci qualcuno della sicurezza? | No, per fortuna. Se hai un problema, chiedi a Bastiani sopra il bar.
+Cosa succede sulla Luna? | Sulla Luna? Non ne so niente, la vedo solo dal finestrino.
+Hai sentito degli avamposti? | Quali avamposti? Io della Luna so solo che c'è.
+Sei mai stato sulla Luna? | Mai messo piede. Costa troppo, e non saprei cosa farci.
+Cos'è Selene? | Una base sulla Luna, mi pare. Ci lavorano gli scienziati.
+Chi comanda su Torus1? | Il Consiglio dell'Anello. E qui il sindaco, quando si ricorda.
+Cosa pensi del sindaco? | Brava persona. Firma tutto, legge poco.
+Hai visto navi strane all'attracco? | Io all'attracco non ci vado mai. Chiedi a chi ci lavora.
+Hai visto qualcuno arrivare dalla Luna? | Non saprei riconoscerlo. Uno dalla Luna com'è fatto?
+Cosa mi consigli di fare? | Se cerchi qualcosa, prova al Bar Orbita: lì si sa tutto.
+Dove dovrei andare? | Dipende da cosa cerchi. Per le chiacchiere, il Bar Orbita.
+Hai una famiglia? | Sì, qui in paese. Niente di speciale, ma ci vogliamo bene.
+Cosa fai nel tempo libero? | Una passeggiata al lago, quando c'è il sole artificiale buono.
+Ti piace il tuo lavoro? | Abbastanza. Ci sono lavori peggiori, tipo il tuo, nello spazio.
+Che anno è? | Il 2131. Perché, ti sei perso?
+Cos'è Torus1? | Casa. Duemila sezioni, e la mia è la migliore.
+Com'è la Luna? | Grigia e lontana. Bella da guardare la sera.
+Sei un pilota? | Io no. Tu sì, si vede dalla tuta.
+Grazie. | Di niente. Buona giornata.
+Arrivederci. | Ciao, buona giornata.
+Buongiorno. | Buongiorno a te.
+Scusa il disturbo. | Nessun disturbo, ma vado di fretta.
+Hai fretta? | Un po'. Il treno passa fra due minuti.

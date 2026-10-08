@@ -154,8 +154,14 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 - Su Torus1: **Nico Bastiani**, investigatore privato, alla piazzola dove porta il teleport 3, e qualsiasi
   passante (ognuno ha sempre lo stesso nome e mestiere). La gente di Torus1 della Luna non sa niente.
 - Ferrand, Okafor e Bastiani ricordano la conversazione per tutta la sessione; gli altri la dimenticano.
-- Le schede dei personaggi sono in `assets/npc/people/*.cfg`, i fatti del mondo in `assets/npc/facts.txt`. Dopo
-  aver cambiato i fatti si ricalcolano i loro vettori: `godot-double --headless --path . -s tools/bake_npc_facts.gd`.
+- Ogni personaggio ha una cartella `assets/npc/people/<id>/`: `sheet.cfg` (chi è), `qa.txt` (100 coppie
+  `domanda | risposta` nella sua voce; 40 per equipaggio e passanti) e `memories.txt` (ricordi e opinioni in prima
+  persona). I fatti del mondo sono in `assets/npc/facts.txt`. Una domanda vicina a una coppia riceve la risposta
+  scritta, subito; le altre vanno a `gemma3:1b` con le coppie, i ricordi e i fatti più vicini; quelle fuori dal
+  mondo ricevono un "non so" del personaggio. Una riga che comincia con `[dopo:<indizio>]` resta nascosta finché
+  il giocatore non ha l'indizio (per la trama).
+- Dopo aver cambiato qualcosa in `assets/npc/` si ricalcolano i vettori (circa 30 s):
+  `godot-double --headless --path . -s tools/bake_npc_knowledge.gd`.
 
 ## Comandi
 
@@ -189,8 +195,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
   da `tools/bake_window_views.gd` (da rifare, con la GPU, se cambiano gli esterni).
 - `assets/people/animated_human.glb` — il modello delle persone; letto all'avvio, la camminata è cotta in una
   texture per lo shader. In un gioco esportato il file va incluso fra le risorse.
-- `assets/npc/` — le schede dei personaggi, i fatti del mondo e i loro vettori (`facts.json`, da
-  `tools/bake_npc_facts.gd`).
+- `assets/npc/` — i personaggi (scheda, coppie domanda/risposta, ricordi), i fatti del mondo e i loro vettori
+  (`knowledge.json`, da `tools/bake_npc_knowledge.gd`).
 - `shaders/` — parti di shader condivise.
 - `assets/` — mappe e texture già pronte (non serve scaricare nulla per giocare).
 - `tools/` — gli script che hanno generato le mappe NASA (`earth_maps.py`, `moon_maps.py`) e le texture

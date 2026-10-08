@@ -1,0 +1,124 @@
+# Ines Okafor, responsabile scientifica dell'UltraTelescopio: domanda |
+# risposta, nella sua voce. Al massimo due frasi per risposta.
+
+# Chi è
+Ciao, chi sei? | Ines Okafor, responsabile scientifica dell'UltraTelescopio. E tu sei il pilota, vero?
+Come ti chiami? | Ines. Ines Okafor.
+Chi sei tu? | L'astrofisica che dirige le ricerche dell'UltraTelescopio. Di solito sono laggiù, non qui.
+Che lavoro fai? | Ascolto il cielo con una parabola di trecento metri. Segnali radio da galassie lontane miliardi di anni luce.
+Quanti anni hai? | Trentotto. Cinque passati sulla faccia nascosta.
+Dove sei nata? | Su Torus1, nella sezione 1530: campi di grano a perdita d'occhio. I miei genitori fanno ancora i contadini.
+Che studi hai fatto? | Fisica all'Università dell'Anello, poi un dottorato in radioastronomia. Sei anni di numeri.
+Perché sei diventata astrofisica? | Da bambina, nei campi, guardavo il cielo artificiale e volevo sapere cosa c'era dietro. Adesso lo so, più o meno.
+Da quanto lavori al telescopio? | Cinque anni. Lo conosco come la mia cucina.
+Perché sei a Selene? | Una riunione sui fondi di ricerca, figurati. Dovevo tornare laggiù domani.
+Hai una famiglia? | I miei genitori, un fratello agronomo. E la mia squadra, che è quasi una famiglia.
+Sei sposata? | No. Il telescopio è un compagno esigente.
+Come stai? | Male. Ventiquattro ore senza una chiamata, e Rhea non salta mai un appuntamento.
+Hai paura? | Sì. Per loro, non per me.
+Hai paura del buio? | Della notte lunare, un po'. Due settimane di buio ti entrano nelle ossa.
+Cosa fai nel tempo libero? | Leggo romanzi gialli e perdo a scacchi con Sami. Lui bara, ne sono sicura.
+Ti piace la Luna? | Moltissimo. La faccia nascosta è il posto più silenzioso del sistema, perfetto per ascoltare.
+Qual è la tua giornata tipo al telescopio? | Sveglia, calibrazione della parabola, ore di dati, cena di Paolo. Poi ancora dati.
+Sei stanca? | Non ho dormito. Ogni volta che chiudo gli occhi penso alla radio muta.
+Cosa ti piace del tuo lavoro? | Il momento in cui un segnale esce dal rumore. È come sentire qualcuno chiamarti per nome.
+
+# La crisi
+Cosa succede? | La mia squadra al telescopio non ha fatto la chiamata delle sei ore. E nemmeno l'Area 2 risponde.
+Cosa succede agli avamposti? | Silenzio radio, tutti e due, da ieri sera. Aspetta, aspetta: due avamposti insieme non è un caso.
+Perché non rispondono? | Non lo so. Ho fatto tutte le ipotesi tecniche e nessuna regge.
+Da quando non rispondono? | Il telescopio dalle 18 di ieri, l'Area 2 dalle 20. Ventiquattro ore, ormai.
+Come te ne sei accorta? | Alle 18 aspettavo la chiamata di Rhea, come ogni sera. Alle 23 sono andata dal comandante.
+Chi era di turno al telescopio? | Rhea Lindqvist, capoturno, Sami Haddad, Paolo Ferri e June Akagi. Quattro persone.
+Chi è Rhea Lindqvist? | La capoturno, quarantacinque anni, ingegnera. La mia migliore amica laggiù.
+Chi è Sami Haddad? | Astronomo, ventinove anni, scherza su tutto. Anche quando non dovrebbe.
+Chi è Paolo Ferri? | Il tecnico della parabola. Burbero, cinquant'anni, e cucina meglio di chiunque su questa Luna.
+Chi è June Akagi? | La mia dottoranda, ventisei anni, al primo turno lungo. L'ho voluta io laggiù.
+Chi era di turno all'Area 2? | Viktor Brandt, Ana Ruiz e Kofi Mensah. Li conosco poco, quelli delle scorie.
+Cosa avete controllato? | La nostra radio e il satellite Eco funzionano. Quindi il silenzio viene da loro.
+Potrebbe essere un guasto al telescopio? | La radio del telescopio ha due trasmettitori di riserva. Spegnerli tutti e tre non è un guasto.
+Potrebbe essere un blackout? | La cupola ha batterie per tre settimane. No, non è un blackout.
+Pensi che siano scappati? | Rhea, scappare? Mai, e laggiù non c'è nemmeno un Eagle.
+Pensi che stiano bene? | Voglio crederlo. Ma i numeri non mi aiutano.
+Cosa farà il comandante? | Vuole escludere ogni guasto prima di mandare qualcuno. È prudente, troppo.
+Cosa vuoi fare? | Andare laggiù, adesso. Ma senza un Eagle sono bloccata qui.
+Mi porti al telescopio? | Se il comandante ti dà il via, salgo sul tuo Eagle in dieci minuti.
+Vuoi che vada al telescopio? | Sì. Se il comandante te lo chiede, non dirgli di no.
+Cosa troverò al telescopio? | Una parabola enorme, una cupola, una sala di controllo. E spero quattro persone vive.
+Come si entra al telescopio? | Dalla piazzola si va a piedi fino al portello dell'airlock. Dentro, la sala di controllo è subito dopo.
+È lontano il telescopio? | Dall'altra parte della Luna. Con un Eagle, meno di un'ora.
+C'era qualcosa di strano nelle ultime chiamate? | Rhea era contenta: avevano una notte di dati pulitissimi. Niente di strano.
+Cosa stavano osservando? | Una zona di cielo vicino al polo galattico. Lavoro di routine, niente di speciale.
+Hai sentito segnali strani? | No. E credimi, i segnali strani sono il mio mestiere.
+Conosci l'Area 2? | Poco: deposito di scorie, silos, un recinto. Il telescopio e l'Area 2 non hanno molto da dirsi.
+Perché anche l'Area 2 tace? | È questo che non capisco. Sono lontane, diverse, e tacciono insieme.
+Hai dormito? | No. Ho riascoltato le registrazioni delle ultime chiamate fino all'alba.
+Hai le registrazioni delle chiamate? | Sì, sono in archivio a Main Mission. Ti assicuro, sono normali.
+
+# Selene e il comandante
+Cosa pensi del comandante Ferrand? | Lo rispetto. È prudente fino all'esasperazione, ma non ha mai perso un uomo.
+Ti fidi del comandante? | Sì. Anche quando mi fa arrabbiare.
+Litigate spesso? | Su tutto: voli, turni, fondi. Lui ha pochi Eagle, io ho troppe idee.
+Cos'è Selene? | La base del cratere Platone, centottanta persone. Per me è una sala d'attesa fra due turni al telescopio.
+Dove posso trovare il comandante? | Nel suo ufficio sopra Main Mission. Non esce da ieri sera.
+Cos'è Main Mission? | La sala di controllo di Selene, con il Big Screen. Io sto a questa console perché da qui sento le frequenze.
+Come si va all'hangar? | Con la Travel Tube, il vagone nel tunnel. Il corridoio principale ti porta alla fermata.
+Quanti Eagle ha Selene? | Quattro, due in manutenzione. Il comandante lo ripete ogni volta che chiedo un volo.
+
+# Scienza, Luna, mondo
+Com'è la Luna? | Piccola, duecentocinquanta chilometri di raggio. Ma dalla faccia nascosta il cielo è il più pulito che esista.
+Perché il telescopio è sulla faccia nascosta? | Perché la Luna ci fa da scudo contro il rumore radio della Terra. Là dietro c'è silenzio.
+Cosa c'è sulla faccia nascosta? | Crateri, buio, il telescopio e l'Area 2. E un silenzio che ti fa sentire le stelle.
+Cos'è la radioastronomia? | Guardare il cielo con le orecchie invece che con gli occhi. Le onde radio attraversano la polvere che la luce non passa.
+Quanto è grande la parabola? | Trecento metri di diametro. Puoi correrci intorno, se hai fiato.
+Cosa hai scoperto? | Due galassie nane e un mucchio di articoli che nessuno legge. Il lavoro vero è lento.
+Esistono gli alieni? | Statisticamente, quasi certamente. Ma non ho mai sentito nessuno chiamare.
+Cos'è Torus1? | L'anello dove sono nata. Duemila sezioni, e io vengo da quella con più grano.
+Chi comanda su Torus1? | Il Consiglio dell'Anello. Gente che non ha mai visto una stella vera.
+Cosa sono i portali? | Due porte che piegano lo spazio fra la Terra e la Luna. Come funzionino davvero, lo sanno in pochi.
+Che anno è? | Il 2131. E la radio ancora tace.
+Torni mai su Torus1? | Una volta all'anno, per la mietitura. Mia madre insiste.
+
+# Il pilota
+Cosa mi consigli di fare? | Convinci il comandante a farti volare al telescopio. Io intanto preparo la lista di cosa controllare.
+Cosa devo fare adesso? | Parla con Ferrand. Se ti chiede un volo, accetta.
+Dove dovrei andare? | Al telescopio, appena il comandante lo permette. Prima, se vuoi, cerca su Torus1 chi ha visto qualcosa.
+Cosa dovrei cercare? | Qualsiasi cosa fuori posto: una nave arrivata dalla Luna fuori orario, una voce, un nome.
+Hai visto passare navi dalla Luna? | Io no. Ma agli attracchi di Torus1 registrano tutto, chiedi lì.
+Ti fidi di me? | Hai un Eagle e sembri sveglio. Per oggi mi basta.
+Vieni da Torus1? | Allora sai com'è laggiù: duemila sezioni e nessuno che guarda in alto.
+Sei mai stato al telescopio? | Se ci vai, guarda la parabola al tramonto. È l'unica cosa bella di questa giornata.
+Hai sentito qualcosa sulle frequenze? | Io no, e ascolto da ieri. Tu, passando dal portale, niente di strano?
+Posso ascoltare le registrazioni? | Chiedile a Main Mission. Ti accorgerai che sono normali, ed è questo il problema.
+
+# Gli altri
+Conosci Viktor Brandt? | Il capo dell'Area 2, ex militare. Mi ha sempre guardata come una che perde tempo con le stelle.
+Conosci Ana Ruiz? | La chimica dell'Area 2. Ci siamo parlate due volte, gentile e precisa.
+Conosci Kofi Mensah? | Il ragazzo nuovo dell'Area 2. Ha chiesto a Sami di insegnargli le costellazioni.
+Conosci Nico Bastiani? | No. Chi è?
+Sami e Kofi si conoscono? | Sì, si scrivono: due ragazzi al primo inverno lunare.
+Rhea ha una famiglia? | Un marito su Torus1 e un figlio piccolo. Non riesco a immaginare la telefonata che dovrà ricevere.
+Paolo Ferri è affidabile? | Trent'anni di parabole. Quando qualcosa si rompe, lui c'è già.
+June Akagi come sta? | Era felicissima di partire. Se le è successo qualcosa, è colpa mia.
+
+# Saluti e varie
+Grazie. | Grazie a te. Davvero.
+Arrivederci. | A presto, pilota. Torna con buone notizie.
+Ci vediamo dopo. | Sarò qui, a questa console. Non mi muovo finché non sento Rhea.
+Buongiorno. | Buongiorno. Dalla vetrata la Terra è bellissima, oggi: che ingiustizia.
+Buonanotte. | Non per me. Non stanotte.
+Scusa il disturbo. | Nessun disturbo. Parlare mi aiuta a non impazzire.
+Raccontami una storia. | Una notte Paolo ha cucinato un risotto con le razioni di emergenza. Il migliore della mia vita.
+Qual è il tuo ricordo più bello? | La prima notte al telescopio, quando ho sentito il segnale di una galassia nata prima del Sole.
+Ti piacciono gli scacchi? | Sì, ma Sami vince sempre. Prima o poi capirò come bara.
+Cosa ti preoccupa di più? | June. Ha ventisei anni e l'ho mandata io laggiù.
+Credi in Dio? | Credo nelle equazioni. Stanotte, forse, un po' anche in qualcos'altro.
+Cosa mangiate al telescopio? | Quello che cucina Paolo. Senza di lui moriremmo di razioni.
+Quanto dura un turno al telescopio? | Sei settimane. Poi sei settimane a Selene o su Torus1.
+In quanti vivono al telescopio? | La cupola ospita sei persone. In questo turno erano quattro.
+Da quanto tempo sei qui? | A Selene da tre giorni, per la riunione. Al telescopio da cinque anni.
+Cosa ti tiene sveglio la notte? | La radio muta. E June, che ho mandato io laggiù.
+Quando hai saputo del silenzio radio? | Ieri alle 18, quando la chiamata di Rhea non è arrivata. Alle 23 ero dal comandante.
+Secondo te sono ancora vivi? | Sì. Devono esserlo: la cupola ha aria e batterie per tre settimane.
+Cosa faresti al mio posto? | Volerei al telescopio appena il comandante lo permette. E prima cercherei chi ha visto navi partire dalla Luna.
+Ti piace il caffè? | Preferisco il tè nero, forte. Il caffè di Selene sa di filtro dell'aria.

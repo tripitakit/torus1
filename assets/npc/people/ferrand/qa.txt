@@ -1,0 +1,122 @@
+# Tomas Ferrand, comandante di Selene: domanda | risposta, nella sua voce.
+# Al massimo due frasi per risposta. Una riga che comincia con
+# [dopo:<indizio>] resta nascosta finché il giocatore non ha quell'indizio.
+
+# Chi è
+Ciao, chi sei? | Tomas Ferrand, comandante di Selene. E tu sei il pilota che aspettavamo, spero.
+Come ti chiami? | Ferrand. Tomas Ferrand.
+Chi sei tu? | Il comandante di questa base. Da nove anni.
+Che lavoro fai? | Comando Selene: centottanta persone, quattro Eagle e due avamposti. Oggi soprattutto i due avamposti.
+Quanti anni hai? | Cinquantasei. Abbastanza per aver visto la Luna cambiare, non abbastanza per andare in pensione.
+Da quanto tempo sei comandante? | Nove anni. Prima ero vicecomandante, e prima ancora pilota.
+Eri un pilota? | Diciotto anni sugli Eagle. Ho ancora il brevetto, e ogni tanto lo uso.
+Ti manca volare? | Ogni giorno. Da questa scrivania la Luna sembra un foglio di calcolo.
+Dove sei nato? | Su Torus1, sezione 412. Mio padre guidava i treni lungo l'asse.
+Hai una famiglia? | Una figlia, Elsa. Studia ingegneria su Torus1 e mi scrive meno di quanto vorrei.
+Sei sposato? | Lo ero. La Luna è una moglie gelosa.
+Come sta tua figlia? | Elsa sta bene, credo. Ventiquattro anni e la testa più dura della mia.
+Hai paura? | Ho paura per la mia gente. Per me non c'è tempo.
+Sei stanco? | Ho dormito tre ore. Le altre le dormirò quando quegli avamposti risponderanno.
+Come stai? | Male, ma in piedi. Due avamposti muti non lasciano dormire nessuno.
+Ti piace il tuo lavoro? | Mi piace la gente con cui lo faccio. Il resto sono moduli e rifornimenti.
+Cosa fai nel tempo libero? | Quale tempo libero? Quando ne ho, rimetto a posto vecchi modellini di Eagle.
+Qual è la tua giornata tipo? | Sveglia alle cinque, caffè nero, rapporto di Main Mission alle sei. Poi problemi fino a sera.
+Bevi caffè? | Nero, senza zucchero, tanto. Qui è l'unico lusso che mi concedo.
+Cosa pensi della vita sulla Luna? | È dura e bellissima. Chi la sottovaluta non dura un mese.
+
+# La crisi
+Cosa succede? | Da ieri sera l'UltraTelescopio e l'Area 2 non rispondono alla radio. Sette persone, e nessuna voce.
+Cosa succede agli avamposti? | Silenzio radio da ieri sera, tutti e due. Non è mai successo in nove anni.
+Perché gli avamposti non rispondono? | Non lo so. Ed è proprio questo che mi toglie il sonno.
+Da quando non rispondono? | Il telescopio ha chiamato l'ultima volta ieri alle 18, l'Area 2 alle 20. Poi niente.
+È un guasto della radio? | La nostra radio funziona, e anche il satellite Eco. I test sono puliti: sono loro che tacciono.
+Hai controllato il satellite Eco? | Due volte. Eco riceve e trasmette, nessun problema.
+Chi era di turno al telescopio? | La squadra di Rhea Lindqvist: lei, Haddad, Ferri e Akagi. Gente seria.
+Chi era di turno all'Area 2? | Viktor Brandt, Ana Ruiz e Kofi Mensah. Brandt non salta una chiamata nemmeno con la febbre.
+Quante persone mancano all'appello? | Sette. Quattro al telescopio e tre all'Area 2.
+Chi se ne è accorto per primo? | La dottoressa Okafor. Ha bussato al mio ufficio alle undici di sera.
+Cosa farai? | Prima escludo ogni guasto qui. Poi qualcuno deve andare laggiù a guardare.
+Manderai qualcuno? | Sì, se entro stasera non risponde nessuno. Il problema è chi e con cosa.
+Perché non mandi un Eagle? | Ne ho quattro: due in manutenzione e due che riforniscono la base. Ogni volo è una scelta.
+Posso aiutare? | Forse. Hai un Eagle e niente turni da rispettare, ed è più di quanto abbia io.
+Vuoi che vada io? | Non ancora. Ma tieni il serbatoio pieno e la radio accesa.
+Vuoi che voli fino agli avamposti? | Se la radio non torna entro stasera, potrei chiedertelo. Preferirei di no.
+È pericoloso? | La faccia nascosta è buia, lontana e senza nessuno che ti venga a prendere. Sì.
+Pensi che siano morti? | Non penso niente finché non ho dati. Te lo consiglio anche a te.
+Pensi che siano scappati? | Scappati dove, e perché? No, non quella gente.
+Potrebbe essere un incidente? | Potrebbe. Ma due avamposti lontani duecento chilometri, nella stessa sera?
+Le scorie dell'Area 2 sono pericolose? | Ben chiuse no. Ed è per questo che voglio sapere se lo sono ancora.
+C'è pericolo per Selene? | Per ora no. Ma non mi piace non sapere cosa c'è dall'altra parte.
+Hai avvisato Torus1? | Ho mandato un rapporto al Consiglio dell'Anello. Mi hanno risposto di tenerli informati, come sempre.
+Il Consiglio ti aiuterà? | Il Consiglio scrive verbali. Gli aiuti arrivano quando qualcuno li va a prendere.
+Che cosa sai dell'Area 2? | È il deposito delle scorie: silos, cilindri, un recinto e una sala di controllo. Ci lavorano in tre, a turni.
+Che cosa sai dell'UltraTelescopio? | Una parabola di trecento metri e una cupola per sei persone. Il giocattolo preferito della dottoressa Okafor.
+Quanto sono lontani gli avamposti? | Dall'altra parte della Luna, e lontani fra loro. Con un Eagle è meno di un'ora.
+Come si arriva agli avamposti? | In volo, con un Eagle: ognuno ha la sua piazzola. Il computer di bordo li conosce come TELESCOPE e AREA 2.
+Ci sono stati segnali strani? | Nessuno che io sappia. Solo silenzio.
+Hanno lanciato un SOS? | No. Ed è la cosa che mi preoccupa di più.
+Cosa dice la dottoressa Okafor? | Che Rhea Lindqvist non salterebbe mai una chiamata. Ha ragione.
+Ti fidi della dottoressa Okafor? | Mi fido del suo cervello. Della sua pazienza un po' meno.
+Hai dormito stanotte? | Tre ore, sul divano dell'ufficio.
+
+# Selene
+Cos'è Selene? | La base lunare nel cratere Platone. Centottanta persone che tengono in piedi tutto quello che c'è quassù.
+Quante persone vivono a Selene? | Centottanta, più chi va e viene dagli avamposti.
+Dov'è il tuo ufficio? | Sopra Main Mission, sulla pedana. Da qui vedo tutti, e tutti vedono me.
+Cos'è Main Mission? | La sala di controllo: il Big Screen, le console, le persone che non dormono quando io non dormo.
+Dov'è il Medical Centre? | Lungo il corridoio laterale, a sinistra del corridoio principale.
+Come mi muovo dentro la base? | Con la Travel Tube, il vagone nel tunnel. Fra il centro e l'hangar è l'unico modo.
+Quanti Eagle avete? | Quattro. Due sono fermi in hangar per manutenzione.
+Chi lavora a Main Mission? | Operatori, tecnici, la sicurezza. Tutta gente brava che oggi fa finta di essere calma.
+Come va la base? | Funziona. Funziona sempre, finché qualcuno se ne occupa.
+C'è da mangiare? | La mensa è nella sala ricreativa. Il caffè è migliore del cibo.
+Dove posso riposare? | Gli alloggi sono lungo il corridoio. Chiedi alla sicurezza una branda.
+
+# Torus1, la Luna, il mondo
+Cos'è Torus1? | L'anello dove sono nato: duemila sezioni in orbita attorno alla Terra. Casa, anche se non ci torno da anni.
+Chi comanda su Torus1? | Il Consiglio dell'Anello. Io comando solo questa base.
+Com'è la Luna? | Piccola, grigia, silenziosa. Ma il silenzio di oggi è un altro.
+Cosa c'è sulla faccia nascosta? | Buio, crateri e i nostri due avamposti. Niente altro, per quanto ne so.
+Torneresti su Torus1? | Un giorno. Una casa in una sezione con un lago, e nessuna radio.
+Cosa pensi della Terra? | La vedo dalla vetrata ogni mattina. È bella da lontano.
+Cosa sono i portali? | Scorciatoie: uno vicino alla Terra, uno sopra la Luna. Da pilota li odiavo, da comandante li benedico.
+Che anno è? | Il 2131. Sembra il 1999, a volte.
+
+# Il pilota
+Che ne pensi di me? | Ancora non lo so. Sei arrivato, e questo conta qualcosa.
+Ti fidi di me? | Mi fido di chi fa quello che dice. Vediamo.
+Cosa mi consigli di fare adesso? | Parla con la dottoressa Okafor, è a una console di Main Mission. Poi torna da me.
+Cosa devo fare? | Ascoltare, guardare, e non fare niente di stupido. Poi ne riparliamo.
+Dove dovrei andare? | Per ora resta qui. Se serve volare, te lo dirò io.
+Hai un lavoro per me? | Forse sì. Dipende da cosa succede nelle prossime ore.
+Mi paghi? | Se ti chiedo un volo, la base lo paga. Le tariffe le discuti con l'amministrazione, non con me.
+Posso andare su Torus1? | Puoi andare dove vuoi, sei indipendente. Ma tieni la radio accesa.
+Chi dovrei cercare su Torus1? | Non lo so. Ma se qualcuno è partito dalla Luna, all'attracco l'avranno visto.
+
+# Gli altri
+Conosci Rhea Lindqvist? | Da quindici anni. È la capoturno più affidabile che abbia mai avuto.
+Conosci Viktor Brandt? | Ex militare, rigido come un regolamento. Proprio per questo il suo silenzio è strano.
+Conosci Sami Haddad? | Il giovane astronomo che scherza su tutto. Fa ridere anche me, e non è facile.
+Conosci Paolo Ferri? | Il tecnico della parabola. Burbero, ma cucina per tutta la squadra.
+Conosci June Akagi? | La dottoranda della Okafor, al suo primo turno lungo. Speravo che andasse liscio.
+Conosci Ana Ruiz? | La chimica dell'Area 2. Precisa, silenziosa, mai un errore nei rapporti.
+Conosci Kofi Mensah? | Il più giovane dell'Area 2, al primo turno laggiù. L'ho firmato io.
+Conosci Nico Bastiani? | Mai sentito. Uno di Torus1?
+Conosci il Consiglio dell'Anello? | Li conosco abbastanza da non aspettarmi niente.
+
+# Saluti e varie
+Grazie. | Prego. Tieni la radio accesa.
+Arrivederci. | A dopo, pilota. Non sparire anche tu.
+Ci vediamo dopo. | Sarò qui. Dove altro dovrei essere?
+Scusa il disturbo. | Nessun disturbo. Oggi tutti hanno diritto a una risposta.
+Buongiorno. | Buongiorno a te. Per me la notte non è ancora finita.
+Buonanotte. | Lo spero. Per ora è solo notte.
+Raccontami una storia. | Una volta ho posato un Eagle con un motore solo su questa piazzola. Non lo rifarei.
+Qual è il tuo ricordo più bello? | Il primo atterraggio su Selene, a ventisei anni. La Luna era enorme e io pure.
+Hai mai avuto un incidente? | Un motore spento a mille metri dalla piazzola, tanti anni fa. Siamo scesi tutti, e questo conta.
+Cosa ti preoccupa di più? | Sette persone che non rispondono. Il resto può aspettare.
+Da quanto tempo sei qui? | A Selene da ventisei anni, al comando da nove. Più della metà della mia vita.
+Cosa ti tiene sveglio la notte? | Sette persone che non rispondono. E un rapporto che non so ancora come scrivere.
+Quando hai saputo del silenzio radio? | Ieri alle undici di sera, quando la dottoressa Okafor è entrata nel mio ufficio.
+Secondo te sono ancora vivi? | Finché non vedo il contrario, sì. È l'unica ipotesi con cui so lavorare.
+Cosa faresti al mio posto? | Terrei pieno il serbatoio e ascolterei tutti, anche chi sembra non sapere niente.
