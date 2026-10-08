@@ -371,6 +371,11 @@ func focus() -> Node3D:
 	var walker := get_node_or_null("InteriorWalker") as Node3D
 	return walker if walker != null else get_node_or_null("InternalCruiser") as Node3D
 
+# What moves with the sections when the origin shifts: things standing in
+# the sections go under it.
+func chain_node() -> Node3D:
+	return _chain
+
 # Back near the origin along Z with `craft`; the craft and the pilot on foot
 # (whichever is not `craft`) move with it.
 func rebase_around(craft: Node3D) -> void:
@@ -388,6 +393,7 @@ func rebase_around(craft: Node3D) -> void:
 		craft.position.z -= shift
 
 func _process(_delta: float) -> void:
+	RenderingServer.global_shader_parameter_set("loop_clock", LoopTraffic.clock())
 	var craft := focus()
 	if craft != null and _chain != null:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)

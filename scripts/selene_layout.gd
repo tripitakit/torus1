@@ -212,9 +212,13 @@ static func routes() -> Array:
 		_route("main_mission", [v.call(3.5, -24.0), v.call(3.5, -34.0)]),
 	]
 
-# The crew at work standing: {department, transform (facing their work)}.
+# The crew at work standing: {department, transform (facing their work),
+# npc (their sheet, NpcBrain) when someone in particular}: the Commander,
+# Ferrand, in his office; Dr Okafor of the UltraTelescope at a console by
+# Main Mission's window.
 static func workers() -> Array:
 	return [
 		{"department": "medical", "transform": Transform3D(Basis(), Vector3(-17.9, 0.0, -9.9))},
-		{"department": "command", "transform": Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(16.8, OFFICE_FLOOR, -26.4))},
+		{"department": "command", "transform": Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(16.8, OFFICE_FLOOR, -26.4)), "npc": "ferrand"},
+		{"department": "technical", "transform": Transform3D(Basis(), Vector3(-4.0, 0.0, -34.4)), "npc": "okafor"},
 	]

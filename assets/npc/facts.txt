@@ -1,0 +1,48 @@
+# I fatti del mondo, uno per riga: chi li conosce | il fatto.
+# Chi: tutti, selene (l'equipaggio di Selene), torus1 (la gente di Torus1),
+# o il nome di un personaggio (ferrand, okafor, bastiani); chiacchiere: vedi in fondo.
+tutti | Siamo nell'anno 2131.
+tutti | Torus1 è un anello di 2000 sezioni in orbita attorno alla Terra, a circa 600 km di quota.
+tutti | Ogni sezione di Torus1 è un cilindro lungo 20 km e largo 4 km che ruota per dare gravità.
+tutti | Dentro le sezioni ci sono città, paesi, campi, colline, boschi e laghi, sotto un cielo artificiale con il giorno e la notte.
+tutti | Le sezioni sono unite da ponti, e ogni ponte ha un attracco per le navi.
+tutti | Dentro una sezione ci si muove a piedi, con il treno lungo l'asse o con i cruiser, che si posano sulle piazzole dei paesi.
+tutti | Torus1 è governato dal Consiglio dell'Anello, e ogni sezione ha un sindaco.
+tutti | La Luna è piccola: 250 km di raggio, a 20.000 km dalla Terra; mostra sempre la stessa faccia alla Terra.
+tutti | Due portali, uno vicino alla Terra e uno sopra la Luna, collegano i due posti in un attimo.
+tutti | Gli Eagle sono le navi che fanno la spola fra Torus1 e la Luna.
+tutti | La base Selene è sulla Luna, nel cratere Platone.
+tutti | Il pilota con cui parli è indipendente: con il suo Eagle porta carichi fra Torus1 e la Luna.
+selene | Selene ha cupole e settori collegati da tubi, una torre con il faro e sei piazzole di atterraggio.
+selene | Dentro Selene ci sono Main Mission, la sala di controllo con il Big Screen, il Medical Centre, gli alloggi e la sala ricreativa.
+selene | Dentro Selene ci si sposta con la Travel Tube, un vagone che corre in un tunnel.
+selene | Il comandante di Selene è Tomas Ferrand, da nove anni.
+selene | Sulla faccia nascosta della Luna ci sono due avamposti che dipendono da Selene: l'UltraTelescopio e l'Area 2.
+selene | L'UltraTelescopio è una grande parabola con una cupola: osserva lo spazio profondo, lontano dal rumore radio della Terra.
+selene | L'Area 2 è il deposito delle scorie nucleari: silos di cilindri dentro un recinto.
+selene | Da ieri sera l'UltraTelescopio e l'Area 2 non rispondono più alle chiamate radio.
+selene | Al telescopio era di turno una squadra di quattro persone: Rhea Lindqvist, capoturno, Sami Haddad, Paolo Ferri e June Akagi.
+selene | All'Area 2 erano di turno tre persone: Viktor Brandt, Ana Ruiz e Kofi Mensah.
+selene | La dottoressa Ines Okafor si è accorta per prima del silenzio radio e lo ha detto al comandante Ferrand.
+selene | Nessuno sa ancora perché gli avamposti non rispondono.
+torus1 | Nelle sezioni la pioggia è programmata e il giorno dura come sulla Terra.
+torus1 | Il treno lungo l'asse della sezione passa ogni pochi minuti.
+torus1 | La gente di Torus1 sa poco della Luna: ci vanno solo piloti, tecnici e scienziati.
+ferrand | Ferrand era pilota di Eagle e ha ancora il brevetto.
+ferrand | Ferrand vuole mandare qualcuno a controllare gli avamposti, ma prima vuole escludere un guasto della radio di Selene.
+ferrand | Ferrand dorme poco da quando gli avamposti tacciono.
+okafor | Okafor è la responsabile scientifica dell'UltraTelescopio; questa settimana era a Selene per una riunione.
+okafor | La squadra del telescopio doveva chiamare Selene ogni sei ore; l'ultima chiamata è di ieri alle 18.
+okafor | Okafor conosce bene la squadra di turno al telescopio, soprattutto Rhea Lindqvist, che lavora con lei da cinque anni.
+bastiani | Bastiani ha un ufficio sopra un bar, nel paese vicino alla piazzola.
+bastiani | Bastiani prima era agente della sicurezza dell'anello; ha lasciato dopo un'indagine finita male.
+bastiani | Bastiani conosce gli attracchi, i treni e chi traffica nelle sezioni.
+bastiani | Bastiani non è mai stato sulla Luna.
+# Chiacchiere: non entrano mai nel prompt, dicono solo che una domanda è "del
+# mondo" (saluti, domande personali) e va passata al personaggio.
+chiacchiere | Ciao, come stai? Buongiorno, buonasera.
+chiacchiere | Chi sei? Come ti chiami? Quanti anni hai?
+chiacchiere | Che lavoro fai? Di cosa ti occupi qui?
+chiacchiere | Come ti senti? Sei stanco? Hai paura?
+chiacchiere | Arrivederci, a presto, grazie.
+chiacchiere | Che cosa mi consigli di fare adesso? Dove dovrei andare?

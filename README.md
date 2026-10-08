@@ -47,6 +47,12 @@ godot-double --editor --path .   # l'editor
 
 Il renderer è **Compatibility** (OpenGL 3.3).
 
+### Ollama (per parlare con le persone)
+
+I dialoghi richiedono [Ollama](https://ollama.com) con i modelli `gemma3:1b` e `embeddinggemma`. Il gioco
+avvia il server da solo al primo dialogo (`OLLAMA_VULKAN=1 ~/ollama/bin/ollama serve`; il percorso si cambia
+con l'impostazione di progetto `torus1/npc/ollama_binary`) e lo spegne all'uscita, solo se l'ha avviato lui.
+
 ## Cosa c'è oggi
 
 ### Il sistema
@@ -136,6 +142,21 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
   abbastanza vicini (8 m) per risalire. Il rover resta parcheggiato dove lo si lascia; se si risale sull'Eagle
   torna nella stiva.
 
+### Parlare con le persone
+
+- A piedi, su Selene e nelle sezioni, con qualcuno entro 2,5 m davanti l'HUD mostra `P PARLA`. Con **P** la
+  persona si ferma e si gira, e in basso si apre un terminale anni '70 (ambra su nero): si scrive liberamente,
+  **Invio** chiede, **Esc** saluta. Le risposte le scrive `gemma3:1b` (in circa un secondo), restando nel
+  personaggio e con i fatti del mondo che il personaggio conosce.
+- Su Selene: il comandante **Tomas Ferrand** nel suo ufficio, la dottoressa **Ines Okafor** dell'UltraTelescopio
+  a una console di Main Mission, e il resto dell'equipaggio. Da ieri sera l'UltraTelescopio e l'Area 2 non
+  rispondono più alla radio.
+- Su Torus1: **Nico Bastiani**, investigatore privato, alla piazzola dove porta il teleport 3, e qualsiasi
+  passante (ognuno ha sempre lo stesso nome e mestiere). La gente di Torus1 della Luna non sa niente.
+- Ferrand, Okafor e Bastiani ricordano la conversazione per tutta la sessione; gli altri la dimenticano.
+- Le schede dei personaggi sono in `assets/npc/people/*.cfg`, i fatti del mondo in `assets/npc/facts.txt`. Dopo
+  aver cambiato i fatti si ricalcolano i loro vettori: `godot-double --headless --path . -s tools/bake_npc_facts.gd`.
+
 ## Comandi
 
 | Tasto | Nave / cruiser interno | Rover | A piedi |
@@ -153,6 +174,7 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 | H | scendi nella base (nave posata su un pad di Selene) | — | — |
 | V | scendi sul rover (nave posata sulla luna) | risali sulla nave | — |
 | K | scendi a piedi (nave posata; cruiser: posa sulla piazzola) | scendi a piedi | risali sul mezzo vicino; in Selene: viaggio o chiamata della Travel Tube, all'ascensore risali sull'Eagle |
+| P | — | — | parla con chi hai davanti (Invio: chiedi, Esc: saluta) |
 | J | — | — | corsa (tenere premuto) |
 | Spazio | — | — | salto |
 | L | — | fari | — |
@@ -167,6 +189,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
   da `tools/bake_window_views.gd` (da rifare, con la GPU, se cambiano gli esterni).
 - `assets/people/animated_human.glb` — il modello delle persone; letto all'avvio, la camminata è cotta in una
   texture per lo shader. In un gioco esportato il file va incluso fra le risorse.
+- `assets/npc/` — le schede dei personaggi, i fatti del mondo e i loro vettori (`facts.json`, da
+  `tools/bake_npc_facts.gd`).
 - `shaders/` — parti di shader condivise.
 - `assets/` — mappe e texture già pronte (non serve scaricare nulla per giocare).
 - `tools/` — gli script che hanno generato le mappe NASA (`earth_maps.py`, `moon_maps.py`) e le texture

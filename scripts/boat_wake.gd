@@ -53,9 +53,9 @@ varying float night;
 void vertex() {
 	float lag = UV.x;
 	vec3 pos; vec3 left; vec3 up; vec3 forward;
-	loop_pose(MODEL_MATRIX, TIME - lag, pos, left, up, forward);
+	loop_pose(MODEL_MATRIX, loop_clock - lag, pos, left, up, forward);
 	vec3 before; vec3 l2; vec3 u2; vec3 f2;
-	loop_pose(MODEL_MATRIX, TIME - lag - speed_sample, before, l2, u2, f2);
+	loop_pose(MODEL_MATRIX, loop_clock - lag - speed_sample, before, l2, u2, f2);
 	float share = clamp(length(pos - before) / speed_sample / full_speed, 0.0, 1.0);
 	vec3 world = pos + left * VERTEX.x + forward * VERTEX.z;
 	float distance = length(world - CAMERA_POSITION_WORLD);

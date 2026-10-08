@@ -145,7 +145,7 @@ func _test_twelve_in_the_base() -> int:
 				seated += 1
 	var count := crew.get_child_count() if crew != null else 0
 	base.free()
-	if count != 12 or seated != 4:
+	if count != 13 or seated != 4:
 		print("FAIL _test_twelve_in_the_base: %d crew, %d seated" % [count, seated])
 		return 1
 	return 0

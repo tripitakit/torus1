@@ -225,6 +225,7 @@ func _build_crew() -> void:
 	for worker in SeleneLayout.workers():
 		var member := SeleneCrew.new_member(worker.department)
 		member.transform = worker.transform
+		member.set_meta("npc", worker.get("npc", "selene_crew"))
 		crew.add_child(member)
 		members.append(member)
 		member.idle()
@@ -237,6 +238,10 @@ func _build_crew() -> void:
 	for k in range(members.size()):
 		members[k].name = "Member_%02d" % k
 		members[k].add_to_group(PEOPLE_GROUP)
+		# Who they are when spoken to (TownFolk.sheet_for).
+		if not members[k].has_meta("npc"):
+			members[k].set_meta("npc", "selene_crew")
+		members[k].set_meta("npc_seed", k)
 
 # The Travel Tube's car: a kinematic box with benches, windows, a control
 # panel with the line's map, a door on its -Z side that is shut while it

@@ -16,6 +16,7 @@ func _initialize():
 	_failures += _test_same_an_hour_later()
 	_failures += _test_stops_at_its_stop_each_lap()
 	_failures += _test_stop_data_matches_pose()
+	_failures += _test_shared_clock_and_hiding()
 
 	if _failures == 0:
 		print("ALL TESTS PASSED")
@@ -130,5 +131,17 @@ func _test_stop_data_matches_pose() -> int:
 			return 1
 	if LoopTraffic.pose_from_data(data, 0, 7.0, 30.0).origin.distance_to(LoopTraffic.pose_from_data(data, 0, 3607.0, 30.0).origin) > 0.02:
 		print("FAIL _test_stop_data_matches_pose: moved after an hour")
+		return 1
+	return 0
+
+# The shaders run on loop_clock, set by the game from LoopTraffic.clock(),
+# so the CPU knows where everyone is; an instance's custom x hides it.
+func _test_shared_clock_and_hiding() -> int:
+	var clock := LoopTraffic.clock()
+	var code: String = LoopTraffic.material(4.0, Color.WHITE).shader.code
+	var wake: String = load("res://scripts/boat_wake.gd").material(4.0).shader.code
+	if clock < 0.0 or clock >= 3600.0 or not code.contains("global uniform float loop_clock") or code.contains("loop_pose(MODEL_MATRIX, TIME") \
+			or not code.contains("INSTANCE_CUSTOM.x") or wake.contains("loop_pose(MODEL_MATRIX, TIME") or not ProjectSettings.has_setting("shader_globals/loop_clock"):
+		print("FAIL _test_shared_clock_and_hiding: clock %.1f" % clock)
 		return 1
 	return 0
