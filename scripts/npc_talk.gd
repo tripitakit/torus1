@@ -22,6 +22,8 @@ var client: Node
 var terminal: CanvasLayer
 # NpcBrain.load_knowledge() unless set before _ready.
 var knowledge: Dictionary = {}
+# Questions close to a pair answered as written (off: always the model).
+var written_answers := true
 # The clues the player has (clue -> true): lines tagged [dopo:<clue>] show.
 var clues: Dictionary = {}
 var _person: Dictionary = {}
@@ -109,7 +111,7 @@ func _answer(question: String, session: int) -> String:
 		var line := NpcBrain.dunno(_person, _rng)
 		terminal.replace_reply(line)
 		return line
-	var written: Dictionary = NpcBrain.direct(pairs, vector)
+	var written: Dictionary = NpcBrain.direct(pairs, vector) if written_answers else {}
 	if not written.is_empty():
 		terminal.replace_reply(written.a)
 		return written.a
