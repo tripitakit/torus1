@@ -49,7 +49,10 @@ Il renderer è **Compatibility** (OpenGL 3.3).
 
 ### Ollama (per parlare con le persone)
 
-I dialoghi richiedono [Ollama](https://ollama.com) con i modelli `gemma3:1b` e `embeddinggemma`. Il gioco
+I dialoghi richiedono [Ollama](https://ollama.com) con `embeddinggemma` e il modello delle risposte
+`gemma3-4b-chat`: il Gemma 3 da 4B (`gemma3-local`) con il formato per la chat, creato senza scaricare niente con
+`~/ollama/bin/ollama create gemma3-4b-chat -f tools/ollama/gemma3-4b-chat.Modelfile`. Il modello si cambia con
+l'impostazione di progetto `torus1/npc/chat_model` (per esempio `gemma3:1b`, più veloce ma più confuso). Il gioco
 avvia il server da solo al primo dialogo (`OLLAMA_VULKAN=1 ~/ollama/bin/ollama serve`; il percorso si cambia
 con l'impostazione di progetto `torus1/npc/ollama_binary`) e lo spegne all'uscita, solo se l'ha avviato lui.
 
@@ -146,8 +149,8 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 
 - A piedi, su Selene e nelle sezioni, con qualcuno entro 2,5 m davanti l'HUD mostra `P PARLA`. Con **P** la
   persona si ferma e si gira, e in basso si apre un terminale anni '70 (ambra su nero): si scrive liberamente,
-  **Invio** chiede, **Esc** saluta. Le risposte le scrive `gemma3:1b` (in circa un secondo), restando nel
-  personaggio e con i fatti del mondo che il personaggio conosce.
+  **Invio** chiede, **Esc** saluta. Le risposte sono quelle scritte per il personaggio quando la domanda è
+  vicina a una delle sue, altrimenti le scrive il modello, restando nel personaggio con i suoi ricordi.
 - Su Selene: il comandante **Tomas Ferrand** nel suo ufficio, la dottoressa **Ines Okafor** dell'UltraTelescopio
   a una console di Main Mission, e il resto dell'equipaggio. Da ieri sera l'UltraTelescopio e l'Area 2 non
   rispondono più alla radio.
@@ -157,7 +160,7 @@ Attraccando a un ponte si entra nell'interno della stazione e si vola con l'**in
 - Ogni personaggio ha una cartella `assets/npc/people/<id>/`: `sheet.cfg` (chi è), `qa.txt` (100 coppie
   `domanda | risposta` nella sua voce; 40 per equipaggio e passanti) e `memories.txt` (ricordi e opinioni in prima
   persona). I fatti del mondo sono in `assets/npc/facts.txt`. Una domanda vicina a una coppia riceve la risposta
-  scritta, subito; le altre vanno a `gemma3:1b` con le coppie, i ricordi e i fatti più vicini; quelle fuori dal
+  scritta, subito; le altre vanno al modello (3–4 s) con le coppie, i ricordi e i fatti più vicini; quelle fuori dal
   mondo ricevono un "non so" del personaggio. Una riga che comincia con `[dopo:<indizio>]` resta nascosta finché
   il giocatore non ha l'indizio (per la trama).
 - Dopo aver cambiato qualcosa in `assets/npc/` si ricalcolano i vettori (circa 30 s):

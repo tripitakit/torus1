@@ -27,6 +27,12 @@ func _initialize():
 	var talk: Node = NpcTalk.new()
 	talk.client = client
 	talk.terminal = terminal
+	# NPC_MODEL=<model> to try another; NPC_MODEL_ONLY=1 for the model's own
+	# replies (no written answers).
+	if OS.get_environment("NPC_MODEL") != "":
+		client.chat_model = OS.get_environment("NPC_MODEL")
+	talk.written_answers = OS.get_environment("NPC_MODEL_ONLY") == ""
+	print("model %s, written answers %s" % [client.chat_model, talk.written_answers])
 	for node in [client, terminal, talk]:
 		root.add_child(node)
 	await process_frame

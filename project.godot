@@ -190,3 +190,7 @@ interior_hour_slope={
 "type": "float",
 "value": 0.0
 }
+
+[torus1]
+
+npc/chat_model="gemma3-4b-chat"

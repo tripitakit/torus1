@@ -15,6 +15,7 @@ const HOST := "127.0.0.1"
 const PORT := 11434
 const BINARY_SETTING := "torus1/npc/ollama_binary"
 const BINARY_DEFAULT := "~/ollama/bin/ollama"
+const MODEL_SETTING := "torus1/npc/chat_model"
 const CHAT_MODEL := "gemma3:1b"
 const EMBED_MODEL := "embeddinggemma"
 const KEEP_ALIVE := "30m"
@@ -23,6 +24,8 @@ const CHAT_OPTIONS := {"num_predict": 60, "temperature": 0.6}
 const START_WAIT := 15.0
 const START_POLL := 0.5
 
+# The model that writes the replies (project setting torus1/npc/chat_model).
+var chat_model := str(ProjectSettings.get_setting(MODEL_SETTING, CHAT_MODEL))
 var _pid := -1
 # Bumped by every new chat and by cancel(): an older chat stops reading.
 var _chat_id := 0
@@ -128,7 +131,7 @@ func _run_chat(messages: Array, id: int) -> void:
 	if http.get_status() != HTTPClient.STATUS_CONNECTED:
 		_finish(id, "", "connessione rifiutata")
 		return
-	var body := JSON.stringify({"model": CHAT_MODEL, "messages": messages, "stream": true, "keep_alive": KEEP_ALIVE, "options": CHAT_OPTIONS})
+	var body := JSON.stringify({"model": chat_model, "messages": messages, "stream": true, "keep_alive": KEEP_ALIVE, "options": CHAT_OPTIONS})
 	http.request(HTTPClient.METHOD_POST, "/api/chat", ["Content-Type: application/json"], body)
 	while http.get_status() == HTTPClient.STATUS_REQUESTING:
 		http.poll()

@@ -9,6 +9,7 @@ const OllamaClient = preload("res://scripts/ollama_client.gd")
 func _initialize():
 	var failures := 0
 	failures += _test_parse_lines()
+	failures += _test_chat_model()
 	failures += await _test_live()
 	if failures == 0:
 		print("ALL TESTS PASSED")
@@ -27,6 +28,17 @@ func _test_parse_lines() -> int:
 	var pieces: Array = a[0] + b[0]
 	if pieces.size() != 3 or pieces[0].message.content != "Ciao" or pieces[1].message.content != " perché" or not pieces[2].done or not (b[1] as PackedByteArray).is_empty():
 		print("FAIL _test_parse_lines: %s / rest %s" % [pieces, b[1]])
+		return 1
+	return 0
+
+# The replies come from the 4B model made from tools/ollama/ (the project
+# setting), the 1B one only if the setting is gone.
+func _test_chat_model() -> int:
+	var client: Node = OllamaClient.new()
+	var model: String = client.chat_model
+	client.free()
+	if model != "gemma3-4b-chat":
+		print("FAIL _test_chat_model: %s" % model)
 		return 1
 	return 0
 

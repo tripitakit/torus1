@@ -32,3 +32,8 @@
 - Il filtro fuori tema contava anche le coppie e non scattava più (mondiali: 0,33 con le coppie): ora la domanda è
   "del mondo" se somiglia ≥ 0,55 a una coppia o ≥ 0,30 a un fatto o a un ricordo.
 - Le frasi delle comparse sono neutre (nome e mestiere possono essere femminili).
+- Dopo il merge: risposte del modello ancora sconclusionate con `gemma3:1b`. Il Gemma 3 4B locale (`gemma3-local`)
+  non aveva il formato per la chat; con quello dei modelli ufficiali (`tools/ollama/gemma3-4b-chat.Modelfile`)
+  segue ricordi e fatti molto meglio. Misurato nel gioco: risposte in 3–4 s (1 s col 1B), il modello per un terzo
+  sul processore perché Godot occupa la scheda video, FPS durante il dialogo ancora alti. Predefinito ora il 4B
+  (`torus1/npc/chat_model`), con le risposte scritte per le domande vicine alle coppie.

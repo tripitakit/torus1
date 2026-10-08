@@ -1,0 +1,16 @@
+# gemma3-4b-chat: the Gemma 3 4B already on this machine (gemma3-local) with the
+# chat template of the official gemma3 models (it had none, so system prompts
+# were lost). Create it, offline: ~/ollama/bin/ollama create gemma3-4b-chat -f tools/ollama/gemma3-4b-chat.Modelfile
+FROM gemma3-local:latest
+TEMPLATE """{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 }}
+{{- if or (eq .Role "user") (eq .Role "system") }}<start_of_turn>user
+{{ .Content }}<end_of_turn>
+{{ if $last }}<start_of_turn>model
+{{ end }}
+{{- else if eq .Role "assistant" }}<start_of_turn>model
+{{ .Content }}{{ if not $last }}<end_of_turn>
+{{ end }}
+{{- end }}
+{{- end }}"""
+PARAMETER stop "<end_of_turn>"
