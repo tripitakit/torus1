@@ -17,6 +17,7 @@ const FACTS := 4
 const HISTORY := 6
 # Lines of facts that only say a question is of the world.
 const SMALL_TALK := "chiacchiere"
+const PLAYER := "TU"
 const RULES := "Rispondi sempre in italiano, al massimo due frasi brevi, restando nel personaggio. Dai del tu al pilota. Usa solo quello che sai; se non sai una cosa, dillo con parole tue, da persona. Non dire mai di essere un programma o un'intelligenza artificiale."
 # A reply with one of these is the model speaking, not the person.
 const BANNED := ["intelligenza artificiale", "modello linguistico", "modello di linguaggio", "google", "assistente virtuale", "sono un assistente", "sono un programma", "chatbot", "openai"]

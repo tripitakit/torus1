@@ -9,6 +9,7 @@ extends CanvasLayer
 signal asked(text: String)
 signal closed
 
+const NpcBrainScript = preload("res://scripts/npc_brain.gd")
 const AMBER := Color(1.0, 0.69, 0.0)
 const DIM_AMBER := Color(0.75, 0.5, 0.0)
 const BACKGROUND := Color(0.0, 0.0, 0.0, 0.85)
@@ -18,7 +19,7 @@ const HEIGHT_SHARE := 0.36
 const MARGIN := 24.0
 const LINES_KEPT := 8
 const BLINK := 0.5
-const PLAYER := "TU"
+const PLAYER := NpcBrainScript.PLAYER
 
 var _lines: Array = []
 var _waiting := false
