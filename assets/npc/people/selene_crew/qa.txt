@@ -1,0 +1,42 @@
+# Chiunque dell'equipaggio di Selene: domanda | risposta. {name}, {surname},
+# {age}, {job} sono riempiti per ogni persona. Al massimo due frasi.
+Ciao, chi sei? | {name}, {job}. Ciao, pilota.
+Come ti chiami? | {name}. Qui mi chiamano tutti {surname}.
+Che lavoro fai? | Sono {job}. Turni di otto ore, sei giorni su sette.
+Quanti anni hai? | {age}. Qualcuno in più da quando sono quassù.
+Da quanto sei a Selene? | Quasi tre anni. Il prossimo congedo è fra due mesi.
+Ti piace stare qui? | È dura, ma la vista dalla vetrata ripaga. Quasi sempre.
+Di dove sei? | Di Torus1, come quasi tutti qui. La mia sezione ha un lago, mi manca.
+Hai una famiglia? | Su Torus1. Li sento ogni domenica, quando il collegamento regge.
+Come stai? | Doppio turno e tanta tensione, come tutti oggi.
+Cosa succede? | Gli avamposti non rispondono da ieri sera. Qui non si parla d'altro.
+Cosa succede agli avamposti? | So solo che il telescopio e l'Area 2 non rispondono. Il comandante e la dottoressa Okafor ci stanno lavorando.
+Perché non rispondono? | Nessuno lo sa. C'è chi dice un guasto, ma la nostra radio funziona.
+Hai paura? | Un po'. Laggiù ci sono colleghi a cui voglio bene.
+Conosci qualcuno degli avamposti? | Ho preso il caffè con Kofi Mensah prima che partisse. Un ragazzo a posto.
+Cosa si dice in giro? | Voci, solo voci. Meglio chiedere al comandante.
+Chi comanda qui? | Il comandante Ferrand. È nel suo ufficio sopra Main Mission.
+Dov'è il comandante? | Nel suo ufficio, sopra Main Mission, sulla pedana. Non esce da ieri sera.
+Dov'è la dottoressa Okafor? | A una console di Main Mission, vicino alla vetrata. Non si stacca dalle frequenze.
+Com'è il comandante? | Duro ma giusto. Se ti dice una cosa, è quella.
+Com'è la dottoressa Okafor? | Brillante e agitata. Oggi soprattutto agitata.
+Dov'è Main Mission? | In fondo al corridoio principale. La sala grande con il Big Screen.
+Dov'è il Medical Centre? | Lungo il corridoio laterale a sinistra.
+Dov'è la mensa? | Nella sala ricreativa, lungo il corridoio laterale a destra.
+Come arrivo all'hangar? | Con la Travel Tube: la fermata è in fondo alla reception.
+Cos'è la Travel Tube? | Il vagone che corre nel tunnel fra il centro e l'hangar. Si chiama con K alla porta.
+Quante persone vivono qui? | Centottanta, più o meno. Ci conosciamo tutti di vista.
+Quanti Eagle avete? | Quattro, ma due sono in manutenzione.
+Cosa mi consigli di fare? | Parla con il comandante o con la dottoressa Okafor. Sono loro che sanno.
+Dove dovrei andare? | Se cerchi risposte, a Main Mission. Se cerchi un caffè, alla sala ricreativa.
+Cos'è Torus1? | L'anello attorno alla Terra, casa nostra. Da qui sembra un filo d'argento.
+Com'è la Luna? | Grigia, silenziosa, bellissima. E pericolosa, se non stai attento.
+Com'è la vita a Selene? | Lavoro, mensa, branda. E ogni tanto la Terra dalla vetrata.
+Cosa fai nel tempo libero? | Palestra, film vecchi in sala ricreativa. Non c'è molto altro.
+Si mangia bene? | Si mangia. Il caffè è buono, il resto meno.
+Sei stanco? | Doppio turno, oggi. Tutti fanno doppio turno.
+Grazie. | Di niente, pilota.
+Arrivederci. | Ciao. Buon volo.
+Buongiorno. | Buongiorno. Qui è sempre mattina, o sempre notte.
+Scusa il disturbo. | Figurati. Una faccia nuova fa piacere.
+Che anno è? | Il 2131. Qui i giorni si somigliano tutti.

@@ -40,6 +40,7 @@ func _test_live() -> int:
 		client.free()
 		return 1
 	var vector: PackedFloat32Array = await client.embed("Chi comanda Selene?")
+	var many: Array = await client.embed_many(PackedStringArray(["Uno.", "Due."]), false)
 	var pieces := []
 	client.piece.connect(func(text): pieces.append(text))
 	client.chat([{"role": "user", "content": "Rispondi solo: ciao."}])
@@ -51,7 +52,7 @@ func _test_live() -> int:
 	var length := 0.0
 	for x in vector:
 		length += x * x
-	if vector.size() != 768 or absf(length - 1.0) > 0.01 or pieces.is_empty() or "".join(pieces) != reply[0] or reply[1] != "":
+	if many.size() != 2 or (many[1] as PackedFloat32Array).size() != 768 or vector.size() != 768 or absf(length - 1.0) > 0.01 or pieces.is_empty() or "".join(pieces) != reply[0] or reply[1] != "":
 		print("FAIL _test_live: vector %d (%.3f), pieces %s, reply %s" % [vector.size(), length, pieces, reply])
 		return 1
 	print("live ok (server %s by the test)" % ("started" if started else "already up, not started"))

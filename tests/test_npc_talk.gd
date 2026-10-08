@@ -43,12 +43,23 @@ func _initialize():
 		print("%d TEST(S) FAILED" % failures)
 	quit()
 
-func _facts() -> Array:
-	return [
-		{"who": "tutti", "text": "Fatto del mondo.", "vector": PackedFloat32Array([1.0, 0.0])},
-		{"who": "ferrand", "text": "Fatto di Ferrand.", "vector": PackedFloat32Array([0.9, 0.1])},
-		{"who": "okafor", "text": "Fatto di Okafor.", "vector": PackedFloat32Array([0.95, 0.05])},
+# Facts of Selene and of Torus1 (Ferrand knows only the first), and a
+# Ferrand with three pairs and two memories, vectors already on.
+func _knowledge() -> Dictionary:
+	return {"world": [
+		{"who": "selene", "after": "", "text": "Fatto di Selene.", "vector": PackedFloat32Array([1.0, 0.0])},
+		{"who": "torus1", "after": "", "text": "Fatto di Torus1.", "vector": PackedFloat32Array([0.95, 0.05])},
+	], "people": {}}
+
+func _ferrand() -> Dictionary:
+	var sheet := NpcBrain.person("ferrand")
+	sheet.qa = [
+		{"after": "", "q": "Cosa succede?", "a": "Silenzio radio.", "vector": PackedFloat32Array([0.9, 0.1])},
+		{"after": "", "q": "Chi sei?", "a": "Ferrand.", "vector": PackedFloat32Array([0.7, 0.3])},
+		{"after": "segreto", "q": "Il segreto?", "a": "Nascosto.", "vector": PackedFloat32Array([1.0, 0.0])},
 	]
+	sheet.memories = [{"after": "", "text": "Ricordo di Ferrand.", "vector": PackedFloat32Array([0.8, 0.2])}]
+	return sheet
 
 func _make(client: FakeClient) -> Array:
 	var terminal: CanvasLayer = NpcTerminal.new()
@@ -57,7 +68,7 @@ func _make(client: FakeClient) -> Array:
 	var talk: Node = NpcTalk.new()
 	talk.client = client
 	talk.terminal = terminal
-	talk.facts = _facts()
+	talk.knowledge = _knowledge()
 	root.add_child(talk)
 	await process_frame
 	return [talk, terminal]
@@ -71,7 +82,7 @@ func _test_talk() -> int:
 	var made: Array = await _make(client)
 	var talk: Node = made[0]
 	var terminal: CanvasLayer = made[1]
-	var ferrand := NpcBrain.person("ferrand")
+	var ferrand := _ferrand()
 	talk.start(ferrand)
 	await _ask(talk, terminal, "Chi ha vinto il campionato di calcio?")
 	if client.chats != 0 or not ferrand.dunno.has(terminal.log_text().get_slice("FERRAND: ", 1)):
@@ -80,13 +91,30 @@ func _test_talk() -> int:
 	client.replies = ["Silenzio radio da ieri sera. Nessuno sa perché. E poi"]
 	await _ask(talk, terminal, "Cosa succede?")
 	var system: String = client.last_messages[0].content
-	if not terminal.log_text().ends_with("FERRAND: Silenzio radio da ieri sera. Nessuno sa perché.") or not system.contains("Fatto di Ferrand.") or system.contains("Fatto di Okafor."):
-		print("FAIL _test_talk: good reply '%s' / %s" % [terminal.log_text(), system])
+	var asked_pairs := []
+	for m in client.last_messages.slice(1, -1):
+		asked_pairs.append(m.content)
+	# Ferrand's facts and memory in; Torus1's fact and the pair hidden behind a
+	# clue out; his pairs as earlier turns.
+	if not terminal.log_text().ends_with("FERRAND: Silenzio radio da ieri sera. Nessuno sa perché.") or not system.contains("Fatto di Selene.") or system.contains("Fatto di Torus1.") \
+			or not system.contains("Ricordo di Ferrand.") or not asked_pairs.has("Cosa succede?") or asked_pairs.has("Il segreto?"):
+		print("FAIL _test_talk: good reply '%s' / %s / %s" % [terminal.log_text(), system, asked_pairs])
+		return 1
+	# With the clue, the hidden pair comes in.
+	talk.clues = {"segreto": true}
+	client.replies = ["Va bene."]
+	await _ask(talk, terminal, "Cosa succede davvero?")
+	talk.clues = {}
+	var with_clue := []
+	for m in client.last_messages:
+		with_clue.append(m.content)
+	if not with_clue.has("Il segreto?"):
+		print("FAIL _test_talk: the pair behind the clue stayed hidden")
 		return 1
 	client.replies = ["Sono un modello linguistico.", "Sono un'intelligenza artificiale."]
 	await _ask(talk, terminal, "Chi sei davvero?")
 	var last: String = terminal.log_text().get_slice("\n", terminal.log_text().get_slice_count("\n") - 1)
-	if client.chats != 3 or not ferrand.dunno.has(last.get_slice("FERRAND: ", 1)):
+	if client.chats != 4 or not ferrand.dunno.has(last.get_slice("FERRAND: ", 1)):
 		print("FAIL _test_talk: rejected twice: %d chats, '%s'" % [client.chats, last])
 		return 1
 	talk.end()

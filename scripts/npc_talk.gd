@@ -2,8 +2,9 @@ extends Node
 
 # One talk with someone, from the question typed on the terminal to the
 # reply written on it: the question's vector (embeddinggemma); off the
-# world, one of their "don't know" lines without asking the model; else the
-# facts they know nearest to it, their sheet and the talk so far to
+# world, one of their "don't know" lines without asking the model; else
+# their pairs whose question is most like it, their nearest memories and
+# the nearest facts they know, their sheet and the talk so far to
 # gemma3:1b, the reply shown as it streams; a reply from the model as
 # itself asked once more, then replaced by "don't know". The named people
 # remember the talk for the session, the others forget it on goodbye.
@@ -18,8 +19,10 @@ const TRIES := 2
 # OllamaClient (or anything with its methods and signals).
 var client: Node
 var terminal: CanvasLayer
-# NpcBrain.load_facts() unless set before _ready.
-var facts: Array = []
+# NpcBrain.load_knowledge() unless set before _ready.
+var knowledge: Dictionary = {}
+# The clues the player has (clue -> true): lines tagged [dopo:<clue>] show.
+var clues: Dictionary = {}
 var _person: Dictionary = {}
 var _history: Array = []
 # Talks kept: person id -> history.
@@ -30,8 +33,8 @@ var _session := 0
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
-	if facts.is_empty():
-		facts = NpcBrain.load_facts()
+	if knowledge.is_empty():
+		knowledge = NpcBrain.load_knowledge()
 	client.piece.connect(_on_piece)
 	terminal.asked.connect(_on_asked)
 	terminal.closed.connect(end)
@@ -43,7 +46,7 @@ func person() -> Dictionary:
 	return _person
 
 func start(sheet: Dictionary) -> void:
-	_person = sheet
+	_person = NpcBrain.with_vectors(sheet, knowledge)
 	_history = (_memory.get(sheet.id, []) as Array).duplicate() if sheet.remembers else []
 	var lines := []
 	for m in _history:
@@ -98,12 +101,16 @@ func _answer(question: String, session: int) -> String:
 		terminal.show_error(NO_SERVER)
 		return ""
 	terminal.begin_reply(_who())
-	if NpcBrain.best(facts, vector) < NpcBrain.ON_TOPIC:
+	var world: Array = knowledge.get("world", [])
+	var pairs := NpcBrain.visible(_person.qa, clues)
+	var memories := NpcBrain.visible(_person.memories, clues)
+	if NpcBrain.best([world, pairs, memories], vector) < NpcBrain.ON_TOPIC:
 		var line := NpcBrain.dunno(_person, _rng)
 		terminal.replace_reply(line)
 		return line
-	var known := NpcBrain.relevant(facts, vector, _person.knows, NpcBrain.FACTS)
-	var messages := NpcBrain.messages(_person, known, _history, question)
+	var facts := NpcBrain.visible(NpcBrain.known_facts(world, _person), clues)
+	var messages := NpcBrain.messages(_person, _texts(NpcBrain.pick(memories, vector, NpcBrain.MEMORIES)),
+		_texts(NpcBrain.pick(facts, vector, NpcBrain.FACTS)), NpcBrain.pick(pairs, vector, NpcBrain.PAIRS), _history, question)
 	for attempt in range(TRIES):
 		terminal.replace_reply("")
 		_streaming = true
@@ -123,3 +130,9 @@ func _answer(question: String, session: int) -> String:
 	var fallback := NpcBrain.dunno(_person, _rng)
 	terminal.replace_reply(fallback)
 	return fallback
+
+static func _texts(entries: Array) -> PackedStringArray:
+	var out := PackedStringArray()
+	for e in entries:
+		out.append(e.text)
+	return out
