@@ -1001,7 +1001,8 @@ func _tend_talk() -> void:
 func _place_bastiani() -> void:
 	var chain: Node3D = _interior.chain_node()
 	var pad: Dictionary = _interior.nearest_pad(_interior.to_local(chain.to_global(_bastiani_spot)))
-	if pad.is_empty():
+	# Not yet the dock's own pad (its section still loading): wait.
+	if pad.is_empty() or pad.distance > PAD_MARKER_RANGE:
 		return
 	var top: Transform3D = pad.transform
 	var up := top.basis.y.normalized()
