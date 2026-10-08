@@ -15,6 +15,7 @@ const DEPARTMENTS := {
 	"technical": Color(0.95, 0.8, 0.15),
 	"command": Color(0.08, 0.08, 0.09),
 }
+const SUIT := Color(0.78, 0.72, 0.6)
 # The pilot on foot: the crew stop for them.
 const PILOT_GROUP := "selene_pilot"
 const SPEED := 1.2
@@ -32,12 +33,13 @@ const BOOT_BONES := ["LeftFoot", "LeftToeBase", "LeftToe_End", "RightFoot", "Rig
 const SHADER := """
 shader_type spatial;
 uniform vec3 sleeve : source_color = vec3(0.95, 0.45, 0.1);
+uniform vec3 suit : source_color = vec3(0.78, 0.72, 0.6);
 varying flat float part;
 void vertex() {
 	part = UV.x;
 }
 void fragment() {
-	vec3 colour = vec3(0.78, 0.72, 0.6);
+	vec3 colour = suit;
 	if (part > 3.5) {
 		colour = vec3(0.16, 0.1, 0.06);
 	} else if (part > 2.5) {
@@ -117,16 +119,20 @@ static func member_mesh() -> ArrayMesh:
 	_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if per == 8 else 0)
 	return _mesh
 
-static func _material(department: String) -> ShaderMaterial:
-	if not _materials.has(department):
+# Alpha's oatmeal suit with the department's sleeve; anyone else (a
+# department not listed) all in `suit`.
+static func _material(department: String, suit: Color = SUIT) -> ShaderMaterial:
+	var key := "%s %s" % [department, suit.to_html()]
+	if not _materials.has(key):
 		var material := ShaderMaterial.new()
 		material.shader = Shader.new()
 		material.shader.code = SHADER
-		material.set_shader_parameter("sleeve", DEPARTMENTS[department])
-		_materials[department] = material
-	return _materials[department]
+		material.set_shader_parameter("sleeve", DEPARTMENTS.get(department, suit))
+		material.set_shader_parameter("suit", suit)
+		_materials[key] = material
+	return _materials[key]
 
-static func new_member(department: String) -> CrewMember:
+static func new_member(department: String, suit: Color = SUIT) -> CrewMember:
 	var member := CrewMember.new()
 	member.name = "CrewMember"
 	var model := _scene().duplicate() as Node3D
@@ -136,7 +142,7 @@ static func new_member(department: String) -> CrewMember:
 	member.add_child(model)
 	var body := model.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
 	body.mesh = member_mesh()
-	body.material_override = _material(department)
+	body.material_override = _material(department, suit)
 	member.setup(department, model, body)
 	return member
 

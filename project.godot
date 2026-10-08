@@ -173,6 +173,10 @@ limits/opengl/max_renderable_lights=64
 
 [shader_globals]
 
+loop_clock={
+"type": "float",
+"value": 0.0
+}
 interior_hour_origin={
 "type": "float",
 "value": 10.0

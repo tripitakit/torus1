@@ -388,6 +388,7 @@ func rebase_around(craft: Node3D) -> void:
 		craft.position.z -= shift
 
 func _process(_delta: float) -> void:
+	RenderingServer.global_shader_parameter_set("loop_clock", LoopTraffic.clock())
 	var craft := focus()
 	if craft != null and _chain != null:
 		stream_step(chain_z(craft.position), CHUNKS_DRESSED_PER_FRAME, CHUNKS_FREED_PER_FRAME)

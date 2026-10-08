@@ -26,6 +26,12 @@ const DETAIL_TO := 80.0
 const STOP_DWELL := 20.0
 const STOP_ACCEL := 0.5
 
+# The loops' time, seconds within the hour: the shaders read it as the
+# global loop_clock (set every frame by the interior), so the CPU can tell
+# where everyone is (shader TIME cannot be read from here).
+static func clock() -> float:
+	return fmod(Time.get_ticks_usec() / 1e6, 3600.0)
+
 static func make_loop(mode: int, x0: float, z0: float, width: float, height: float, corner: float, speed: float, phase_share: float, level: float, id: int) -> Dictionary:
 	var loop := {"mode": mode, "x0": x0, "z0": z0, "w": width, "h": height, "corner": corner, "level": level, "id": id, "laps": 1, "phase": 0.0, "stop": -1.0}
 	var length := loop_length(loop)
@@ -146,6 +152,8 @@ static func pose_from_data(data: PackedFloat32Array, i: int, time: float, corner
 const LOOP_GLSL := """
 #include "res://shaders/interior_hour.gdshaderinc"
 
+global uniform float loop_clock;
+
 uniform float corner = 4.0;
 uniform float stop_dwell = 20.0;
 uniform float stop_accel = 0.5;
@@ -254,7 +262,7 @@ varying float blink;
 
 void vertex() {
 	vec3 pos; vec3 left; vec3 up; vec3 forward;
-	loop_pose(MODEL_MATRIX, TIME, pos, left, up, forward);
+	loop_pose(MODEL_MATRIX, loop_clock, pos, left, up, forward);
 	float lift = bob * abs(sin(TIME * bob_rate + COLOR.a * 40.0));
 	vec3 point = VERTEX;
 	vec3 facing = NORMAL;
@@ -264,7 +272,7 @@ void vertex() {
 	vec3 c0 = MODEL_MATRIX[0].xyz;
 	float sides = 2.0 * (c0.z - 2.0 * corner) + 2.0 * (MODEL_MATRIX[1].x - 2.0 * corner) + TAU * corner;
 	float speed = abs(sides * MODEL_MATRIX[1].z / 3600.0);
-	float cycle = fract(speed * TIME / stride + COLOR.a * 7.0) * float(walk_frames);
+	float cycle = fract(speed * loop_clock / stride + COLOR.a * 7.0) * float(walk_frames);
 	int f0 = int(cycle) %% walk_frames;
 	int f1 = (f0 + 1) %% walk_frames;
 	float between = fract(cycle);
@@ -277,7 +285,8 @@ void vertex() {
 	night = interior_night(interior_hour(world.z));
 	shade = mix(1.0, 0.3, night) * (0.6 + 0.4 * max(dot(normal, up), 0.0));
 	float seen = distance(pos, INV_VIEW_MATRIX[3].xyz);
-	bool hidden = fract(COLOR.a * 13.7) < night * night_hide || seen < detail_from || seen >= detail_to;
+	// INSTANCE_CUSTOM.x: hidden (someone standing in for them, TownFolk).
+	bool hidden = fract(COLOR.a * 13.7) < night * night_hide || seen < detail_from || seen >= detail_to || INSTANCE_CUSTOM.x > 0.5;
 	VERTEX = hidden ? vec3(0.0) : (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	NORMAL = mat3(VIEW_MATRIX) * normal;
 	part = UV.x;
