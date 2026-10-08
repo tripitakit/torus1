@@ -1,6 +1,6 @@
 # I fatti del mondo, uno per riga: chi li conosce | il fatto.
 # Chi: tutti, selene (l'equipaggio di Selene), torus1 (la gente di Torus1),
-# o il nome di un personaggio (ferrand, okafor, bastiani).
+# o il nome di un personaggio (ferrand, okafor, bastiani); chiacchiere: vedi in fondo.
 tutti | Siamo nell'anno 2131.
 tutti | Torus1 è un anello di 2000 sezioni in orbita attorno alla Terra, a circa 600 km di quota.
 tutti | Ogni sezione di Torus1 è un cilindro lungo 20 km e largo 4 km che ruota per dare gravità.
@@ -38,3 +38,11 @@ bastiani | Bastiani ha un ufficio sopra un bar, nel paese vicino alla piazzola.
 bastiani | Bastiani prima era agente della sicurezza dell'anello; ha lasciato dopo un'indagine finita male.
 bastiani | Bastiani conosce gli attracchi, i treni e chi traffica nelle sezioni.
 bastiani | Bastiani non è mai stato sulla Luna.
+# Chiacchiere: non entrano mai nel prompt, dicono solo che una domanda è "del
+# mondo" (saluti, domande personali) e va passata al personaggio.
+chiacchiere | Ciao, come stai? Buongiorno, buonasera.
+chiacchiere | Chi sei? Come ti chiami? Quanti anni hai?
+chiacchiere | Che lavoro fai? Di cosa ti occupi qui?
+chiacchiere | Come ti senti? Sei stanco? Hai paura?
+chiacchiere | Arrivederci, a presto, grazie.
+chiacchiere | Che cosa mi consigli di fare adesso? Dove dovrei andare?
