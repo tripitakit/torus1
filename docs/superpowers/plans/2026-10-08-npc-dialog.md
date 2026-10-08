@@ -113,3 +113,17 @@ nomi diversi su 100; `nearest` sceglie il passante davanti entro 2,5 m, scarta q
 ### Task 7: prova dal vivo, GPU, documenti
 
 `tests/test_npc_live.gd` (10 domande × 3), prova GPU del terminale davanti a Ferrand, README, commit.
+
+## Decisioni prese durante l'esecuzione
+
+- Task 2: un solo segnale `finished(text, error)` invece di `finished` + `failed` — più semplice da attendere.
+- Task 2: il server si avvia con `/bin/sh -c "OLLAMA_VULKAN=1 exec … >/dev/null 2>&1"`: con l'uscita ereditata da
+  Godot il server teneva aperta la pipe e i comandi non finivano.
+- Task 5: chi è nascosto si annota anche sul nodo (meta): senza grafica Godot non conserva i dati personali delle
+  istanze, quindi non si possono rileggere.
+- Task 6: Okafor è una persona in più (13 invece di 12 in Selene); `test_selene_crew` aggiornato.
+- Task 6: Ferrand e Okafor sono `workers` di `SeleneLayout` con una chiave `npc`.
+- Task 7: regole più concrete ("rispondi in modo diretto, senza metafore") e scheda di Bastiani riscritta: con la
+  prima versione Bastiani divagava ("Sono un'ombra…"); filtro esteso a "sistema operativo", "un'istanza".
+- Visto in prova: un crash raro (1 volta su 4) in `TerrainDressing.build_ground` su un thread, andando da Selene
+  alla sezione col teleport 3. Codice non toccato da questo lavoro; da indagare a parte.

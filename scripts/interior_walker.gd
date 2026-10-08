@@ -18,6 +18,8 @@ const FLOOR_SNAP := 0.3
 var controls := {}
 # On a flat floor (Selene's interior): up is +Y everywhere.
 var flat := false
+# Talking to someone: neither walks nor looks round.
+var frozen := false
 var _carry := Vector3.ZERO
 var _turn := 0.0
 var _pitch := 0.0
@@ -86,6 +88,8 @@ func set_targets(targets: Array) -> void:
 	(get_node("Hud") as CanvasLayer).update_markers(camera(), targets)
 
 func read_controls() -> Dictionary:
+	if frozen:
+		return {"move": Vector2.ZERO, "jog": false, "jump": false}
 	if not controls.is_empty():
 		return controls
 	return {
@@ -95,7 +99,7 @@ func read_controls() -> Dictionary:
 	}
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
+	if event is InputEventMouseMotion and not frozen:
 		var look := OnFoot.look(Vector2(0.0, _pitch), event.relative)
 		_turn += look.x
 		_pitch = look.y

@@ -100,7 +100,7 @@ func _test_messages() -> int:
 	return 0
 
 func _test_rejected() -> int:
-	for bad in ["Sono un'intelligenza artificiale.", "Come modello linguistico non posso.", "Sono stato creato da Google.", "Sono un assistente.", "Sono un programma.", "Sono una IA."]:
+	for bad in ["Sono un sistema operativo.", "Sono un'intelligenza artificiale.", "Come modello linguistico non posso.", "Sono stato creato da Google.", "Sono un assistente.", "Sono un programma.", "Sono una IA."]:
 		if not NpcBrain.rejected(bad):
 			print("FAIL _test_rejected: let through '%s'" % bad)
 			return 1

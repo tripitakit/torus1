@@ -155,6 +155,7 @@ class CrewMember extends AnimatableBody3D:
 	var _skeleton: Skeleton3D
 	var _player: AnimationPlayer
 	var _seated := false
+	var _listening := false
 	var _route := PackedVector3Array()
 	var _target := 1
 	var _step := 1
@@ -208,8 +209,23 @@ class CrewMember extends AnimatableBody3D:
 		if direction.length() > 1e-4:
 			transform.basis = Basis.looking_at(direction.normalized(), Vector3.UP)
 
+	# Spoken to: stops where they are and faces `point` (seated ones only
+	# stop); stop_listening() sends them on again.
+	func listen_to(point: Vector3) -> void:
+		_listening = true
+		if _seated:
+			return
+		idle()
+		_face(point - global_position)
+
+	func stop_listening() -> void:
+		_listening = false
+
+	func is_listening() -> bool:
+		return _listening
+
 	func _physics_process(delta: float) -> void:
-		if _route.size() < 2:
+		if _listening or _route.size() < 2:
 			return
 		if _wait > 0.0:
 			_wait -= delta

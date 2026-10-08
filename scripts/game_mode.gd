@@ -20,6 +20,14 @@ const OutpostInteriorScript = preload("res://scripts/outpost_interior.gd")
 const TelescopeLayout = preload("res://scripts/telescope_layout.gd")
 const DepotLayout = preload("res://scripts/depot_layout.gd")
 const MoonSites = preload("res://scripts/moon_sites.gd")
+const OllamaClient = preload("res://scripts/ollama_client.gd")
+const NpcTerminal = preload("res://scripts/npc_terminal.gd")
+const NpcTalk = preload("res://scripts/npc_talk.gd")
+const TownFolk = preload("res://scripts/town_folk.gd")
+const TownWalkers = preload("res://scripts/town_walkers.gd")
+const LoopTraffic = preload("res://scripts/loop_traffic.gd")
+const InteriorClock = preload("res://scripts/interior_clock.gd")
+const LandingPads = preload("res://scripts/landing_pads.gd")
 
 enum Mode { VOID, INTERIOR, ROVER, ON_FOOT, ON_FOOT_INSIDE, IN_BASE, IN_OUTPOST }
 
@@ -42,6 +50,15 @@ const CRASH_FADE_TIME := 1.0
 const CRASH_FLASH_COLOR := Color(1.0, 0.75, 0.45, 1.0)
 const CRASH_SCREEN_COLOR := Color(0.22, 0.02, 0.02, 0.92)
 const CRASH_TEXT := "CRASH\nPRESS R TO RESTART"
+# Talking: the prompt; a passer-by stood in for goes back to its round once
+# the pilot is this far; the town walkers drawn near are looked for within
+# this of the pilot (their group's bounds); Bastiani's coat; the share of
+# walkers home at night (the town walkers' material).
+const TALK_PROMPT := "P PARLA"
+const STAND_IN_KEPT := 30.0
+const WALKER_SEARCH := 10.0
+const BASTIANI_COAT := Color(0.32, 0.24, 0.17)
+const WALKERS_NIGHT_HIDE := 0.5
 
 var mode: Mode = Mode.VOID
 var docked_bridge := -1
@@ -62,12 +79,24 @@ var _crash_label: Label
 # Crashed, and whether the crash screen is up (waiting for R).
 var _crashed := false
 var _crash_screen_up := false
+# The talk (NpcTalk on its terminal, Ollama behind), who is listening, and
+# the passers-by stood in for: [{person, node, index}].
+var _ollama: Node
+var _terminal: CanvasLayer
+var _talk: Node
+var _listener: Node3D
+var _stand_ins: Array = []
+# Bastiani at the pad by the docked bridge 0 (where teleport 3 lands): the
+# spawn point in the chain's frame until he is placed.
+var _bastiani: Node3D
+var _bastiani_spot := Vector3.INF
 
 func _ready() -> void:
 	_station = get_node(station_path)
 	_void_cruiser = get_node(void_cruiser_path)
 	_build_fade()
 	_build_debug_legend()
+	_build_talk()
 	if _void_cruiser.has_signal("crashed"):
 		_void_cruiser.crashed.connect(_on_crashed)
 
@@ -91,6 +120,7 @@ func is_crashed() -> bool:
 	return _crashed
 
 func _process(_delta: float) -> void:
+	_tend_talk()
 	if mode == Mode.VOID:
 		var cockpit := _void_cruiser.get_node_or_null("Cockpit")
 		if cockpit:
@@ -128,12 +158,24 @@ func _process(_delta: float) -> void:
 	elif mode == Mode.IN_BASE and _base != null:
 		var walker := _base.get_node("BaseWalker") as CharacterBody3D
 		var hud := walker.get_node("Hud")
-		hud.set_prompt(_base_prompt(walker.position))
+		var prompt := _base_prompt(walker.position)
+		if talking():
+			prompt = ""
+		elif prompt == "" and _talk_target() != null:
+			prompt = TALK_PROMPT
+		hud.set_prompt(prompt)
 		hud.set_place(_base.room_name(walker.position))
 	elif mode == Mode.ON_FOOT_INSIDE and _interior:
 		var walker := _interior.get_node_or_null("InteriorWalker")
 		if walker != null:
-			walker.set_board_prompt(_can_board_cruiser())
+			var prompt := ""
+			if talking():
+				pass
+			elif _can_board_cruiser():
+				prompt = "K BOARD"
+			elif _talk_target() != null:
+				prompt = TALK_PROMPT
+			(walker.get_node("Hud") as CanvasLayer).set_prompt(prompt)
 			walker.set_targets([["CRUISER", _interior.get_node("InternalCruiser")]])
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -141,7 +183,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _crash_screen_up and event.is_action_pressed("restart"):
 			restart_after_crash()
 		return
-	if _transitioning:
+	if _transitioning or (_talk != null and _talk.talking()):
+		return
+	if event.is_action_pressed("talk") and mode in [Mode.IN_BASE, Mode.ON_FOOT_INSIDE]:
+		var target = _talk_target()
+		if target != null:
+			start_talk(target)
 		return
 	for number in range(1, 10):
 		if event.is_action_pressed("teleport_%d" % number):
@@ -695,6 +742,9 @@ func enter_interior(bridge_index: int) -> void:
 	parent.add_child(_interior)
 	docked_bridge = bridge_index
 	mode = Mode.INTERIOR
+	_bastiani = null
+	_stand_ins.clear()
+	_bastiani_spot = _interior.chain_node().to_local(cruiser.position) if bridge_index == 0 else Vector3.INF
 
 func exit_interior() -> void:
 	# Out through the collar of the bridge whose dock is nearest.
@@ -813,3 +863,153 @@ func _show_dome(shown: bool) -> void:
 	var world := get_parent().get_node_or_null("WorldEnvironment")
 	if world != null and world.has_method("show_dome"):
 		world.show_dome(shown)
+
+# The talk's parts, always there: Ollama is only started at the first
+# question.
+func _build_talk() -> void:
+	_ollama = OllamaClient.new()
+	_ollama.name = "Ollama"
+	add_child(_ollama)
+	_terminal = NpcTerminal.new()
+	_terminal.name = "NpcTerminal"
+	add_child(_terminal)
+	_talk = NpcTalk.new()
+	_talk.name = "NpcTalk"
+	_talk.client = _ollama
+	_talk.terminal = _terminal
+	_talk.ended.connect(_on_talk_ended)
+	add_child(_talk)
+
+func talking() -> bool:
+	return _talk != null and _talk.talking()
+
+# Who P would speak to: in Selene the crew member right ahead; in a
+# section Bastiani or someone stood in for, else the passer-by ahead
+# ({node, index, pose} of the walkers drawn by the shader). null if nobody.
+func _talk_target():
+	if mode == Mode.IN_BASE and _base != null:
+		var walker := _base.get_node("BaseWalker") as Node3D
+		return TownFolk.person_ahead(_base.get_node("Crew").get_children() if _base.has_node("Crew") else [], walker.global_transform)
+	if mode == Mode.ON_FOOT_INSIDE and _interior != null:
+		var walker := _interior.get_node_or_null("InteriorWalker") as Node3D
+		if walker == null:
+			return null
+		var people := []
+		if _bastiani != null:
+			people.append(_bastiani)
+		for entry in _stand_ins:
+			people.append(entry.person)
+		var person := TownFolk.person_ahead(people, walker.global_transform)
+		if person != null:
+			return person
+		var found := TownFolk.nearest(_near_walker_nodes(walker.global_position), walker.global_transform, LoopTraffic.clock(), TownWalkers.CORNER, _home_at_night)
+		return null if found.is_empty() else found
+	return null
+
+# The groups of animated town walkers whose bounds come within
+# WALKER_SEARCH of `point`.
+func _near_walker_nodes(point: Vector3) -> Array:
+	var out := []
+	var chain: Node3D = _interior.chain_node()
+	if chain == null:
+		return out
+	for section in chain.get_children():
+		for node in section.get_children():
+			if node is MultiMeshInstance3D and String(node.name).begins_with(TownFolk.NEAR_PREFIX):
+				var box: AABB = (node as MultiMeshInstance3D).global_transform * (node as MultiMeshInstance3D).custom_aabb
+				if box.grow(WALKER_SEARCH).has_point(point):
+					out.append(node)
+	return out
+
+# A walker the shader has sent home for the night (as LoopTraffic's shader).
+func _home_at_night(pose: Transform3D, alpha: float) -> bool:
+	var night := InteriorClock.night(_interior.hour_at(_interior.to_local(pose.origin)))
+	return fposmod(alpha * 13.7, 1.0) < night * WALKERS_NIGHT_HIDE
+
+# P: the pilot stops, the person stops and turns, the terminal opens.
+func start_talk(target) -> void:
+	var walker := (_base.get_node("BaseWalker") if mode == Mode.IN_BASE else _interior.get_node("InteriorWalker")) as Node3D
+	var person: Node3D = target if target is Node3D else _stand_in(target, walker)
+	walker.frozen = true
+	person.listen_to(walker.global_position)
+	_listener = person
+	_talk.start(TownFolk.sheet_for(person))
+
+# The passer-by `found` hidden, a real person in its place facing the pilot.
+func _stand_in(found: Dictionary, walker: Node3D) -> Node3D:
+	var node: MultiMeshInstance3D = found.node
+	var pose: Transform3D = found.pose
+	var person := TownFolk.stand_in(TownFolk.paint(node, found.index))
+	var section: Node3D = node.get_parent()
+	var who := TownFolk.identity(TownFolk.walker_id(node, found.index))
+	var slot := String(section.name).get_slice("_", 1).to_int()
+	who.place = "sezione %d" % posmod(docked_bridge + slot, maxi(1, _station.num_sections))
+	person.set_meta("npc", "townsfolk")
+	person.set_meta("npc_identity", who)
+	section.add_child(person)
+	var up := pose.basis.y.normalized()
+	var toward := walker.global_position - pose.origin
+	toward -= up * toward.dot(up)
+	person.global_transform = Transform3D(Basis.looking_at(toward.normalized() if toward.length() > 1e-3 else pose.basis.z, up), pose.origin)
+	TownFolk.hide(node, found.index, true)
+	_stand_ins.append({"person": person, "node": node, "index": found.index})
+	return person
+
+func _on_talk_ended() -> void:
+	var walker: Node = null
+	if mode == Mode.IN_BASE and _base != null:
+		walker = _base.get_node_or_null("BaseWalker")
+	elif _interior != null:
+		walker = _interior.get_node_or_null("InteriorWalker")
+	if walker != null:
+		walker.frozen = false
+	# The crew go back to work; one stood in for stays put until left behind.
+	if is_instance_valid(_listener) and not _stand_ins.any(func(e): return e.person == _listener):
+		_listener.stop_listening()
+	_listener = null
+
+# Every frame: a talk ends if its place is gone; Bastiani placed once his
+# pad is loaded; the passers-by left behind (or whose section went) back on
+# their rounds.
+func _tend_talk() -> void:
+	if talking() and not (mode == Mode.IN_BASE or mode == Mode.ON_FOOT_INSIDE):
+		_talk.end()
+	if _interior == null:
+		_stand_ins.clear()
+		_bastiani = null
+		return
+	if _bastiani == null and _bastiani_spot != Vector3.INF:
+		_place_bastiani()
+	var walker := _interior.get_node_or_null("InteriorWalker") as Node3D
+	var kept := []
+	for entry in _stand_ins:
+		var person: Node3D = entry.person
+		var node: MultiMeshInstance3D = entry.node
+		var gone := not is_instance_valid(node) or not is_instance_valid(person)
+		var left := walker == null or (not gone and person.global_position.distance_to(walker.global_position) > STAND_IN_KEPT)
+		if (gone or left) and person != _listener:
+			if is_instance_valid(node):
+				TownFolk.hide(node, entry.index, false)
+			if is_instance_valid(person):
+				person.queue_free()
+		else:
+			kept.append(entry)
+	_stand_ins = kept
+
+# Bastiani standing on the pad nearest bridge 0's dock, a few metres in
+# from its edge, facing its middle.
+func _place_bastiani() -> void:
+	var chain: Node3D = _interior.chain_node()
+	var pad: Dictionary = _interior.nearest_pad(_interior.to_local(chain.to_global(_bastiani_spot)))
+	if pad.is_empty():
+		return
+	var top: Transform3D = pad.transform
+	var up := top.basis.y.normalized()
+	var spot := top.origin + top.basis.x.normalized() * (LandingPads.SIZE * 0.5 - 3.0)
+	var person := SeleneCrew.new_member("", BASTIANI_COAT)
+	person.name = "Bastiani"
+	person.set_meta("npc", "bastiani")
+	chain.add_child(person)
+	person.global_transform = Transform3D(Basis.looking_at((top.origin - spot).normalized(), up), _interior.to_global(spot))
+	person.idle()
+	_bastiani = person

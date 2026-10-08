@@ -18,9 +18,9 @@ const HISTORY := 6
 # Lines of facts that only say a question is of the world.
 const SMALL_TALK := "chiacchiere"
 const PLAYER := "TU"
-const RULES := "Rispondi sempre in italiano, al massimo due frasi brevi, restando nel personaggio. Dai del tu al pilota. Usa solo quello che sai; se non sai una cosa, dillo con parole tue, da persona. Non dire mai di essere un programma o un'intelligenza artificiale."
+const RULES := "Rispondi sempre in italiano, al massimo due frasi brevi, restando nel personaggio. Rispondi alla domanda in modo diretto e concreto, senza metafore; se ti chiedono chi sei, di' il tuo nome e il tuo lavoro. Dai del tu al pilota. Usa solo quello che sai; se non sai una cosa, dillo con parole tue, da persona. Non dire mai di essere un programma o un'intelligenza artificiale."
 # A reply with one of these is the model speaking, not the person.
-const BANNED := ["intelligenza artificiale", "modello linguistico", "modello di linguaggio", "google", "assistente virtuale", "sono un assistente", "sono un programma", "chatbot", "openai"]
+const BANNED := ["intelligenza artificiale", "modello linguistico", "modello di linguaggio", "google", "assistente virtuale", "sono un assistente", "sono un programma", "un programma informatico", "sistema operativo", "un'istanza", "chatbot", "openai"]
 
 # The sheet `id`: {id, name, label, core, knows, examples, dunno, remembers};
 # {} if there is none.

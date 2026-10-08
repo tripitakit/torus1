@@ -9,6 +9,7 @@ extends RefCounted
 
 const LoopTraffic = preload("res://scripts/loop_traffic.gd")
 const SeleneCrew = preload("res://scripts/selene_crew.gd")
+const NpcBrain = preload("res://scripts/npc_brain.gd")
 
 # Talking reach: this far, and this much ahead (cosine).
 const REACH := 2.5
@@ -26,6 +27,10 @@ const JOBS := ["la fornaia", "il tecnico dei filtri d'aria", "l'insegnante", "l'
 	"l'infermiera", "il cuoco", "la tecnica del cielo artificiale", "il giardiniere", "la commessa", "il manutentore dei ponti",
 	"la biologa", "il postino", "la studentessa", "il pensionato", "l'elettricista", "la pescatrice del lago",
 	"il barista", "la meccanica dei cruiser"]
+
+# Selene's crew at work, by department.
+const CREW_JOBS := {"main_mission": "operatore di Main Mission", "medical": "medico del Medical Centre", "technical": "tecnico della base",
+	"security": "agente della sicurezza", "command": "ufficiale di comando"}
 
 # {name, age, job} of walker `id`.
 static func identity(id: int) -> Dictionary:
@@ -95,3 +100,35 @@ static func paint(node: MultiMeshInstance3D, index: int) -> Color:
 	var b := index * LoopTraffic.INSTANCE_FLOATS
 	var data := node.multimesh.buffer
 	return Color(data[b + 12], data[b + 13], data[b + 14])
+
+# Someone's sheet (NpcBrain) from their metas: npc (the sheet's id), and for
+# the generic sheets npc_identity ({name, age, job, place}) or npc_seed
+# (Selene's crew: name and age from it, the job from the department).
+static func sheet_for(person: Node) -> Dictionary:
+	var id := str(person.get_meta("npc", "selene_crew"))
+	var sheet := NpcBrain.person(id)
+	if not (sheet.name as String).contains("{"):
+		return sheet
+	var who: Dictionary = person.get_meta("npc_identity", {})
+	if who.is_empty():
+		who = identity(int(person.get_meta("npc_seed", 0)) + 7919)
+		who.job = CREW_JOBS.get(str(person.get("department")), "membro dell'equipaggio")
+	return NpcBrain.fill(sheet, who)
+
+# Of `people` (Node3Ds), the nearest within REACH ahead of the pilot at
+# `from` (global, facing -Z), on the pilot's floor; null if none.
+static func person_ahead(people: Array, from: Transform3D) -> Node3D:
+	var forward := -from.basis.z.normalized()
+	var up := from.basis.y.normalized()
+	var best: Node3D = null
+	var best_distance := REACH
+	for person: Node3D in people:
+		if not is_instance_valid(person) or not person.is_inside_tree():
+			continue
+		var offset := person.global_position - from.origin
+		var flat := offset - up * offset.dot(up)
+		var distance := flat.length()
+		if distance <= best_distance and distance > 1e-3 and flat.normalized().dot(forward) >= AHEAD and absf(offset.dot(up)) < 2.0:
+			best_distance = distance
+			best = person
+	return best
